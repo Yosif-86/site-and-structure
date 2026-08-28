@@ -68,6 +68,13 @@
   .status.active{color:var(--green); border-color:var(--green);}
   .status.pending{color:var(--yellow); border-color:var(--yellow);}
   .empty{color:var(--muted); font-size:14px;}
+
+  .overlay{
+    display:none; position:fixed; inset:0; background:rgba(6,11,18,0.9); z-index:100; align-items:center; justify-content:center; padding:40px 20px;
+  }
+  .overlay.active{display:flex;}
+  .video-modal{position:relative; width:100%; max-width:900px; aspect-ratio:16/9;}
+  .video-modal iframe{width:100%; height:100%; border:1px solid var(--line);}
 </style>
 </head>
 <body>
@@ -144,11 +151,42 @@
             <h3>${title}</h3>
             <div class="meta">Enrolled ${date}</div>
           </div>
-          <div class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Awaiting approval'}</div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            ${isActive ? `<button class="btn" onclick="watchCourse('${e.course_slug}')">Watch</button>` : ''}
+            <div class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Awaiting approval'}</div>
+          </div>
         </div>`;
     }).join('');
   })();
+
+  async function watchCourse(courseSlug){
+    const { data:{ session } } = await sb.auth.getSession();
+    const res = await fetch('/api/get-video-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ courseSlug })
+    });
+    const result = await res.json();
+    if(!res.ok){
+      alert(result.error || 'This course video isn\'t available yet.');
+      return;
+    }
+    document.getElementById('videoFrame').src = result.url;
+    document.getElementById('videoOverlay').classList.add('active');
+  }
+
+  function closeVideo(){
+    document.getElementById('videoOverlay').classList.remove('active');
+    document.getElementById('videoFrame').src = '';
+  }
 </script>
+
+<div class="overlay" id="videoOverlay">
+  <div class="video-modal">
+    <button class="btn" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
+    <iframe id="videoFrame" src="" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+  </div>
+</div>
 
 </body>
 </html>
