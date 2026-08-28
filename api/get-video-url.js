@@ -67,17 +67,5 @@ module.exports = async (req, res) => {
   const token = crypto.createHash('sha256').update(securityKey + videoId + expires).digest('hex');
   const url = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}?token=${token}&expires=${expires}`;
 
-  if (req.query.debug === '1') {
-    res.status(200).json({
-      url,
-      keyLength: securityKey.length,
-      keyPrefix: securityKey.slice(0, 4),
-      keySuffix: securityKey.slice(-4),
-      hasWhitespace: /\s/.test(securityKey),
-      hashableBaseLength: (securityKey + videoId + expires).length
-    });
-    return;
-  }
-
   res.status(200).json({ url });
 };
