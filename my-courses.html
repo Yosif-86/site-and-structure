@@ -78,8 +78,9 @@
 
   .watermark{
     position:absolute; pointer-events:none; z-index:5;
-    font-family:'IBM Plex Mono'; font-size:13px; color:rgba(255,255,255,0.35);
-    text-shadow:0 0 4px rgba(0,0,0,0.6); transition:top 1.5s ease, left 1.5s ease;
+    font-family:'IBM Plex Mono'; font-weight:600; font-size:16px; color:rgba(255,255,255,0.75);
+    background:rgba(0,0,0,0.35); padding:4px 10px; border-radius:3px;
+    text-shadow:0 0 6px rgba(0,0,0,0.8); transition:top 1.5s ease, left 1.5s ease;
     white-space:nowrap;
   }
 
@@ -221,6 +222,7 @@
   async function triggerCaptureWarning(){
     if(!document.getElementById('videoOverlay').classList.contains('active')) return;
     document.getElementById('captureWarning').classList.add('active');
+    document.getElementById('videoFrame').src = ''; // hard-stop playback
 
     const now = Date.now();
     if(now - lastAlertAt < 10000) return; // avoid spamming the log
@@ -232,8 +234,19 @@
     }
   }
 
-  function dismissCaptureWarning(){
+  async function dismissCaptureWarning(){
     document.getElementById('captureWarning').classList.remove('active');
+    // Video was hard-stopped on detection; get a fresh link to resume watching (starts from the beginning).
+    const { data:{ session } } = await sb.auth.getSession();
+    const res = await fetch('/api/get-video-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ courseSlug: currentCourseSlug })
+    });
+    const result = await res.json();
+    if(res.ok){
+      document.getElementById('videoFrame').src = result.url;
+    }
   }
 
   function closeVideo(){
