@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Site & Structure — Engineering Course Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1B2D;
+    --panel:#16243A;
+    --panel2:#1C2C46;
+    --grid:#24354F;
+    --line:#2E4364;
+    --red:#C0453A;
+    --yellow:#E8B94D;
+    --text:#EDEEF0;
+    --muted:#8FA0B8;
+    --muted2:#5F7291;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    line-height:1.6;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
+
+  /* corner crop marks used throughout */
+  .crop{position:relative;}
+  .crop::before, .crop::after{content:''; position:absolute; width:14px; height:14px; pointer-events:none;}
+  .crop::before{top:0; left:0; border-top:1.5px solid var(--muted2); border-left:1.5px solid var(--muted2);}
+  .crop::after{bottom:0; right:0; border-bottom:1.5px solid var(--muted2); border-right:1.5px solid var(--muted2);}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:rgba(15,27,45,0.92); backdrop-filter:blur(6px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:34px; height:34px; border:1.5px solid var(--red); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); transform:rotate(45deg);}
+  .brand-mark span{transform:rotate(-45deg);}
+  .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px; letter-spacing:0.2px;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:1px;}
+  nav{display:flex; gap:28px; align-items:center;}
+  nav a{color:var(--muted); text-decoration:none; font-size:14px;}
+  nav a:hover{color:var(--text);}
+  .btn{
+    font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.5px; text-transform:uppercase;
+    padding:9px 18px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;
+  }
+  .btn:hover{border-color:var(--muted2);}
+  .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
+  .btn-accent:hover{background:#a83a30;}
+
+  .hero{padding:80px 0 60px; border-bottom:1px solid var(--line);}
+  .eyebrow{font-family:'IBM Plex Mono'; font-size:12px; color:var(--yellow); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:18px;}
+  .eyebrow::before{content:'// '; color:var(--muted2);}
+  h1{font-family:'Space Grotesk'; font-weight:700; font-size:44px; line-height:1.15; max-width:680px; letter-spacing:-0.5px;}
+  h1 em{font-style:normal; color:var(--red);}
+  .hero-sub{color:var(--muted); font-size:16px; max-width:520px; margin-top:20px;}
+  .hero-cta{display:flex; gap:12px; margin-top:32px;}
+
+  .section{padding:64px 0; border-bottom:1px solid var(--line);}
+  .section-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:36px;}
+  h2{font-family:'Space Grotesk'; font-weight:600; font-size:26px;}
+  .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
+
+  .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:22px;}
+  @media (max-width:800px){ .grid{grid-template-columns:1fr;} h1{font-size:32px;} }
+
+  /* course card = title block */
+  .card{
+    background:var(--panel); border:1px solid var(--line); padding:20px; display:flex; flex-direction:column; gap:14px; position:relative; transition:border-color .15s;
+  }
+  .card:hover{border-color:var(--muted2);}
+  .card-tag{font-family:'IBM Plex Mono'; font-size:10px; color:var(--red); letter-spacing:1px; text-transform:uppercase;}
+  .card h3{font-family:'Space Grotesk'; font-size:18px; font-weight:600; line-height:1.3;}
+  .card p{font-size:13.5px; color:var(--muted); flex-grow:1;}
+  .titleblock{
+    border-top:1px solid var(--line); margin-top:6px; padding-top:12px;
+    display:grid; grid-template-columns:1fr 1fr; gap:8px 12px;
+    font-family:'IBM Plex Mono'; font-size:10.5px;
+  }
+  .titleblock div span{display:block; color:var(--muted2); font-size:9.5px; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:2px;}
+  .titleblock div b{color:var(--text); font-weight:500;}
+  .price-row{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .price{font-family:'Space Grotesk'; font-size:20px; font-weight:600;}
+  .price.free{color:var(--yellow);}
+  .badge{font-family:'IBM Plex Mono'; font-size:9.5px; padding:3px 8px; border:1px solid var(--yellow); color:var(--yellow); letter-spacing:0.5px;}
+
+  footer{padding:40px 0; text-align:center;}
+  footer p{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2);}
+
+  /* modal (login / payment) */
+  .overlay{
+    display:none; position:fixed; inset:0; background:rgba(6,11,18,0.75); z-index:100; align-items:center; justify-content:center; padding:20px;
+  }
+  .overlay.active{display:flex;}
+  .modal{
+    background:var(--panel); border:1px solid var(--line); width:100%; max-width:420px; padding:28px; position:relative;
+  }
+  .modal-close{position:absolute; top:14px; right:14px; background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; font-family:'IBM Plex Mono';}
+  .modal h3{font-family:'Space Grotesk'; font-size:20px; margin-bottom:6px;}
+  .modal .sub{color:var(--muted); font-size:13px; margin-bottom:22px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;}
+  .field input{
+    width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text); padding:10px 12px; font-size:14px; font-family:'Inter';
+  }
+  .field input:focus{outline:none; border-color:var(--red);}
+  .pay-options{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
+  .pay-opt{
+    border:1px solid var(--line); padding:14px 10px; text-align:center; cursor:pointer; font-size:13px; font-weight:500;
+  }
+  .pay-opt.selected{border-color:var(--yellow); background:rgba(232,185,77,0.08);}
+  .pay-opt small{display:block; font-family:'IBM Plex Mono'; font-size:9.5px; color:var(--muted2); margin-top:4px; font-weight:400;}
+  .err{color:var(--red); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
+  .err.show{display:block;}
+  .success-box{text-align:center; padding:10px 0;}
+  .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
+  .modal-full-btn{width:100%; margin-top:4px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small>ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+    </div>
+    <nav>
+      <a href="#courses">Courses</a>
+      <a href="#service">Project service</a>
+      <button class="btn" id="loginBtn">Log in</button>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Rev 01 — Prototype for review</div>
+    <h1>Built like a drawing set. <em>Taught</em> like a site walkthrough.</h1>
+    <p class="hero-sub">Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.</p>
+    <div class="hero-cta">
+      <button class="btn btn-accent" onclick="document.getElementById('courses').scrollIntoView({behavior:'smooth'})">Browse courses</button>
+      <button class="btn" id="loginBtn2">Log in</button>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="courses">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="section-tag">Sheet index</div>
+        <h2>Course catalogue</h2>
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Free &rarr; service funnel</div>
+          <h3>Graduation project making</h3>
+          <p>References, chapter structure, Word formatting, and defense prep — everything needed before submission.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-01</b></div>
+          <div><span>Duration</span><b>~3.5 hrs</b></div>
+          <div><span>Deadline</span><b>22/09/2026</b></div>
+          <div><span>Level</span><b>Mixed</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price free">Free</span>
+          <span class="badge">Discount on service</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Graduation Project Making')">View course</button>
+      </div>
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Academic — 4th stage</div>
+          <h3>Foundation engineering</h3>
+          <p>Bearing capacity, settlement, shallow &amp; deep foundation design — full syllabus, hand-calc, exam-style.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-02A</b></div>
+          <div><span>Duration</span><b>~6-7.5 hrs</b></div>
+          <div><span>Reference</span><b>Textbook</b></div>
+          <div><span>Level</span><b>4th stage</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price">15,000 IQD</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Foundation Engineering')">View course</button>
+      </div>
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Academic — 4th stage</div>
+          <h3>Bridge design</h3>
+          <p>RC slab/beam bridges — AASHTO loading, influence lines, girder design, substructure, bearings.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-02B</b></div>
+          <div><span>Duration</span><b>~5.5-7 hrs</b></div>
+          <div><span>Code</span><b>AASHTO</b></div>
+          <div><span>Level</span><b>4th stage</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price">15,000 IQD</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Bridge Design')">View course</button>
+      </div>
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Academic — 4th stage</div>
+          <h3>Reinforced concrete</h3>
+          <p>Slabs, columns, and footings under ACI 318 — the 4th-stage RC scope, hand-calc, exam-style.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-02C</b></div>
+          <div><span>Duration</span><b>~5.5-7 hrs</b></div>
+          <div><span>Code</span><b>ACI 318</b></div>
+          <div><span>Level</span><b>4th stage</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price">15,000 IQD</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Reinforced Concrete')">View course</button>
+      </div>
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Free &rarr; QS discount</div>
+          <h3>AutoCAD for civil engineering</h3>
+          <p>Civil/structural drawing fundamentals for complete beginners — plans, sections, details, printing.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-03A</b></div>
+          <div><span>Duration</span><b>~3-4 hrs</b></div>
+          <div><span>Exam</span><b>Practical</b></div>
+          <div><span>Level</span><b>Beginner</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price free">Free</span>
+          <span class="badge">Pass &rarr; QS discount</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('AutoCAD for Civil Engineering')">View course</button>
+      </div>
+
+      <div class="card crop">
+        <div>
+          <div class="card-tag">Applied</div>
+          <h3>Quantity survey</h3>
+          <p>Takeoff from real project drawings and building reusable Excel templates for QS work.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-03B</b></div>
+          <div><span>Duration</span><b>~3.5-5 hrs</b></div>
+          <div><span>Practice</span><b>Real drawings</b></div>
+          <div><span>Level</span><b>Beginner+</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price">12,000 IQD</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Quantity Survey')">View course</button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section class="section" id="service">
+  <div class="wrap">
+    <div class="section-tag">Beyond the course</div>
+    <h2 style="margin-bottom:14px;">Graduation project service</h2>
+    <p style="color:var(--muted); max-width:560px;">Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.</p>
+  </div>
+</section>
+
+<footer>
+  <p>PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY</p>
+</footer>
+
+<!-- LOGIN MODAL -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal crop">
+    <button class="modal-close" onclick="closeModal('loginOverlay')">&times;</button>
+    <h3>Log in</h3>
+    <p class="sub">Access your enrolled courses.</p>
+    <div class="field">
+      <label>Phone number</label>
+      <input type="text" id="loginPhone" placeholder="07XX XXX XXXX">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPass" placeholder="••••••••">
+    </div>
+    <p class="err" id="loginErr">Enter your phone number and password first.</p>
+    <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
+  </div>
+</div>
+
+<!-- ENROLL / PAYMENT MODAL -->
+<div class="overlay" id="enrollOverlay">
+  <div class="modal crop">
+    <button class="modal-close" onclick="closeModal('enrollOverlay')">&times;</button>
+    <div id="enrollBody"></div>
+  </div>
+</div>
+
+<script>
+  const courses = {
+    'Graduation Project Making': {free:true, price:null},
+    'Foundation Engineering': {free:false, price:'15,000 IQD'},
+    'Bridge Design': {free:false, price:'15,000 IQD'},
+    'Reinforced Concrete': {free:false, price:'15,000 IQD'},
+    'AutoCAD for Civil Engineering': {free:true, price:null},
+    'Quantity Survey': {free:false, price:'12,000 IQD'}
+  };
+
+  let selectedPay = null;
+
+  function openModal(id){ document.getElementById(id).classList.add('active'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+
+  document.getElementById('loginBtn').onclick = () => openModal('loginOverlay');
+  document.getElementById('loginBtn2').onclick = () => openModal('loginOverlay');
+
+  function submitLogin(){
+    const phone = document.getElementById('loginPhone').value.trim();
+    const pass = document.getElementById('loginPass').value.trim();
+    const err = document.getElementById('loginErr');
+    if(!phone || !pass){
+      err.classList.add('show');
+      return;
+    }
+    err.classList.remove('show');
+    document.getElementById('enrollBody').innerHTML = `
+      <div class="success-box">
+        <div class="check">&#10003;</div>
+        <h3>Logged in</h3>
+        <p class="sub">This is a prototype — a live site would now show your enrolled courses and progress here.</p>
+        <button class="btn modal-full-btn" onclick="closeModal('loginOverlay')">Close</button>
+      </div>`;
+    closeModal('loginOverlay');
+    document.getElementById('loginPhone').value='';
+    document.getElementById('loginPass').value='';
+  }
+
+  function openEnroll(name){
+    const c = courses[name];
+    selectedPay = null;
+    const body = document.getElementById('enrollBody');
+
+    if(c.free){
+      body.innerHTML = `
+        <h3>${name}</h3>
+        <p class="sub">Free course — dwg access unlocked instantly after enrolling.</p>
+        <div class="field">
+          <label>Phone number</label>
+          <input type="text" id="enrollPhone" placeholder="07XX XXX XXXX">
+        </div>
+        <p class="err" id="enrollErr">Enter your phone number to enroll.</p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitFree('${name}')">Enroll for free</button>
+      `;
+    } else {
+      body.innerHTML = `
+        <h3>${name}</h3>
+        <p class="sub">${c.price} — choose a payment method.</p>
+        <div class="pay-options">
+          <div class="pay-opt" id="opt-zain" onclick="choosePay('zain')">Zain Cash<small>Mobile wallet</small></div>
+          <div class="pay-opt" id="opt-qi" onclick="choosePay('qi')">Qi Card<small>Card transfer</small></div>
+        </div>
+        <div class="field">
+          <label id="payLabel">Phone / card number</label>
+          <input type="text" id="payDetail" placeholder="Select a payment method first">
+        </div>
+        <p class="err" id="payErr">Choose a payment method and enter your details.</p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitPay('${name}', '${c.price}')">Confirm payment</button>
+      `;
+    }
+  }
+
+  function choosePay(method){
+    selectedPay = method;
+    document.getElementById('opt-zain').classList.toggle('selected', method==='zain');
+    document.getElementById('opt-qi').classList.toggle('selected', method==='qi');
+    const label = document.getElementById('payLabel');
+    const input = document.getElementById('payDetail');
+    if(method==='zain'){ label.textContent='Zain Cash number'; input.placeholder='07XX XXX XXXX'; }
+    else { label.textContent='Qi Card number'; input.placeholder='XXXX XXXX XXXX XXXX'; }
+  }
+
+  function submitFree(name){
+    const phone = document.getElementById('enrollPhone').value.trim();
+    const err = document.getElementById('enrollErr');
+    if(!phone){ err.classList.add('show'); return; }
+    err.classList.remove('show');
+    showEnrollSuccess(name, null);
+  }
+
+  function submitPay(name, price){
+    const detail = document.getElementById('payDetail').value.trim();
+    const err = document.getElementById('payErr');
+    if(!selectedPay || !detail){ err.classList.add('show'); return; }
+    err.classList.remove('show');
+    showEnrollSuccess(name, price + ' via ' + (selectedPay==='zain' ? 'Zain Cash' : 'Qi Card'));
+  }
+
+  function showEnrollSuccess(name, paymentInfo){
+    document.getElementById('enrollBody').innerHTML = `
+      <div class="success-box">
+        <div class="check">&#10003;</div>
+        <h3>Enrolled</h3>
+        <p class="sub">${name}${paymentInfo ? ' — ' + paymentInfo : ' — access unlocked'}</p>
+        <p class="sub">This confirms the flow only. A live site would connect here to Bunny Stream for protected video access and to Zain Cash / Qi Card APIs for real payment confirmation.</p>
+        <button class="btn modal-full-btn" onclick="closeModal('enrollOverlay')">Close</button>
+      </div>`;
+  }
+
+  document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', e => { if(e.target === ov) ov.classList.remove('active'); });
+  });
+</script>
+
+</body>
+</html>
