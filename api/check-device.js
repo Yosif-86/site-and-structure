@@ -22,14 +22,15 @@ module.exports = async (req, res) => {
     });
     const adminApiResult = await testClient.auth.admin.listUsers({ perPage: 1 });
     const dbResult = await testClient.from('trusted_devices').select('id', { count: 'exact', head: true });
+    const profileResult = await testClient.from('profiles').select('id').limit(3);
     res.status(200).json({
       keyLength: serviceRoleKey.length,
       keyPrefix: serviceRoleKey.slice(0, 12),
       hasWhitespace: /\s/.test(serviceRoleKey),
       adminApiError: adminApiResult.error ? adminApiResult.error.message : null,
       adminApiUserCount: adminApiResult.data ? adminApiResult.data.users.length : null,
-      dbError: dbResult.error ? dbResult.error.message : null,
-      dbCount: dbResult.count
+      dbResultFull: JSON.stringify(dbResult),
+      profileResultFull: JSON.stringify(profileResult)
     });
     return;
   }
