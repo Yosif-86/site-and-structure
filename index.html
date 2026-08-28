@@ -78,6 +78,8 @@
   }
   .card:hover{border-color:var(--muted2);}
   .card-tag{font-family:'IBM Plex Mono'; font-size:10px; color:var(--red); letter-spacing:1px; text-transform:uppercase;}
+  .card-tag.gray{color:var(--muted2);}
+  .card-byline{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); margin-top:-8px;}
   .card h3{font-family:'Space Grotesk'; font-size:18px; font-weight:600; line-height:1.3;}
   .card p{font-size:13.5px; color:var(--muted); flex-grow:1;}
   .titleblock{
@@ -274,6 +276,25 @@
         <button class="btn modal-full-btn" onclick="openEnroll('Quantity Survey')">View course</button>
       </div>
 
+      <div class="card crop">
+        <div>
+          <div class="card-tag gray">Academic — 4th stage</div>
+          <h3>Steel design</h3>
+          <p class="card-byline">By. Eng Ghadeer</p>
+          <p>Best steel design course — structural steel members, connections, and design under AISC 360, hand-calc, exam-style.</p>
+        </div>
+        <div class="titleblock">
+          <div><span>Dwg no.</span><b>C-02D</b></div>
+          <div><span>Duration</span><b>~5-6 hrs</b></div>
+          <div><span>Code</span><b>AISC 360</b></div>
+          <div><span>Level</span><b>4th stage</b></div>
+        </div>
+        <div class="price-row">
+          <span class="price">65,000 IQD</span>
+        </div>
+        <button class="btn modal-full-btn" onclick="openEnroll('Steel Design')">View course</button>
+      </div>
+
     </div>
   </div>
 </section>
@@ -313,7 +334,8 @@
     'Bridge Design': {slug:'bridge', free:false, price:'15,000 IQD'},
     'Reinforced Concrete': {slug:'rc', free:false, price:'15,000 IQD'},
     'AutoCAD for Civil Engineering': {slug:'autocad', free:true, price:null},
-    'Quantity Survey': {slug:'qs', free:false, price:'12,000 IQD'}
+    'Quantity Survey': {slug:'qs', free:false, price:'12,000 IQD'},
+    'Steel Design': {slug:'steel', free:false, price:'65,000 IQD'}
   };
 
   let selectedPay = null;
