@@ -6,6 +6,7 @@
 <title>Site & Structure — Engineering Course Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0F1B2D;
@@ -289,22 +290,11 @@
   <p>PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY</p>
 </footer>
 
-<!-- LOGIN MODAL -->
+<!-- LOGIN / SIGNUP MODAL -->
 <div class="overlay" id="loginOverlay">
   <div class="modal crop">
     <button class="modal-close" onclick="closeModal('loginOverlay')">&times;</button>
-    <h3>Log in</h3>
-    <p class="sub">Access your enrolled courses.</p>
-    <div class="field">
-      <label>Phone number</label>
-      <input type="text" id="loginPhone" placeholder="07XX XXX XXXX">
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input type="password" id="loginPass" placeholder="••••••••">
-    </div>
-    <p class="err" id="loginErr">Enter your phone number and password first.</p>
-    <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
+    <div id="authBody"></div>
   </div>
 </div>
 
@@ -328,32 +318,104 @@
 
   let selectedPay = null;
 
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
-  document.getElementById('loginBtn').onclick = () => openModal('loginOverlay');
-  document.getElementById('loginBtn2').onclick = () => openModal('loginOverlay');
+  document.getElementById('loginBtn').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+  document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
 
-  function submitLogin(){
-    const phone = document.getElementById('loginPhone').value.trim();
-    const pass = document.getElementById('loginPass').value.trim();
-    const err = document.getElementById('loginErr');
-    if(!phone || !pass){
-      err.classList.add('show');
-      return;
+  function renderAuth(mode){
+    const body = document.getElementById('authBody');
+    if(mode === 'login'){
+      body.innerHTML = `
+        <h3>Log in</h3>
+        <p class="sub">Access your enrolled courses.</p>
+        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
+        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">No account? <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">Sign up</a></p>
+      `;
+    } else {
+      body.innerHTML = `
+        <h3>Sign up</h3>
+        <p class="sub">Create your account.</p>
+        <div class="field"><label>Full name</label><input type="text" id="authName" placeholder="Your name"></div>
+        <div class="field"><label>Phone number</label><input type="text" id="authPhone" placeholder="07XX XXX XXXX"></div>
+        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
+        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="At least 6 characters"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">Sign up</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">Already have an account? <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Log in</a></p>
+      `;
     }
-    err.classList.remove('show');
-    document.getElementById('enrollBody').innerHTML = `
+  }
+
+  function showAuthErr(msg){
+    const err = document.getElementById('authErr');
+    err.textContent = msg;
+    err.classList.add('show');
+  }
+
+  async function submitLogin(){
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value.trim();
+    if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error){ showAuthErr(error.message); return; }
+    closeModal('loginOverlay');
+    updateAuthUI();
+  }
+
+  async function submitSignup(){
+    const name = document.getElementById('authName').value.trim();
+    const phone = document.getElementById('authPhone').value.trim();
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value.trim();
+    if(!name || !phone || !email || !pass){ showAuthErr('Fill in all fields.'); return; }
+    if(pass.length < 6){ showAuthErr('Password must be at least 6 characters.'); return; }
+    const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
+    if(error){ showAuthErr(error.message); return; }
+    if(data.user){
+      await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
+    }
+    document.getElementById('authBody').innerHTML = `
       <div class="success-box">
         <div class="check">&#10003;</div>
-        <h3>Logged in</h3>
-        <p class="sub">This is a prototype — a live site would now show your enrolled courses and progress here.</p>
+        <h3>Account created</h3>
+        <p class="sub">You're signed up and logged in.</p>
         <button class="btn modal-full-btn" onclick="closeModal('loginOverlay')">Close</button>
       </div>`;
-    closeModal('loginOverlay');
-    document.getElementById('loginPhone').value='';
-    document.getElementById('loginPass').value='';
+    updateAuthUI();
   }
+
+  async function doLogout(){
+    await sb.auth.signOut();
+    updateAuthUI();
+  }
+
+  async function updateAuthUI(){
+    const { data:{ session } } = await sb.auth.getSession();
+    const loginBtn = document.getElementById('loginBtn');
+    const loginBtn2 = document.getElementById('loginBtn2');
+    if(session){
+      loginBtn.textContent = 'Log out';
+      loginBtn.onclick = doLogout;
+      loginBtn2.textContent = 'Log out';
+      loginBtn2.onclick = doLogout;
+    } else {
+      loginBtn.textContent = 'Log in';
+      loginBtn.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+      loginBtn2.textContent = 'Log in';
+      loginBtn2.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+    }
+  }
+
+  updateAuthUI();
 
   function openEnroll(name){
     const c = courses[name];
