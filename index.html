@@ -308,12 +308,12 @@
 
 <script>
   const courses = {
-    'Graduation Project Making': {free:true, price:null},
-    'Foundation Engineering': {free:false, price:'15,000 IQD'},
-    'Bridge Design': {free:false, price:'15,000 IQD'},
-    'Reinforced Concrete': {free:false, price:'15,000 IQD'},
-    'AutoCAD for Civil Engineering': {free:true, price:null},
-    'Quantity Survey': {free:false, price:'12,000 IQD'}
+    'Graduation Project Making': {slug:'grad-project', free:true, price:null},
+    'Foundation Engineering': {slug:'foundation', free:false, price:'15,000 IQD'},
+    'Bridge Design': {slug:'bridge', free:false, price:'15,000 IQD'},
+    'Reinforced Concrete': {slug:'rc', free:false, price:'15,000 IQD'},
+    'AutoCAD for Civil Engineering': {slug:'autocad', free:true, price:null},
+    'Quantity Survey': {slug:'qs', free:false, price:'12,000 IQD'}
   };
 
   let selectedPay = null;
@@ -417,20 +417,49 @@
 
   updateAuthUI();
 
-  function openEnroll(name){
+  async function openEnroll(name){
     const c = courses[name];
     selectedPay = null;
     const body = document.getElementById('enrollBody');
 
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){
+      renderAuth('login');
+      openModal('loginOverlay');
+      return;
+    }
+
+    const { data: existing } = await sb.from('enrollments')
+      .select('status')
+      .eq('user_id', session.user.id)
+      .eq('course_slug', c.slug)
+      .maybeSingle();
+
+    if(existing){
+      if(existing.status === 'pending'){
+        body.innerHTML = `
+          <h3>${name}</h3>
+          <p class="sub">Payment submitted — awaiting manual verification. You'll get access once it's approved.</p>
+          <button class="btn modal-full-btn" onclick="closeModal('enrollOverlay')">Close</button>
+        `;
+      } else {
+        body.innerHTML = `
+          <div class="success-box">
+            <div class="check">&#10003;</div>
+            <h3>${name}</h3>
+            <p class="sub">You're enrolled. Course content isn't wired up yet — that comes in a later step.</p>
+            <button class="btn modal-full-btn" onclick="closeModal('enrollOverlay')">Close</button>
+          </div>`;
+      }
+      openModal('enrollOverlay');
+      return;
+    }
+
     if(c.free){
       body.innerHTML = `
         <h3>${name}</h3>
-        <p class="sub">Free course — dwg access unlocked instantly after enrolling.</p>
-        <div class="field">
-          <label>Phone number</label>
-          <input type="text" id="enrollPhone" placeholder="07XX XXX XXXX">
-        </div>
-        <p class="err" id="enrollErr">Enter your phone number to enroll.</p>
+        <p class="sub">Free course — access unlocked instantly after enrolling.</p>
+        <p class="err" id="enrollErr"></p>
         <button class="btn btn-accent modal-full-btn" onclick="submitFree('${name}')">Enroll for free</button>
       `;
     } else {
@@ -445,10 +474,11 @@
           <label id="payLabel">Phone / card number</label>
           <input type="text" id="payDetail" placeholder="Select a payment method first">
         </div>
-        <p class="err" id="payErr">Choose a payment method and enter your details.</p>
+        <p class="err" id="payErr"></p>
         <button class="btn btn-accent modal-full-btn" onclick="submitPay('${name}', '${c.price}')">Confirm payment</button>
       `;
     }
+    openModal('enrollOverlay');
   }
 
   function choosePay(method){
@@ -461,18 +491,34 @@
     else { label.textContent='Qi Card number'; input.placeholder='XXXX XXXX XXXX XXXX'; }
   }
 
-  function submitFree(name){
-    const phone = document.getElementById('enrollPhone').value.trim();
+  async function submitFree(name){
+    const c = courses[name];
     const err = document.getElementById('enrollErr');
-    if(!phone){ err.classList.add('show'); return; }
+    const { data:{ session } } = await sb.auth.getSession();
+    const { error } = await sb.from('enrollments').insert({
+      user_id: session.user.id,
+      course_slug: c.slug,
+      status: 'active'
+    });
+    if(error){ err.textContent = error.message; err.classList.add('show'); return; }
     err.classList.remove('show');
     showEnrollSuccess(name, null);
   }
 
-  function submitPay(name, price){
+  async function submitPay(name, price){
+    const c = courses[name];
     const detail = document.getElementById('payDetail').value.trim();
     const err = document.getElementById('payErr');
-    if(!selectedPay || !detail){ err.classList.add('show'); return; }
+    if(!selectedPay || !detail){ err.textContent = 'Choose a payment method and enter your details.'; err.classList.add('show'); return; }
+    const { data:{ session } } = await sb.auth.getSession();
+    const { error } = await sb.from('enrollments').insert({
+      user_id: session.user.id,
+      course_slug: c.slug,
+      status: 'pending',
+      payment_method: selectedPay,
+      payment_detail: detail
+    });
+    if(error){ err.textContent = error.message; err.classList.add('show'); return; }
     err.classList.remove('show');
     showEnrollSuccess(name, price + ' via ' + (selectedPay==='zain' ? 'Zain Cash' : 'Qi Card'));
   }
@@ -481,9 +527,9 @@
     document.getElementById('enrollBody').innerHTML = `
       <div class="success-box">
         <div class="check">&#10003;</div>
-        <h3>Enrolled</h3>
+        <h3>${paymentInfo ? 'Submitted' : 'Enrolled'}</h3>
         <p class="sub">${name}${paymentInfo ? ' — ' + paymentInfo : ' — access unlocked'}</p>
-        <p class="sub">This confirms the flow only. A live site would connect here to Bunny Stream for protected video access and to Zain Cash / Qi Card APIs for real payment confirmation.</p>
+        ${paymentInfo ? '<p class="sub">Your payment is pending manual verification. Access unlocks once it\'s approved.</p>' : ''}
         <button class="btn modal-full-btn" onclick="closeModal('enrollOverlay')">Close</button>
       </div>`;
   }
