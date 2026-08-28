@@ -75,6 +75,8 @@
   .overlay.active{display:flex;}
   .video-modal{position:relative; width:100%; max-width:900px; aspect-ratio:16/9;}
   .video-modal iframe{width:100%; height:100%; border:1px solid var(--line);}
+  .video-modal:fullscreen{max-width:none; width:100vw; height:100vh; background:#000;}
+  .video-modal:fullscreen iframe{border:none;}
 
   .watermark{
     position:absolute; pointer-events:none; z-index:5;
@@ -203,6 +205,14 @@
     wm.style.left = left + '%';
   }
 
+  function toggleFullscreen(){
+    if(document.fullscreenElement){
+      document.exitFullscreen();
+    } else {
+      document.getElementById('videoModal').requestFullscreen().catch(() => {});
+    }
+  }
+
   function closeVideo(){
     document.getElementById('videoOverlay').classList.remove('active');
     document.getElementById('videoFrame').src = '';
@@ -212,8 +222,11 @@
 
 <div class="overlay" id="videoOverlay">
   <div class="video-modal" id="videoModal">
-    <button class="btn" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
-    <iframe id="videoFrame" src="" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    <div style="position:absolute; top:-44px; right:0; display:flex; gap:8px;">
+      <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
+      <button class="btn" onclick="closeVideo()">Close</button>
+    </div>
+    <iframe id="videoFrame" src="" frameborder="0" allow="autoplay"></iframe>
     <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
   </div>
 </div>
