@@ -16,25 +16,6 @@ module.exports = async (req, res) => {
     return;
   }
 
-  if (req.query.debug === '1') {
-    const testClient = createClient(SUPABASE_URL, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
-    const adminApiResult = await testClient.auth.admin.listUsers({ perPage: 1 });
-    const dbResult = await testClient.from('trusted_devices').select('id', { count: 'exact', head: true });
-    const profileResult = await testClient.from('profiles').select('id').limit(3);
-    res.status(200).json({
-      keyLength: serviceRoleKey.length,
-      keyPrefix: serviceRoleKey.slice(0, 12),
-      hasWhitespace: /\s/.test(serviceRoleKey),
-      adminApiError: adminApiResult.error ? adminApiResult.error.message : null,
-      adminApiUserCount: adminApiResult.data ? adminApiResult.data.users.length : null,
-      dbResultFull: JSON.stringify(dbResult),
-      profileResultFull: JSON.stringify(profileResult)
-    });
-    return;
-  }
-
   const authHeader = req.headers.authorization || '';
   const accessToken = authHeader.replace('Bearer ', '');
   if (!accessToken) {
