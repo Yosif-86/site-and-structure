@@ -75,6 +75,22 @@
   .overlay.active{display:flex;}
   .video-modal{position:relative; width:100%; max-width:900px; aspect-ratio:16/9;}
   .video-modal iframe{width:100%; height:100%; border:1px solid var(--line);}
+
+  .watermark{
+    position:absolute; pointer-events:none; z-index:5;
+    font-family:'IBM Plex Mono'; font-size:13px; color:rgba(255,255,255,0.35);
+    text-shadow:0 0 4px rgba(0,0,0,0.6); transition:top 1.5s ease, left 1.5s ease;
+    white-space:nowrap;
+  }
+
+  .capture-warning{
+    display:none; position:absolute; inset:0; z-index:10; align-items:center; justify-content:center; text-align:center;
+    background:rgba(6,11,18,0.97); padding:30px;
+  }
+  .capture-warning.active{display:flex;}
+  .capture-warning .shield{font-size:40px; color:var(--red); margin-bottom:16px;}
+  .capture-warning h3{font-family:'Space Grotesk'; font-size:20px; margin-bottom:12px;}
+  .capture-warning p{color:var(--muted); font-size:13.5px; margin-bottom:20px; line-height:1.6;}
 </style>
 </head>
 <body>
@@ -159,6 +175,10 @@
     }).join('');
   })();
 
+  let currentCourseSlug = null;
+  let watermarkInterval = null;
+  let lastAlertAt = 0;
+
   async function watchCourse(courseSlug){
     const { data:{ session } } = await sb.auth.getSession();
     const res = await fetch('/api/get-video-url', {
@@ -171,13 +191,58 @@
       alert(result.error || 'This course video isn\'t available yet.');
       return;
     }
+    currentCourseSlug = courseSlug;
+
+    const { data: prof } = await sb.from('profiles').select('phone').eq('id', session.user.id).maybeSingle();
+    const watermarkText = document.getElementById('watermarkText');
+    watermarkText.textContent = (prof && prof.phone) ? prof.phone : session.user.email;
+    moveWatermark();
+    watermarkInterval = setInterval(moveWatermark, 4000);
+
     document.getElementById('videoFrame').src = result.url;
     document.getElementById('videoOverlay').classList.add('active');
+    document.getElementById('captureWarning').classList.remove('active');
+
+    window.addEventListener('blur', onFocusLoss);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+  }
+
+  function moveWatermark(){
+    const wm = document.getElementById('watermark');
+    const top = 10 + Math.random() * 70;
+    const left = 10 + Math.random() * 60;
+    wm.style.top = top + '%';
+    wm.style.left = left + '%';
+  }
+
+  function onFocusLoss(){ triggerCaptureWarning(); }
+  function onVisibilityChange(){ if(document.hidden) triggerCaptureWarning(); }
+
+  async function triggerCaptureWarning(){
+    if(!document.getElementById('videoOverlay').classList.contains('active')) return;
+    document.getElementById('captureWarning').classList.add('active');
+
+    const now = Date.now();
+    if(now - lastAlertAt < 10000) return; // avoid spamming the log
+    lastAlertAt = now;
+
+    const { data:{ session } } = await sb.auth.getSession();
+    if(session){
+      await sb.from('screen_alerts').insert({ user_id: session.user.id, course_slug: currentCourseSlug });
+    }
+  }
+
+  function dismissCaptureWarning(){
+    document.getElementById('captureWarning').classList.remove('active');
   }
 
   function closeVideo(){
     document.getElementById('videoOverlay').classList.remove('active');
+    document.getElementById('captureWarning').classList.remove('active');
     document.getElementById('videoFrame').src = '';
+    clearInterval(watermarkInterval);
+    window.removeEventListener('blur', onFocusLoss);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
   }
 </script>
 
@@ -185,6 +250,15 @@
   <div class="video-modal">
     <button class="btn" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
     <iframe id="videoFrame" src="" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
+    <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
+    <div class="capture-warning" id="captureWarning">
+      <div>
+        <div class="shield">&#9873;</div>
+        <h3>Screen capture attempt detected</h3>
+        <p>This content is protected. Recording or capturing this screen is not permitted.<br>Close any screen recording software, then continue.</p>
+        <button class="btn btn-accent" onclick="dismissCaptureWarning()">Return to content</button>
+      </div>
+    </div>
   </div>
 </div>
 
