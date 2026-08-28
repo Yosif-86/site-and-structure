@@ -75,8 +75,6 @@
   .overlay.active{display:flex;}
   .video-modal{position:relative; width:100%; max-width:900px; aspect-ratio:16/9;}
   .video-modal iframe{width:100%; height:100%; border:1px solid var(--line);}
-  .video-modal:fullscreen{max-width:none; aspect-ratio:auto; background:#000;}
-  .video-modal:fullscreen iframe{border:none;}
 
   .watermark{
     position:absolute; pointer-events:none; z-index:5;
@@ -86,14 +84,6 @@
     white-space:nowrap;
   }
 
-  .capture-warning{
-    display:none; position:absolute; inset:0; z-index:10; align-items:center; justify-content:center; text-align:center;
-    background:rgba(6,11,18,0.97); padding:30px;
-  }
-  .capture-warning.active{display:flex;}
-  .capture-warning .shield{font-size:40px; color:var(--red); margin-bottom:16px;}
-  .capture-warning h3{font-family:'Space Grotesk'; font-size:20px; margin-bottom:12px;}
-  .capture-warning p{color:var(--muted); font-size:13.5px; margin-bottom:20px; line-height:1.6;}
 </style>
 </head>
 <body>
@@ -180,7 +170,6 @@
 
   let currentCourseSlug = null;
   let watermarkInterval = null;
-  let lastAlertAt = 0;
 
   async function watchCourse(courseSlug){
     const { data:{ session } } = await sb.auth.getSession();
@@ -204,9 +193,6 @@
 
     document.getElementById('videoFrame').src = result.url;
     document.getElementById('videoOverlay').classList.add('active');
-    document.getElementById('captureWarning').classList.remove('active');
-
-    document.addEventListener('visibilitychange', onVisibilityChange);
   }
 
   function moveWatermark(){
@@ -217,68 +203,10 @@
     wm.style.left = left + '%';
   }
 
-  let hiddenTimeout = null;
-  function onVisibilityChange(){
-    if(document.hidden){
-      // Wait 2s before reacting so a quick, accidental tab switch doesn't false-trigger.
-      hiddenTimeout = setTimeout(() => {
-        if(document.hidden) triggerCaptureWarning();
-      }, 2000);
-    } else if(hiddenTimeout){
-      clearTimeout(hiddenTimeout);
-      hiddenTimeout = null;
-    }
-  }
-
-  async function triggerCaptureWarning(){
-    if(!document.getElementById('videoOverlay').classList.contains('active')) return;
-    document.getElementById('captureWarning').classList.add('active');
-    document.getElementById('videoFrame').src = ''; // hard-stop playback
-
-    const now = Date.now();
-    if(now - lastAlertAt < 10000) return; // avoid spamming the log
-    lastAlertAt = now;
-
-    const { data:{ session } } = await sb.auth.getSession();
-    if(session){
-      await sb.from('screen_alerts').insert({ user_id: session.user.id, course_slug: currentCourseSlug });
-    }
-  }
-
-  async function dismissCaptureWarning(){
-    document.getElementById('captureWarning').classList.remove('active');
-    // Video was hard-stopped on detection; get a fresh link to resume watching (starts from the beginning).
-    const { data:{ session } } = await sb.auth.getSession();
-    const res = await fetch('/api/get-video-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
-      body: JSON.stringify({ courseSlug: currentCourseSlug })
-    });
-    const result = await res.json();
-    if(res.ok){
-      document.getElementById('videoFrame').src = result.url;
-    }
-  }
-
-  let redirectingFullscreen = false;
-  document.addEventListener('fullscreenchange', () => {
-    const frame = document.getElementById('videoFrame');
-    if(document.fullscreenElement === frame && !redirectingFullscreen){
-      redirectingFullscreen = true;
-      document.exitFullscreen().then(() => {
-        document.getElementById('videoModal').requestFullscreen().catch(() => {});
-        redirectingFullscreen = false;
-      });
-    }
-  });
-
   function closeVideo(){
     document.getElementById('videoOverlay').classList.remove('active');
-    document.getElementById('captureWarning').classList.remove('active');
     document.getElementById('videoFrame').src = '';
     clearInterval(watermarkInterval);
-    if(hiddenTimeout){ clearTimeout(hiddenTimeout); hiddenTimeout = null; }
-    document.removeEventListener('visibilitychange', onVisibilityChange);
   }
 </script>
 
@@ -287,14 +215,6 @@
     <button class="btn" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
     <iframe id="videoFrame" src="" frameborder="0" allow="autoplay; fullscreen" allowfullscreen></iframe>
     <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
-    <div class="capture-warning" id="captureWarning">
-      <div>
-        <div class="shield">&#9873;</div>
-        <h3>Screen capture attempt detected</h3>
-        <p>This content is protected. Recording or capturing this screen is not permitted.<br>Close any screen recording software, then continue.</p>
-        <button class="btn btn-accent" onclick="dismissCaptureWarning()">Return to content</button>
-      </div>
-    </div>
   </div>
 </div>
 

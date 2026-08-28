@@ -117,23 +117,6 @@
   </div>
 </section>
 
-<section class="section">
-  <div class="wrap">
-    <div class="section-head">
-      <div class="section-tag">Video protection</div>
-      <h2>Screen capture alerts</h2>
-    </div>
-    <div class="table-wrap">
-      <table id="captureTable">
-        <thead>
-          <tr><th>Email</th><th>Name</th><th>Phone</th><th>Course</th><th>When</th></tr>
-        </thead>
-        <tbody id="captureBody"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
 <script>
   const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
@@ -243,36 +226,6 @@
       </tr>`).join('');
   }
 
-  async function loadCaptureAlerts(){
-    const { data: profiles } = await sb.from('profiles').select('id, full_name, phone');
-    const { data: logins } = await sb.from('login_events').select('user_id, email, created_at').order('created_at', { ascending: false });
-    const { data: alerts } = await sb.from('screen_alerts').select('user_id, course_slug, created_at').order('created_at', { ascending: false }).limit(50);
-
-    const emailByUser = {};
-    (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
-    const profileByUser = {};
-    (profiles || []).forEach(p => { profileByUser[p.id] = p; });
-
-    const body = document.getElementById('captureBody');
-    if(!alerts || alerts.length === 0){
-      body.innerHTML = '<tr><td colspan="5" class="empty">No screen capture alerts.</td></tr>';
-      return;
-    }
-    body.innerHTML = alerts.map(a => {
-      const prof = profileByUser[a.user_id] || {};
-      const email = emailByUser[a.user_id] || '—';
-      const title = courseTitles[a.course_slug] || a.course_slug || '—';
-      return `
-        <tr>
-          <td>${email}</td>
-          <td>${prof.full_name || '—'}</td>
-          <td>${prof.phone || '—'}</td>
-          <td>${title}</td>
-          <td>${new Date(a.created_at).toLocaleString()}</td>
-        </tr>`;
-    }).join('');
-  }
-
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ window.location.href = 'index.html'; return; }
@@ -280,7 +233,6 @@
     if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
     loadEnrollments();
     loadFlagged();
-    loadCaptureAlerts();
   })();
 </script>
 
