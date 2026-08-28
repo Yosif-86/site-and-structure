@@ -42,7 +42,7 @@
 
   header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:rgba(15,27,45,0.92); backdrop-filter:blur(6px); z-index:50;}
   header .wrap{display:flex; align-items:center; justify-content:space-between;}
-  .brand{display:flex; align-items:center; gap:10px;}
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit;}
   .brand-mark{width:34px; height:34px; border:1.5px solid var(--red); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); transform:rotate(45deg);}
   .brand-mark span{transform:rotate(-45deg);}
   .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px; letter-spacing:0.2px;}
@@ -142,10 +142,10 @@
 
 <header>
   <div class="wrap">
-    <div class="brand">
+    <a href="index.html" class="brand">
       <div class="brand-mark"><span>&#9651;</span></div>
       <div class="brand-name">SITE &amp; STRUCTURE<small>ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
-    </div>
+    </a>
     <nav>
       <a href="#courses">Courses</a>
       <a href="#service">Project service</a>
