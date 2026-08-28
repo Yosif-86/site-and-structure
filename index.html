@@ -351,7 +351,6 @@
 
   const DEVICE_KEY = 'ss_device_id';
   const SESSION_KEY = 'ss_session_token';
-  const MAX_DEVICES = 2;
   let sessionCheckInterval = null;
 
   function makeToken(){
@@ -371,38 +370,19 @@
     return id;
   }
 
-  async function checkDeviceAllowed(userId){
+  async function checkDeviceAndClaimSession(userId, accessToken){
     const deviceId = getDeviceId();
-    const { data: existing } = await sb.from('trusted_devices')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('device_id', deviceId)
-      .maybeSingle();
-
-    if(existing){
-      await sb.from('trusted_devices').update({ last_seen: new Date().toISOString() }).eq('id', existing.id);
-      return true;
-    }
-
-    const { count } = await sb.from('trusted_devices')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
-    if(count >= MAX_DEVICES) return false;
-
-    await sb.from('trusted_devices').insert({
-      user_id: userId,
-      device_id: deviceId,
-      device_label: navigator.userAgent
+    const res = await fetch('/api/check-device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
+      body: JSON.stringify({ deviceId, deviceLabel: navigator.userAgent })
     });
-    return true;
-  }
-
-  async function claimActiveSession(userId){
-    const token = makeToken();
-    localStorage.setItem(SESSION_KEY, token);
-    await sb.from('profiles').upsert({ id:userId, active_session_token:token });
+    if(!res.ok) return false;
+    const result = await res.json();
+    if(!result.allowed) return false;
+    localStorage.setItem(SESSION_KEY, result.sessionToken);
     startSessionWatch(userId);
+    return true;
   }
 
   function startSessionWatch(userId){
@@ -545,13 +525,12 @@
     if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showAuthErr(error.message); return; }
-    const allowed = await checkDeviceAllowed(data.user.id);
+    const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
     if(!allowed){
       await sb.auth.signOut();
       showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
       return;
     }
-    await claimActiveSession(data.user.id);
     logLoginEvent(data.user.id, data.user.email);
     closeModal('loginOverlay');
     updateAuthUI();
@@ -569,13 +548,12 @@
     if(data.user){
       const { error: profileErr } = await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
       if(profileErr){ showAuthErr(profileErr.message); return; }
-      const allowed = await checkDeviceAllowed(data.user.id);
+      const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
       if(!allowed){
         await sb.auth.signOut();
         showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
         return;
       }
-      await claimActiveSession(data.user.id);
       logLoginEvent(data.user.id, data.user.email);
     }
     document.getElementById('authBody').innerHTML = `
