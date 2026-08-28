@@ -84,9 +84,36 @@
   :root[dir="rtl"] .eyebrow, :root[dir="rtl"] .section-tag, :root[dir="rtl"] .card-tag, :root[dir="rtl"] .status-badge{font-family:'Cairo', sans-serif; text-transform:none;}
   :root[dir="rtl"] .eyebrow::before{content:'';}
 
+  .hamburger-btn{
+    display:none; width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
+    cursor:pointer; align-items:center; justify-content:center; font-size:18px; padding:0;
+  }
+  .hamburger-btn:hover{background:var(--panel2);}
+
+  .drawer-backdrop{display:none; position:fixed; inset:0; background:rgba(10,8,6,0.6); z-index:199;}
+  .drawer-backdrop.open{display:block;}
+  .drawer{
+    position:fixed; top:0; bottom:0; width:min(300px,82vw); z-index:200;
+    background:var(--panel); padding:20px; display:flex; flex-direction:column; gap:6px;
+    transition:transform .3s cubic-bezier(0.16,1,0.3,1); overflow-y:auto;
+  }
+  :root:not([dir="rtl"]) .drawer{left:0; transform:translateX(-100%); border-right:1px solid var(--line);}
+  :root:not([dir="rtl"]) .drawer.open{transform:translateX(0);}
+  :root[dir="rtl"] .drawer{right:0; transform:translateX(100%); border-left:1px solid var(--line);}
+  :root[dir="rtl"] .drawer.open{transform:translateX(0);}
+  .drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .drawer-title{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px; text-transform:uppercase;}
+  :root[dir="rtl"] .drawer-title{font-family:'Cairo', sans-serif; text-transform:none;}
+  .drawer-close{background:none; border:none; color:var(--red); font-size:20px; cursor:pointer; line-height:1;}
+  .drawer-links{display:flex; flex-direction:column; gap:4px;}
+  .drawer-links a{color:var(--text); text-decoration:none; font-size:15px; padding:12px 8px; border-radius:8px;}
+  .drawer-links a:hover{background:var(--panel2);}
+  .drawer-links .btn{margin-top:12px;}
+
   @media (max-width:700px){
-    header .wrap{flex-wrap:wrap; row-gap:12px;}
-    nav{gap:12px 16px; width:100%;}
+    header .wrap{row-gap:12px;}
+    .nav-links-desktop{display:none;}
+    .hamburger-btn{display:flex;}
     .brand-name{font-size:15px;}
     .brand-name small{font-size:8px;}
   }
@@ -203,16 +230,34 @@
       <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
     </a>
     <nav>
-      <a href="#courses" data-i18n="nav_courses">Courses</a>
-      <a href="#service" data-i18n="nav_service">Project service</a>
-      <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
-      <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
+      <button class="hamburger-btn" id="hamburgerBtn" onclick="openDrawer()" aria-label="Menu" title="Menu">&#9776;</button>
+      <div class="nav-links-desktop">
+        <a href="#courses" data-i18n="nav_courses">Courses</a>
+        <a href="#service" data-i18n="nav_service">Project service</a>
+        <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+        <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
+        <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
+      </div>
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
       <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
-      <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
     </nav>
   </div>
 </header>
+
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+    <div class="drawer-title" data-i18n="menu">Menu</div>
+  </div>
+  <div class="drawer-links">
+    <a href="#courses" onclick="closeDrawer()" data-i18n="nav_courses">Courses</a>
+    <a href="#service" onclick="closeDrawer()" data-i18n="nav_service">Project service</a>
+    <a href="my-courses.html" id="myCoursesLinkDrawer" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+    <a href="admin.html" id="adminLinkDrawer" style="display:none;" data-i18n="nav_admin">Admin</a>
+    <button class="btn btn-accent" id="loginBtnDrawer" data-i18n="log_in">Log in</button>
+  </div>
+</div>
 
 <section class="hero">
   <div class="wrap">
@@ -271,6 +316,7 @@
       hero_title: 'Built like a drawing set. <em>Taught</em> like a site walkthrough.',
       hero_sub: 'Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.',
       browse_courses: 'Browse courses',
+      menu: 'Menu',
       sheet_index: 'Sheet index', course_catalogue: 'Course catalogue',
       loading_courses: 'Loading courses…', no_courses: 'No courses published yet.',
       beyond_course: 'Beyond the course', grad_service_title: 'Graduation project service',
@@ -302,6 +348,7 @@
       hero_title: 'مبني كملف مخططات، <em>ويُدرَّس</em> كجولة ميدانية.',
       hero_sub: 'ثلاثة مسارات دراسية لطلاب الهندسة المدنية — من معايير مشروع التخرج إلى المواد الأكاديمية الأساسية والأوتوكاد وحصر الكميات. عملية، جاهزة للامتحان، ومبنية على مخططات حقيقية.',
       browse_courses: 'تصفح الدورات',
+      menu: 'القائمة',
       sheet_index: 'فهرس اللوحات', course_catalogue: 'فهرس الدورات',
       loading_courses: 'جاري تحميل الدورات...', no_courses: 'لا توجد دورات منشورة بعد.',
       beyond_course: 'ما بعد الدورة', grad_service_title: 'خدمة مشروع التخرج',
@@ -475,6 +522,9 @@
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
+  function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); }
+  function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
+
   document.getElementById('loginBtn').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
   document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
 
@@ -599,22 +649,23 @@
     const { data:{ session } } = await sb.auth.getSession();
     const loginBtn = document.getElementById('loginBtn');
     const loginBtn2 = document.getElementById('loginBtn2');
+    const loginBtnDrawer = document.getElementById('loginBtnDrawer');
     if(session){
       if(!sessionCheckInterval) startSessionWatch(session.user.id);
-      loginBtn.textContent = t('log_out');
-      loginBtn.onclick = doLogout;
-      loginBtn2.textContent = t('log_out');
-      loginBtn2.onclick = doLogout;
+      [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_out'); btn.onclick = doLogout; });
       document.getElementById('myCoursesLink').style.display = '';
+      document.getElementById('myCoursesLinkDrawer').style.display = '';
       const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
-      document.getElementById('adminLink').style.display = (prof && prof.is_admin) ? '' : 'none';
+      const showAdmin = (prof && prof.is_admin) ? '' : 'none';
+      document.getElementById('adminLink').style.display = showAdmin;
+      document.getElementById('adminLinkDrawer').style.display = showAdmin;
     } else {
-      loginBtn.textContent = t('log_in');
-      loginBtn.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
-      loginBtn2.textContent = t('log_in');
-      loginBtn2.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+      const openLogin = () => { closeDrawer(); renderAuth('login'); openModal('loginOverlay'); };
+      [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_in'); btn.onclick = openLogin; });
       document.getElementById('myCoursesLink').style.display = 'none';
+      document.getElementById('myCoursesLinkDrawer').style.display = 'none';
       document.getElementById('adminLink').style.display = 'none';
+      document.getElementById('adminLinkDrawer').style.display = 'none';
     }
   }
 

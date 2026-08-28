@@ -79,9 +79,35 @@
   :root[dir="rtl"] .row h3{font-family:'Cairo', sans-serif;}
   :root[dir="rtl"] .status{font-family:'Cairo', sans-serif; text-transform:none;}
 
+  .hamburger-btn{
+    display:none; width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
+    cursor:pointer; align-items:center; justify-content:center; font-size:18px; padding:0;
+  }
+  .hamburger-btn:hover{background:var(--panel2);}
+  .drawer-backdrop{display:none; position:fixed; inset:0; background:rgba(10,8,6,0.6); z-index:199;}
+  .drawer-backdrop.open{display:block;}
+  .drawer{
+    position:fixed; top:0; bottom:0; width:min(300px,82vw); z-index:200;
+    background:var(--panel); padding:20px; display:flex; flex-direction:column; gap:6px;
+    transition:transform .3s cubic-bezier(0.16,1,0.3,1); overflow-y:auto;
+  }
+  :root:not([dir="rtl"]) .drawer{left:0; transform:translateX(-100%); border-right:1px solid var(--line);}
+  :root:not([dir="rtl"]) .drawer.open{transform:translateX(0);}
+  :root[dir="rtl"] .drawer{right:0; transform:translateX(100%); border-left:1px solid var(--line);}
+  :root[dir="rtl"] .drawer.open{transform:translateX(0);}
+  .drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .drawer-title{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px; text-transform:uppercase;}
+  :root[dir="rtl"] .drawer-title{font-family:'Cairo', sans-serif; text-transform:none;}
+  .drawer-close{background:none; border:none; color:var(--red); font-size:20px; cursor:pointer; line-height:1;}
+  .drawer-links{display:flex; flex-direction:column; gap:4px;}
+  .drawer-links a{color:var(--text); text-decoration:none; font-size:15px; padding:12px 8px; border-radius:8px;}
+  .drawer-links a:hover{background:var(--panel2);}
+  .drawer-links .btn{margin-top:12px;}
+
   @media (max-width:700px){
-    header .wrap{flex-wrap:wrap; row-gap:12px;}
-    nav{gap:12px 16px; width:100%;}
+    header .wrap{row-gap:12px;}
+    .nav-links-desktop{display:none;}
+    .hamburger-btn{display:flex;}
     .brand-name{font-size:15px;}
     .brand-name small{font-size:8px;}
   }
@@ -156,14 +182,30 @@
       <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
     </a>
     <nav>
-      <a href="index.html" data-i18n="nav_home">Home</a>
-      <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+      <button class="hamburger-btn" id="hamburgerBtn" onclick="openDrawer()" aria-label="Menu" title="Menu">&#9776;</button>
+      <div class="nav-links-desktop">
+        <a href="index.html" data-i18n="nav_home">Home</a>
+        <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+        <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
+      </div>
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
       <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
-      <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
     </nav>
   </div>
 </header>
+
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+    <div class="drawer-title" data-i18n="menu">Menu</div>
+  </div>
+  <div class="drawer-links">
+    <a href="index.html" data-i18n="nav_home">Home</a>
+    <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+    <button class="btn btn-accent" id="logoutBtnDrawer" data-i18n="log_out">Log out</button>
+  </div>
+</div>
 
 <section class="section">
   <div class="wrap">
@@ -180,14 +222,14 @@
     en: {
       tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
       nav_home: 'Home', nav_courses: 'Courses', log_out: 'Log out',
-      your_account: 'Your account', my_courses: 'My courses',
+      menu: 'Menu', your_account: 'Your account', my_courses: 'My courses',
       no_enrollments: "You haven't enrolled in any courses yet.", browse_catalogue: 'Browse the catalogue',
       enrolled_on: 'Enrolled', watch: 'Watch', view: 'View', status_active: 'Active', status_pending: 'Awaiting approval'
     },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
       nav_home: 'الرئيسية', nav_courses: 'الدورات', log_out: 'تسجيل الخروج',
-      your_account: 'حسابك', my_courses: 'دوراتي',
+      menu: 'القائمة', your_account: 'حسابك', my_courses: 'دوراتي',
       no_enrollments: 'لم تسجَّل في أي دورة بعد.', browse_catalogue: 'تصفح فهرس الدورات',
       enrolled_on: 'تاريخ التسجيل', watch: 'مشاهدة', view: 'عرض', status_active: 'مفعّل', status_pending: 'بانتظار الموافقة'
     }
@@ -233,10 +275,15 @@
   applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
   applyLang(currentLang);
 
-  document.getElementById('logoutBtn').onclick = async () => {
+  function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); }
+  function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
+
+  const doLogout = async () => {
     await sb.auth.signOut();
     window.location.href = 'index.html';
   };
+  document.getElementById('logoutBtn').onclick = doLogout;
+  document.getElementById('logoutBtnDrawer').onclick = doLogout;
 
   function renderList(enrollments){
     renderedEnrollments = enrollments;
