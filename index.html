@@ -488,9 +488,12 @@
         <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
         <p class="err" id="authErr"></p>
         <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">No account? <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">Sign up</a></p>
+        <p class="sub" style="margin-top:14px; text-align:center;">
+          <a href="#" onclick="renderAuth('forgot'); return false;" style="color:var(--muted);">Forgot password?</a>
+        </p>
+        <p class="sub" style="margin-top:6px; text-align:center;">No account? <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">Sign up</a></p>
       `;
-    } else {
+    } else if(mode === 'signup'){
       body.innerHTML = `
         <h3>Sign up</h3>
         <p class="sub">Create your account.</p>
@@ -502,7 +505,32 @@
         <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">Sign up</button>
         <p class="sub" style="margin-top:14px; text-align:center;">Already have an account? <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Log in</a></p>
       `;
+    } else if(mode === 'forgot'){
+      body.innerHTML = `
+        <h3>Reset password</h3>
+        <p class="sub">We'll email you a link to set a new password.</p>
+        <div class="field"><label>Email</label><input type="email" id="forgotEmail" placeholder="you@email.com"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitForgotPassword()">Send reset link</button>
+        <p class="sub" style="margin-top:14px; text-align:center;"><a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Back to log in</a></p>
+      `;
     }
+  }
+
+  async function submitForgotPassword(){
+    const email = document.getElementById('forgotEmail').value.trim();
+    if(!email){ showAuthErr('Enter your email.'); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password.html'
+    });
+    if(error){ showAuthErr(error.message); return; }
+    document.getElementById('authBody').innerHTML = `
+      <div class="success-box">
+        <div class="check">&#10003;</div>
+        <h3>Check your email</h3>
+        <p class="sub">If an account exists for that email, a reset link is on its way.</p>
+        <button class="btn modal-full-btn" onclick="closeModal('loginOverlay')">Close</button>
+      </div>`;
   }
 
   function showAuthErr(msg){
@@ -649,6 +677,10 @@
           <label id="payLabel">Phone / card number</label>
           <input type="text" id="payDetail" placeholder="Select a payment method first">
         </div>
+        <div class="field">
+          <label>Payment screenshot</label>
+          <input type="file" id="payProof" accept="image/*">
+        </div>
         <p class="err" id="payErr"></p>
         <button class="btn btn-accent modal-full-btn" onclick="submitPay('${name}', '${c.price}')">Confirm payment</button>
       `;
@@ -683,15 +715,23 @@
   async function submitPay(name, price){
     const c = courses[name];
     const detail = document.getElementById('payDetail').value.trim();
+    const proofFile = document.getElementById('payProof').files[0];
     const err = document.getElementById('payErr');
     if(!selectedPay || !detail){ err.textContent = 'Choose a payment method and enter your details.'; err.classList.add('show'); return; }
+    if(!proofFile){ err.textContent = 'Upload a screenshot of your payment.'; err.classList.add('show'); return; }
     const { data:{ session } } = await sb.auth.getSession();
+
+    const filePath = `${session.user.id}/${Date.now()}-${proofFile.name}`;
+    const { error: uploadErr } = await sb.storage.from('payment-proofs').upload(filePath, proofFile);
+    if(uploadErr){ err.textContent = 'Screenshot upload failed: ' + uploadErr.message; err.classList.add('show'); return; }
+
     const { error } = await sb.from('enrollments').insert({
       user_id: session.user.id,
       course_slug: c.slug,
       status: 'pending',
       payment_method: selectedPay,
-      payment_detail: detail
+      payment_detail: detail,
+      payment_proof_path: filePath
     });
     if(error){ err.textContent = error.message; err.classList.add('show'); return; }
     err.classList.remove('show');

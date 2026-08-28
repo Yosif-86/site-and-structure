@@ -144,10 +144,17 @@
   }
   window.approve = approve;
 
+  async function viewProof(path){
+    const { data, error } = await sb.storage.from('payment-proofs').createSignedUrl(path, 60);
+    if(error){ alert('Failed to load proof: ' + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+  window.viewProof = viewProof;
+
   async function loadEnrollments(){
     const { data: profiles } = await sb.from('profiles').select('id, full_name, phone');
     const { data: enrollments } = await sb.from('enrollments')
-      .select('id, user_id, course_slug, status, payment_method, payment_detail, created_at')
+      .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at')
       .order('created_at', { ascending: false });
     const { data: logins } = await sb.from('login_events')
       .select('user_id, email, created_at')
@@ -180,7 +187,10 @@
           <td><span class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Pending'}</span></td>
           <td>${payment}</td>
           <td>${date}</td>
-          <td>${isActive ? '' : `<button class="btn btn-accent" onclick="approve('${e.id}')">Approve</button>`}</td>
+          <td style="display:flex; gap:8px;">
+            ${e.payment_proof_path ? `<button class="btn" onclick="viewProof('${e.payment_proof_path}')">View proof</button>` : ''}
+            ${isActive ? '' : `<button class="btn btn-accent" onclick="approve('${e.id}')">Approve</button>`}
+          </td>
         </tr>`;
     }).join('');
   }
