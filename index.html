@@ -337,7 +337,22 @@
     const token = makeToken();
     localStorage.setItem(SESSION_KEY, token);
     await sb.from('profiles').upsert({ id:userId, active_session_token:token });
+    logLoginEvent(userId);
     startSessionWatch(userId);
+  }
+
+  async function logLoginEvent(userId){
+    let ip = null;
+    try{
+      const res = await fetch('https://api.ipify.org?format=json');
+      const json = await res.json();
+      ip = json.ip;
+    } catch(e){ /* IP lookup failed, log without it */ }
+    await sb.from('login_events').insert({
+      user_id: userId,
+      user_agent: navigator.userAgent,
+      ip: ip
+    });
   }
 
   function startSessionWatch(userId){
