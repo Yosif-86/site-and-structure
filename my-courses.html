@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Courses — Site & Structure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0F1B2D;
+    --panel:#16243A;
+    --panel2:#1C2C46;
+    --grid:#24354F;
+    --line:#2E4364;
+    --red:#C0453A;
+    --yellow:#E8B94D;
+    --green:#4CAF6E;
+    --text:#EDEEF0;
+    --muted:#8FA0B8;
+    --muted2:#5F7291;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    line-height:1.6;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
+  .crop{position:relative;}
+  .crop::before, .crop::after{content:''; position:absolute; width:14px; height:14px; pointer-events:none;}
+  .crop::before{top:0; left:0; border-top:1.5px solid var(--muted2); border-left:1.5px solid var(--muted2);}
+  .crop::after{bottom:0; right:0; border-bottom:1.5px solid var(--muted2); border-right:1.5px solid var(--muted2);}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:rgba(15,27,45,0.92); backdrop-filter:blur(6px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:34px; height:34px; border:1.5px solid var(--red); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); transform:rotate(45deg);}
+  .brand-mark span{transform:rotate(-45deg);}
+  .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px; letter-spacing:0.2px;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:1px;}
+  nav{display:flex; gap:28px; align-items:center;}
+  nav a{color:var(--muted); text-decoration:none; font-size:14px;}
+  nav a:hover{color:var(--text);}
+  .btn{
+    font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.5px; text-transform:uppercase;
+    padding:9px 18px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;
+  }
+  .btn:hover{border-color:var(--muted2);}
+
+  .section{padding:64px 0;}
+  .section-head{margin-bottom:36px;}
+  h2{font-family:'Space Grotesk'; font-weight:600; font-size:26px;}
+  .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
+
+  .list{display:flex; flex-direction:column; gap:14px;}
+  .row{
+    background:var(--panel); border:1px solid var(--line); padding:18px 20px; display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .row h3{font-family:'Space Grotesk'; font-size:16px; font-weight:600;}
+  .row .meta{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); margin-top:4px;}
+  .status{font-family:'IBM Plex Mono'; font-size:10.5px; padding:4px 10px; border:1px solid var(--line); letter-spacing:0.5px; text-transform:uppercase; white-space:nowrap;}
+  .status.active{color:var(--green); border-color:var(--green);}
+  .status.pending{color:var(--yellow); border-color:var(--yellow);}
+  .empty{color:var(--muted); font-size:14px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small>ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+    </div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="index.html#courses">Courses</a>
+      <button class="btn" id="logoutBtn">Log out</button>
+    </nav>
+  </div>
+</header>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-tag">Your account</div>
+      <h2>My courses</h2>
+    </div>
+    <div class="list" id="list"></div>
+  </div>
+</section>
+
+<script>
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const courseTitles = {
+    'grad-project': 'Graduation Project Making',
+    'foundation': 'Foundation Engineering',
+    'bridge': 'Bridge Design',
+    'rc': 'Reinforced Concrete',
+    'autocad': 'AutoCAD for Civil Engineering',
+    'qs': 'Quantity Survey',
+    'steel': 'Steel Design'
+  };
+
+  document.getElementById('logoutBtn').onclick = async () => {
+    await sb.auth.signOut();
+    window.location.href = 'index.html';
+  };
+
+  (async () => {
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){
+      window.location.href = 'index.html';
+      return;
+    }
+
+    const { data: enrollments } = await sb.from('enrollments')
+      .select('course_slug, status, created_at')
+      .eq('user_id', session.user.id)
+      .order('created_at', { ascending: false });
+
+    const list = document.getElementById('list');
+    if(!enrollments || enrollments.length === 0){
+      list.innerHTML = '<p class="empty">You haven\'t enrolled in any courses yet. <a href="index.html#courses" style="color:var(--yellow);">Browse the catalogue</a>.</p>';
+      return;
+    }
+
+    list.innerHTML = enrollments.map(e => {
+      const title = courseTitles[e.course_slug] || e.course_slug;
+      const isActive = e.status === 'active';
+      const date = new Date(e.created_at).toLocaleDateString();
+      return `
+        <div class="row crop">
+          <div>
+            <h3>${title}</h3>
+            <div class="meta">Enrolled ${date}</div>
+          </div>
+          <div class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Awaiting approval'}</div>
+        </div>`;
+    }).join('');
+  })();
+</script>
+
+</body>
+</html>

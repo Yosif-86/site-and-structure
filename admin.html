@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — Site & Structure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0F1B2D;
+    --panel:#16243A;
+    --panel2:#1C2C46;
+    --grid:#24354F;
+    --line:#2E4364;
+    --red:#C0453A;
+    --yellow:#E8B94D;
+    --green:#4CAF6E;
+    --text:#EDEEF0;
+    --muted:#8FA0B8;
+    --muted2:#5F7291;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    line-height:1.6;
+  }
+  .wrap{max-width:1200px; margin:0 auto; padding:0 24px;}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:rgba(15,27,45,0.92); backdrop-filter:blur(6px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:34px; height:34px; border:1.5px solid var(--red); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); transform:rotate(45deg);}
+  .brand-mark span{transform:rotate(-45deg);}
+  .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px; letter-spacing:0.2px;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:1px;}
+  nav{display:flex; gap:28px; align-items:center;}
+  nav a{color:var(--muted); text-decoration:none; font-size:14px;}
+  nav a:hover{color:var(--text);}
+  .btn{
+    font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.5px; text-transform:uppercase;
+    padding:9px 18px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;
+  }
+  .btn:hover{border-color:var(--muted2);}
+  .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
+  .btn-accent:hover{background:#a83a30;}
+
+  .section{padding:48px 0;}
+  .section-head{margin-bottom:24px;}
+  h2{font-family:'Space Grotesk'; font-weight:600; font-size:22px;}
+  .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
+
+  table{width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line);}
+  th, td{text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line);}
+  th{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px;}
+  tr:last-child td{border-bottom:none;}
+  .status{font-family:'IBM Plex Mono'; font-size:10.5px; padding:3px 8px; border:1px solid var(--line); letter-spacing:0.5px; text-transform:uppercase; white-space:nowrap;}
+  .status.active{color:var(--green); border-color:var(--green);}
+  .status.pending{color:var(--yellow); border-color:var(--yellow);}
+  .flagged-yes{color:var(--red); font-weight:600;}
+  .empty{color:var(--muted); font-size:14px; padding:16px;}
+  .table-wrap{overflow-x:auto;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small>ADMIN DASHBOARD</small></div>
+    </div>
+    <nav>
+      <a href="index.html">Home</a>
+      <button class="btn" id="logoutBtn">Log out</button>
+    </nav>
+  </div>
+</header>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-tag">Enrollments</div>
+      <h2>Students &amp; courses</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="enrollTable">
+        <thead>
+          <tr><th>Email</th><th>Name</th><th>Phone</th><th>Course</th><th>Status</th><th>Payment</th><th>Enrolled</th><th></th></tr>
+        </thead>
+        <tbody id="enrollBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-tag">Account sharing watch</div>
+      <h2>Flagged logins</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="flagTable">
+        <thead>
+          <tr><th>Email</th><th>City</th><th>Country</th><th>Distance</th><th>When</th></tr>
+        </thead>
+        <tbody id="flagBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script>
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const courseTitles = {
+    'grad-project': 'Graduation Project Making',
+    'foundation': 'Foundation Engineering',
+    'bridge': 'Bridge Design',
+    'rc': 'Reinforced Concrete',
+    'autocad': 'AutoCAD for Civil Engineering',
+    'qs': 'Quantity Survey',
+    'steel': 'Steel Design'
+  };
+
+  document.getElementById('logoutBtn').onclick = async () => {
+    await sb.auth.signOut();
+    window.location.href = 'index.html';
+  };
+
+  async function approve(enrollmentId){
+    const { error } = await sb.from('enrollments').update({ status: 'active' }).eq('id', enrollmentId);
+    if(error){ alert('Failed to approve: ' + error.message); return; }
+    loadEnrollments();
+  }
+  window.approve = approve;
+
+  async function loadEnrollments(){
+    const { data: profiles } = await sb.from('profiles').select('id, full_name, phone');
+    const { data: enrollments } = await sb.from('enrollments')
+      .select('id, user_id, course_slug, status, payment_method, payment_detail, created_at')
+      .order('created_at', { ascending: false });
+    const { data: logins } = await sb.from('login_events')
+      .select('user_id, email, created_at')
+      .order('created_at', { ascending: false });
+
+    const emailByUser = {};
+    (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
+    const profileByUser = {};
+    (profiles || []).forEach(p => { profileByUser[p.id] = p; });
+
+    const body = document.getElementById('enrollBody');
+    if(!enrollments || enrollments.length === 0){
+      body.innerHTML = '<tr><td colspan="8" class="empty">No enrollments yet.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = enrollments.map(e => {
+      const prof = profileByUser[e.user_id] || {};
+      const email = emailByUser[e.user_id] || '—';
+      const title = courseTitles[e.course_slug] || e.course_slug;
+      const isActive = e.status === 'active';
+      const date = new Date(e.created_at).toLocaleDateString();
+      const payment = e.payment_method ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : '')) : '—';
+      return `
+        <tr>
+          <td>${email}</td>
+          <td>${prof.full_name || '—'}</td>
+          <td>${prof.phone || '—'}</td>
+          <td>${title}</td>
+          <td><span class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Pending'}</span></td>
+          <td>${payment}</td>
+          <td>${date}</td>
+          <td>${isActive ? '' : `<button class="btn btn-accent" onclick="approve('${e.id}')">Approve</button>`}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function loadFlagged(){
+    const { data: flagged } = await sb.from('login_events')
+      .select('email, city, country, distance_km, created_at')
+      .eq('flagged', true)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const body = document.getElementById('flagBody');
+    if(!flagged || flagged.length === 0){
+      body.innerHTML = '<tr><td colspan="5" class="empty">No flagged logins.</td></tr>';
+      return;
+    }
+    body.innerHTML = flagged.map(f => `
+      <tr>
+        <td>${f.email || '—'}</td>
+        <td>${f.city || '—'}</td>
+        <td>${f.country || '—'}</td>
+        <td class="flagged-yes">${f.distance_km} km</td>
+        <td>${new Date(f.created_at).toLocaleString()}</td>
+      </tr>`).join('');
+  }
+
+  (async () => {
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ window.location.href = 'index.html'; return; }
+    const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+    if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
+    loadEnrollments();
+    loadFlagged();
+  })();
+</script>
+
+</body>
+</html>

@@ -141,6 +141,8 @@
     <nav>
       <a href="#courses">Courses</a>
       <a href="#service">Project service</a>
+      <a href="my-courses.html" id="myCoursesLink" style="display:none;">My courses</a>
+      <a href="admin.html" id="adminLink" style="display:none;">Admin</a>
       <button class="btn" id="loginBtn">Log in</button>
     </nav>
   </div>
@@ -575,11 +577,16 @@
       loginBtn.onclick = doLogout;
       loginBtn2.textContent = 'Log out';
       loginBtn2.onclick = doLogout;
+      document.getElementById('myCoursesLink').style.display = '';
+      const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+      document.getElementById('adminLink').style.display = (prof && prof.is_admin) ? '' : 'none';
     } else {
       loginBtn.textContent = 'Log in';
       loginBtn.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
       loginBtn2.textContent = 'Log in';
       loginBtn2.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+      document.getElementById('myCoursesLink').style.display = 'none';
+      document.getElementById('adminLink').style.display = 'none';
     }
   }
 
