@@ -37,31 +37,40 @@ module.exports = async (req, res) => {
   }
   const userId = userData.user.id;
 
-  const { data: existing } = await admin
+  const { data: existing, error: selectErr } = await admin
     .from('trusted_devices')
     .select('id')
     .eq('user_id', userId)
     .eq('device_id', deviceId)
     .maybeSingle();
 
+  if (selectErr) {
+    res.status(500).json({ error: 'select failed: ' + selectErr.message });
+    return;
+  }
+
   let allowed;
   if (existing) {
-    await admin.from('trusted_devices').update({ last_seen: new Date().toISOString() }).eq('id', existing.id);
+    const { error: updateErr } = await admin.from('trusted_devices').update({ last_seen: new Date().toISOString() }).eq('id', existing.id);
+    if (updateErr) { res.status(500).json({ error: 'update failed: ' + updateErr.message }); return; }
     allowed = true;
   } else {
-    const { count } = await admin
+    const { count, error: countErr } = await admin
       .from('trusted_devices')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId);
 
+    if (countErr) { res.status(500).json({ error: 'count failed: ' + countErr.message }); return; }
+
     if (count >= MAX_DEVICES) {
       allowed = false;
     } else {
-      await admin.from('trusted_devices').insert({
+      const { error: insertErr } = await admin.from('trusted_devices').insert({
         user_id: userId,
         device_id: deviceId,
         device_label: deviceLabel || null
       });
+      if (insertErr) { res.status(500).json({ error: 'insert failed: ' + insertErr.message }); return; }
       allowed = true;
     }
   }
