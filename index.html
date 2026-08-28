@@ -347,8 +347,8 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const SESSION_KEY = 'ss_session_token';
-  let sessionCheckInterval = null;
+  const DEVICE_KEY = 'ss_device_id';
+  const MAX_DEVICES = 2;
 
   function makeToken(){
     if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -358,12 +358,40 @@
     });
   }
 
-  async function claimSession(userId, email){
-    const token = makeToken();
-    localStorage.setItem(SESSION_KEY, token);
-    await sb.from('profiles').upsert({ id:userId, active_session_token:token });
-    logLoginEvent(userId, email);
-    startSessionWatch(userId);
+  function getDeviceId(){
+    let id = localStorage.getItem(DEVICE_KEY);
+    if(!id){
+      id = makeToken();
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  }
+
+  async function checkDeviceAllowed(userId){
+    const deviceId = getDeviceId();
+    const { data: existing } = await sb.from('trusted_devices')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('device_id', deviceId)
+      .maybeSingle();
+
+    if(existing){
+      await sb.from('trusted_devices').update({ last_seen: new Date().toISOString() }).eq('id', existing.id);
+      return true;
+    }
+
+    const { count } = await sb.from('trusted_devices')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId);
+
+    if(count >= MAX_DEVICES) return false;
+
+    await sb.from('trusted_devices').insert({
+      user_id: userId,
+      device_id: deviceId,
+      device_label: navigator.userAgent
+    });
+    return true;
   }
 
   function distanceKm(lat1, lon1, lat2, lon2){
@@ -413,26 +441,6 @@
     });
   }
 
-  function startSessionWatch(userId){
-    if(sessionCheckInterval) clearInterval(sessionCheckInterval);
-    sessionCheckInterval = setInterval(async () => {
-      const myToken = localStorage.getItem(SESSION_KEY);
-      const { data } = await sb.from('profiles').select('active_session_token').eq('id', userId).maybeSingle();
-      if(data && data.active_session_token !== myToken){
-        clearInterval(sessionCheckInterval);
-        sessionCheckInterval = null;
-        await sb.auth.signOut();
-        localStorage.removeItem(SESSION_KEY);
-        updateAuthUI();
-        alert('You were logged out because your account was used to log in on another device.');
-      }
-    }, 20000);
-  }
-
-  function stopSessionWatch(){
-    if(sessionCheckInterval){ clearInterval(sessionCheckInterval); sessionCheckInterval = null; }
-  }
-
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
@@ -478,7 +486,13 @@
     if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showAuthErr(error.message); return; }
-    await claimSession(data.user.id, data.user.email);
+    const allowed = await checkDeviceAllowed(data.user.id);
+    if(!allowed){
+      await sb.auth.signOut();
+      showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+      return;
+    }
+    logLoginEvent(data.user.id, data.user.email);
     closeModal('loginOverlay');
     updateAuthUI();
   }
@@ -495,7 +509,13 @@
     if(data.user){
       const { error: profileErr } = await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
       if(profileErr){ showAuthErr(profileErr.message); return; }
-      await claimSession(data.user.id, data.user.email);
+      const allowed = await checkDeviceAllowed(data.user.id);
+      if(!allowed){
+        await sb.auth.signOut();
+        showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+        return;
+      }
+      logLoginEvent(data.user.id, data.user.email);
     }
     document.getElementById('authBody').innerHTML = `
       <div class="success-box">
@@ -508,8 +528,6 @@
   }
 
   async function doLogout(){
-    stopSessionWatch();
-    localStorage.removeItem(SESSION_KEY);
     await sb.auth.signOut();
     updateAuthUI();
   }
@@ -519,12 +537,6 @@
     const loginBtn = document.getElementById('loginBtn');
     const loginBtn2 = document.getElementById('loginBtn2');
     if(session){
-      const myToken = localStorage.getItem(SESSION_KEY);
-      if(!myToken){
-        await claimSession(session.user.id, session.user.email);
-      } else if(!sessionCheckInterval){
-        startSessionWatch(session.user.id);
-      }
       loginBtn.textContent = 'Log out';
       loginBtn.onclick = doLogout;
       loginBtn2.textContent = 'Log out';
