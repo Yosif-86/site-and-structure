@@ -102,6 +102,14 @@
   .video-modal:fullscreen iframe, .video-modal:-webkit-full-screen iframe{border:none;}
   .watermark{position:absolute; pointer-events:none; z-index:5; font-family:'IBM Plex Mono'; font-weight:600; font-size:16px; color:rgba(255,255,255,0.75); background:rgba(0,0,0,0.35); padding:4px 10px; border-radius:3px; text-shadow:0 0 6px rgba(0,0,0,0.8); transition:top 1.5s ease, left 1.5s ease; white-space:nowrap;}
 
+  .fullscreen-icon-btn{
+    position:absolute; bottom:14px; right:14px; z-index:6;
+    width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.2); border-radius:4px;
+    color:#fff; cursor:pointer; padding:0;
+  }
+  .fullscreen-icon-btn:hover{background:rgba(0,0,0,0.75); border-color:rgba(255,255,255,0.4);}
+
   .empty{color:var(--muted); font-size:14px;}
 </style>
 </head>
@@ -145,12 +153,17 @@
 <!-- VIDEO MODAL -->
 <div class="video-overlay" id="videoOverlay">
   <div class="video-modal" id="videoModal">
-    <div style="position:absolute; top:-44px; right:0; display:flex; gap:8px;">
-      <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
-      <button class="btn" onclick="closeVideo()">Close</button>
-    </div>
+    <button class="btn" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
     <iframe id="videoFrame" src="" frameborder="0" allow="autoplay"></iframe>
     <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
+    <button class="fullscreen-icon-btn" onclick="toggleFullscreen()" aria-label="Fullscreen" title="Fullscreen">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+        <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
+        <path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>
+        <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+      </svg>
+    </button>
   </div>
 </div>
 
