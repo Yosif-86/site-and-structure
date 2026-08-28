@@ -17,11 +17,19 @@ module.exports = async (req, res) => {
   }
 
   if (req.query.debug === '1') {
+    const testClient = createClient(SUPABASE_URL, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+    const adminApiResult = await testClient.auth.admin.listUsers({ perPage: 1 });
+    const dbResult = await testClient.from('trusted_devices').select('id', { count: 'exact', head: true });
     res.status(200).json({
       keyLength: serviceRoleKey.length,
       keyPrefix: serviceRoleKey.slice(0, 12),
-      keySuffix: serviceRoleKey.slice(-4),
-      hasWhitespace: /\s/.test(serviceRoleKey)
+      hasWhitespace: /\s/.test(serviceRoleKey),
+      adminApiError: adminApiResult.error ? adminApiResult.error.message : null,
+      adminApiUserCount: adminApiResult.data ? adminApiResult.data.users.length : null,
+      dbError: dbResult.error ? dbResult.error.message : null,
+      dbCount: dbResult.count
     });
     return;
   }
