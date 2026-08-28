@@ -127,16 +127,6 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const courseTitles = {
-    'grad-project': 'Graduation Project Making',
-    'foundation': 'Foundation Engineering',
-    'bridge': 'Bridge Design',
-    'rc': 'Reinforced Concrete',
-    'autocad': 'AutoCAD for Civil Engineering',
-    'qs': 'Quantity Survey',
-    'steel': 'Steel Design'
-  };
-
   document.getElementById('logoutBtn').onclick = async () => {
     await sb.auth.signOut();
     window.location.href = 'index.html';
@@ -160,8 +150,12 @@
       return;
     }
 
+    const { data: courses } = await sb.from('courses').select('slug, title').in('slug', enrollments.map(e => e.course_slug));
+    const titleBySlug = {};
+    (courses || []).forEach(c => { titleBySlug[c.slug] = c.title; });
+
     list.innerHTML = enrollments.map(e => {
-      const title = courseTitles[e.course_slug] || e.course_slug;
+      const title = titleBySlug[e.course_slug] || e.course_slug;
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       return `
@@ -171,98 +165,13 @@
             <div class="meta">Enrolled ${date}</div>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            ${isActive ? `<button class="btn" onclick="watchCourse('${e.course_slug}')">Watch</button>` : ''}
+            <a class="btn" href="course.html?slug=${e.course_slug}" style="text-decoration:none;">${isActive ? 'Watch' : 'View'}</a>
             <div class="status ${isActive ? 'active' : 'pending'}">${isActive ? 'Active' : 'Awaiting approval'}</div>
           </div>
         </div>`;
     }).join('');
   })();
-
-  let currentCourseSlug = null;
-  let watermarkInterval = null;
-
-  async function fetchVideoUrl(courseSlug, accessToken){
-    const res = await fetch('/api/get-video-url', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
-      body: JSON.stringify({ courseSlug })
-    });
-    return { res, result: await res.json() };
-  }
-
-  async function watchCourse(courseSlug){
-    let { data:{ session } } = await sb.auth.getSession();
-    let { res, result } = await fetchVideoUrl(courseSlug, session.access_token);
-
-    if(res.status === 401){
-      // Session likely stale — force a refresh and retry once before giving up.
-      const refreshed = await sb.auth.refreshSession();
-      if(refreshed.data.session){
-        session = refreshed.data.session;
-        ({ res, result } = await fetchVideoUrl(courseSlug, session.access_token));
-      }
-    }
-
-    if(!res.ok){
-      alert(result.error || 'This course video isn\'t available yet.');
-      return;
-    }
-    currentCourseSlug = courseSlug;
-
-    const { data: prof } = await sb.from('profiles').select('phone').eq('id', session.user.id).maybeSingle();
-    const watermarkText = document.getElementById('watermarkText');
-    watermarkText.textContent = (prof && prof.phone) ? prof.phone : session.user.email;
-    moveWatermark();
-    watermarkInterval = setInterval(moveWatermark, 4000);
-
-    document.getElementById('videoFrame').src = result.url;
-    document.getElementById('videoOverlay').classList.add('active');
-  }
-
-  function moveWatermark(){
-    const wm = document.getElementById('watermark');
-    const top = 10 + Math.random() * 70;
-    const left = 10 + Math.random() * 60;
-    wm.style.top = top + '%';
-    wm.style.left = left + '%';
-  }
-
-  function getFullscreenElement(){
-    return document.fullscreenElement || document.webkitFullscreenElement || null;
-  }
-
-  function fullscreenSupported(el){
-    return !!(el.requestFullscreen || el.webkitRequestFullscreen);
-  }
-
-  function toggleFullscreen(){
-    const modal = document.getElementById('videoModal');
-    if(getFullscreenElement()){
-      if(document.exitFullscreen) document.exitFullscreen();
-      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
-    } else if(fullscreenSupported(modal)){
-      const req = modal.requestFullscreen || modal.webkitRequestFullscreen;
-      req.call(modal).catch?.(() => {});
-    }
-  }
-
-  function closeVideo(){
-    document.getElementById('videoOverlay').classList.remove('active');
-    document.getElementById('videoFrame').src = '';
-    clearInterval(watermarkInterval);
-  }
 </script>
-
-<div class="overlay" id="videoOverlay">
-  <div class="video-modal" id="videoModal">
-    <div style="position:absolute; top:-44px; right:0; display:flex; gap:8px;">
-      <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
-      <button class="btn" onclick="closeVideo()">Close</button>
-    </div>
-    <iframe id="videoFrame" src="" frameborder="0" allow="autoplay"></iframe>
-    <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
-  </div>
-</div>
 
 </body>
 </html>

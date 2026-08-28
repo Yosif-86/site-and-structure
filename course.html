@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course — Site & Structure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0F1B2D; --panel:#16243A; --line:#2E4364; --red:#C0453A; --yellow:#E8B94D;
+    --green:#4CAF6E; --text:#EDEEF0; --muted:#8FA0B8; --muted2:#5F7291;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{overflow-x:hidden; max-width:100%;}
+  body{
+    background:
+      linear-gradient(var(--grid,#24354F) 1px, transparent 1px) 0 0/40px 40px,
+      linear-gradient(90deg, var(--grid,#24354F) 1px, transparent 1px) 0 0/40px 40px,
+      var(--bg);
+    color:var(--text); font-family:'Inter', sans-serif; line-height:1.6;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
+  .crop{position:relative;}
+  .crop::before, .crop::after{content:''; position:absolute; width:14px; height:14px; pointer-events:none;}
+  .crop::before{top:0; left:0; border-top:1.5px solid var(--muted2); border-left:1.5px solid var(--muted2);}
+  .crop::after{bottom:0; right:0; border-bottom:1.5px solid var(--muted2); border-right:1.5px solid var(--muted2);}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:rgba(15,27,45,0.92); backdrop-filter:blur(6px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between;}
+  .brand{display:flex; align-items:center; gap:10px;}
+  .brand-mark{width:34px; height:34px; border:1.5px solid var(--red); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); transform:rotate(45deg);}
+  .brand-mark span{transform:rotate(-45deg);}
+  .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:1px;}
+  nav{display:flex; gap:28px; align-items:center; flex-wrap:wrap;}
+  nav a{color:var(--muted); text-decoration:none; font-size:14px;}
+  nav a:hover{color:var(--text);}
+  @media (max-width:700px){
+    header .wrap{flex-wrap:wrap; row-gap:12px;}
+    nav{gap:12px 16px; width:100%;}
+    .brand-name{font-size:14px;} .brand-name small{font-size:8px;}
+  }
+
+  .btn{font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.5px; text-transform:uppercase; padding:9px 18px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;}
+  .btn:hover{border-color:var(--muted2);}
+  .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
+  .btn-accent:hover{background:#a83a30;}
+
+  .course-head{padding:56px 0 32px;}
+  .tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); letter-spacing:1px; text-transform:uppercase;}
+  .tag.green{color:var(--green);}
+  h1{font-family:'Space Grotesk'; font-weight:700; font-size:32px; margin:10px 0 14px;}
+  .byline{font-family:'IBM Plex Mono'; font-size:12px; color:#E06B9F; margin-bottom:14px;}
+  .desc{color:var(--muted); font-size:15px; max-width:640px;}
+
+  .meta-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin:24px 0; font-family:'IBM Plex Mono'; font-size:11px;}
+  .meta-grid div span{display:block; color:var(--muted2); font-size:9.5px; text-transform:uppercase; margin-bottom:3px;}
+  .meta-grid div b{font-weight:500;}
+  @media (max-width:600px){ .meta-grid{grid-template-columns:1fr 1fr;} }
+
+  .price-box{display:flex; align-items:center; gap:16px; margin-top:20px; flex-wrap:wrap;}
+  .price{font-family:'Space Grotesk'; font-size:24px; font-weight:600;}
+  .price.free{color:var(--yellow);}
+  .status-badge{font-family:'IBM Plex Mono'; font-size:10.5px; padding:4px 10px; border:1px solid var(--line); text-transform:uppercase;}
+  .status-badge.active{color:var(--green); border-color:var(--green);}
+  .status-badge.pending{color:var(--yellow); border-color:var(--yellow);}
+
+  .section{padding:32px 0; border-top:1px solid var(--line);}
+  h2{font-family:'Space Grotesk'; font-size:20px; margin-bottom:20px;}
+  .lecture{display:flex; align-items:center; justify-content:space-between; background:var(--panel); border:1px solid var(--line); padding:14px 18px; margin-bottom:10px;}
+  .lecture-title{font-size:14px;}
+  .lecture-free{font-family:'IBM Plex Mono'; font-size:10px; color:var(--yellow); margin-left:10px;}
+  .lecture-lock{color:var(--muted2); font-size:13px;}
+
+  .overlay{display:none; position:fixed; inset:0; background:rgba(6,11,18,0.75); z-index:100; align-items:center; justify-content:center; padding:20px;}
+  .overlay.active{display:flex;}
+  .modal{background:var(--panel); border:1px solid var(--line); width:100%; max-width:420px; padding:28px; position:relative;}
+  .modal-close{position:absolute; top:14px; right:14px; background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; font-family:'IBM Plex Mono';}
+  .modal h3{font-family:'Space Grotesk'; font-size:20px; margin-bottom:6px;}
+  .modal .sub{color:var(--muted); font-size:13px; margin-bottom:22px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; margin-bottom:6px;}
+  .field input{width:100%; background:var(--bg); border:1px solid var(--line); color:var(--text); padding:10px 12px; font-size:14px; font-family:'Inter';}
+  .field input:focus{outline:none; border-color:var(--red);}
+  .pay-options{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
+  .pay-opt{border:1px solid var(--line); padding:14px 10px; text-align:center; cursor:pointer; font-size:13px; font-weight:500;}
+  .pay-opt.selected{border-color:var(--yellow); background:rgba(232,185,77,0.08);}
+  .pay-opt small{display:block; font-family:'IBM Plex Mono'; font-size:9.5px; color:var(--muted2); margin-top:4px; font-weight:400;}
+  .err{color:var(--red); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
+  .err.show{display:block;}
+  .success-box{text-align:center; padding:10px 0;}
+  .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
+  .modal-full-btn{width:100%; margin-top:4px;}
+
+  .video-overlay{display:none; position:fixed; inset:0; background:rgba(6,11,18,0.9); z-index:100; align-items:center; justify-content:center; padding:40px 20px;}
+  .video-overlay.active{display:flex;}
+  .video-modal{position:relative; width:100%; max-width:900px; aspect-ratio:16/9;}
+  .video-modal iframe{width:100%; height:100%; border:1px solid var(--line);}
+  .video-modal:fullscreen, .video-modal:-webkit-full-screen{max-width:none; width:100vw; height:100vh; background:#000;}
+  .video-modal:fullscreen iframe, .video-modal:-webkit-full-screen iframe{border:none;}
+  .watermark{position:absolute; pointer-events:none; z-index:5; font-family:'IBM Plex Mono'; font-weight:600; font-size:16px; color:rgba(255,255,255,0.75); background:rgba(0,0,0,0.35); padding:4px 10px; border-radius:3px; text-shadow:0 0 6px rgba(0,0,0,0.8); transition:top 1.5s ease, left 1.5s ease; white-space:nowrap;}
+
+  .empty{color:var(--muted); font-size:14px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small>ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+    </div>
+    <nav>
+      <a href="index.html">Home</a>
+      <a href="index.html#courses">Courses</a>
+      <a href="my-courses.html" id="myCoursesLink" style="display:none;">My courses</a>
+      <button class="btn" id="loginBtn">Log in</button>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap" id="content">
+  <p class="empty" style="padding:60px 0;">Loading course…</p>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal crop">
+    <button class="modal-close" onclick="closeModal('loginOverlay')">&times;</button>
+    <div id="authBody"></div>
+  </div>
+</div>
+
+<!-- ENROLL MODAL -->
+<div class="overlay" id="enrollOverlay">
+  <div class="modal crop">
+    <button class="modal-close" onclick="closeModal('enrollOverlay')">&times;</button>
+    <div id="enrollBody"></div>
+  </div>
+</div>
+
+<!-- VIDEO MODAL -->
+<div class="video-overlay" id="videoOverlay">
+  <div class="video-modal" id="videoModal">
+    <div style="position:absolute; top:-44px; right:0; display:flex; gap:8px;">
+      <button class="btn" onclick="toggleFullscreen()">Fullscreen</button>
+      <button class="btn" onclick="closeVideo()">Close</button>
+    </div>
+    <iframe id="videoFrame" src="" frameborder="0" allow="autoplay"></iframe>
+    <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get('slug');
+  let course = null;
+  let lectures = [];
+  let enrollment = null;
+  let selectedPay = null;
+  let watermarkInterval = null;
+
+  function openModal(id){ document.getElementById(id).classList.add('active'); }
+  function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+
+  document.getElementById('loginBtn').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+
+  function renderAuth(mode){
+    const body = document.getElementById('authBody');
+    if(mode === 'login'){
+      body.innerHTML = `
+        <h3>Log in</h3>
+        <p class="sub">Access your enrolled courses.</p>
+        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
+        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">No account? <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">Sign up</a></p>
+      `;
+    } else {
+      body.innerHTML = `
+        <h3>Sign up</h3>
+        <p class="sub">Create your account.</p>
+        <div class="field"><label>Full name</label><input type="text" id="authName" placeholder="Your name"></div>
+        <div class="field"><label>Phone number</label><input type="text" id="authPhone" placeholder="07XX XXX XXXX"></div>
+        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
+        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="At least 6 characters"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">Sign up</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">Already have an account? <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Log in</a></p>
+      `;
+    }
+  }
+
+  function showAuthErr(msg){
+    const err = document.getElementById('authErr');
+    err.textContent = msg; err.classList.add('show');
+  }
+
+  function makeToken(){
+    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random()*16|0;
+      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
+    });
+  }
+
+  function getDeviceId(){
+    let id = localStorage.getItem('ss_device_id');
+    if(!id){ id = makeToken(); localStorage.setItem('ss_device_id', id); }
+    return id;
+  }
+
+  async function checkDeviceAndClaimSession(userId, accessToken){
+    const deviceId = getDeviceId();
+    const res = await fetch('/api/check-device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
+      body: JSON.stringify({ deviceId, deviceLabel: navigator.userAgent })
+    });
+    if(!res.ok) return false;
+    const result = await res.json();
+    if(!result.allowed) return false;
+    localStorage.setItem('ss_session_token', result.sessionToken);
+    return true;
+  }
+
+  async function logLoginEvent(userId, email){
+    let geo = {};
+    try{ const r = await fetch('https://ipapi.co/json/'); geo = await r.json(); } catch(e){}
+    let flagged = false, distance_km = null;
+    if(geo.latitude != null && geo.longitude != null){
+      const { data: prev } = await sb.from('login_events').select('lat, lon').eq('user_id', userId).not('lat', 'is', null).order('created_at', { ascending:false }).limit(1).maybeSingle();
+      if(prev && prev.lat != null){
+        const R=6371, dLat=(geo.latitude-prev.lat)*Math.PI/180, dLon=(geo.longitude-prev.lon)*Math.PI/180;
+        const a=Math.sin(dLat/2)**2+Math.cos(prev.lat*Math.PI/180)*Math.cos(geo.latitude*Math.PI/180)*Math.sin(dLon/2)**2;
+        distance_km = Math.round(R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        flagged = distance_km > 300;
+      }
+    }
+    await sb.from('login_events').insert({ user_id:userId, email, user_agent:navigator.userAgent, ip:geo.ip||null, city:geo.city||null, country:geo.country_name||null, lat:geo.latitude??null, lon:geo.longitude??null, flagged, distance_km });
+  }
+
+  async function submitLogin(){
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value.trim();
+    if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if(error){ showAuthErr(error.message); return; }
+    const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
+    if(!allowed){
+      await sb.auth.signOut();
+      showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+      return;
+    }
+    logLoginEvent(data.user.id, data.user.email);
+    closeModal('loginOverlay');
+    location.reload();
+  }
+
+  async function submitSignup(){
+    const name = document.getElementById('authName').value.trim();
+    const phone = document.getElementById('authPhone').value.trim();
+    const email = document.getElementById('authEmail').value.trim();
+    const pass = document.getElementById('authPass').value.trim();
+    if(!name || !phone || !email || !pass){ showAuthErr('Fill in all fields.'); return; }
+    if(pass.length < 6){ showAuthErr('Password must be at least 6 characters.'); return; }
+    const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
+    if(error){ showAuthErr(error.message); return; }
+    if(data.user){
+      const { error: profileErr } = await sb.from('profiles').insert({ id:data.user.id, full_name:name, phone:phone });
+      if(profileErr){ showAuthErr(profileErr.message); return; }
+      const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
+      if(!allowed){
+        await sb.auth.signOut();
+        showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+        return;
+      }
+      logLoginEvent(data.user.id, data.user.email);
+    }
+    closeModal('loginOverlay');
+    location.reload();
+  }
+
+  function openEnroll(){
+    selectedPay = null;
+    const body = document.getElementById('enrollBody');
+    if(course.is_free){
+      body.innerHTML = `
+        <h3>${course.title}</h3>
+        <p class="sub">Free course — access unlocked instantly after enrolling.</p>
+        <p class="err" id="enrollErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitFree()">Enroll for free</button>
+      `;
+    } else {
+      body.innerHTML = `
+        <h3>${course.title}</h3>
+        <p class="sub">${course.price} — choose a payment method.</p>
+        <div class="pay-options">
+          <div class="pay-opt" id="opt-zain" onclick="choosePay('zain')">Zain Cash<small>Mobile wallet</small></div>
+          <div class="pay-opt" id="opt-qi" onclick="choosePay('qi')">Qi Card<small>Card transfer</small></div>
+        </div>
+        <div class="field"><label id="payLabel">Phone / card number</label><input type="text" id="payDetail" placeholder="Select a payment method first"></div>
+        <div class="field"><label>Payment screenshot</label><input type="file" id="payProof" accept="image/*"></div>
+        <p class="err" id="payErr"></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitPay()">Confirm payment</button>
+      `;
+    }
+    openModal('enrollOverlay');
+  }
+
+  function choosePay(method){
+    selectedPay = method;
+    document.getElementById('opt-zain').classList.toggle('selected', method==='zain');
+    document.getElementById('opt-qi').classList.toggle('selected', method==='qi');
+    const label = document.getElementById('payLabel'), input = document.getElementById('payDetail');
+    if(method==='zain'){ label.textContent='Zain Cash number'; input.placeholder='07XX XXX XXXX'; }
+    else { label.textContent='Qi Card number'; input.placeholder='XXXX XXXX XXXX XXXX'; }
+  }
+
+  async function submitFree(){
+    const err = document.getElementById('enrollErr');
+    const { data:{ session } } = await sb.auth.getSession();
+    const { error } = await sb.from('enrollments').insert({ user_id: session.user.id, course_slug: course.slug, status: 'active' });
+    if(error){ err.textContent = error.message; err.classList.add('show'); return; }
+    showEnrollSuccess(null);
+  }
+
+  async function submitPay(){
+    const detail = document.getElementById('payDetail').value.trim();
+    const proofFile = document.getElementById('payProof').files[0];
+    const err = document.getElementById('payErr');
+    if(!selectedPay || !detail){ err.textContent = 'Choose a payment method and enter your details.'; err.classList.add('show'); return; }
+    if(!proofFile){ err.textContent = 'Upload a screenshot of your payment.'; err.classList.add('show'); return; }
+    const { data:{ session } } = await sb.auth.getSession();
+    const filePath = `${session.user.id}/${Date.now()}-${proofFile.name}`;
+    const { error: uploadErr } = await sb.storage.from('payment-proofs').upload(filePath, proofFile);
+    if(uploadErr){ err.textContent = 'Screenshot upload failed: ' + uploadErr.message; err.classList.add('show'); return; }
+    const { error } = await sb.from('enrollments').insert({ user_id: session.user.id, course_slug: course.slug, status: 'pending', payment_method: selectedPay, payment_detail: detail, payment_proof_path: filePath });
+    if(error){ err.textContent = error.message; err.classList.add('show'); return; }
+    showEnrollSuccess(course.price + ' via ' + (selectedPay==='zain' ? 'Zain Cash' : 'Qi Card'));
+  }
+
+  function showEnrollSuccess(paymentInfo){
+    document.getElementById('enrollBody').innerHTML = `
+      <div class="success-box">
+        <div class="check">&#10003;</div>
+        <h3>${paymentInfo ? 'Submitted' : 'Enrolled'}</h3>
+        <p class="sub">${course.title}${paymentInfo ? ' — ' + paymentInfo : ' — access unlocked'}</p>
+        ${paymentInfo ? '<p class="sub">Your payment is pending manual verification. Access unlocks once it\'s approved.</p>' : ''}
+        <button class="btn modal-full-btn" onclick="closeModal('enrollOverlay'); location.reload();">Close</button>
+      </div>`;
+  }
+
+  function moveWatermark(){
+    const wm = document.getElementById('watermark');
+    wm.style.top = (10 + Math.random()*70) + '%';
+    wm.style.left = (10 + Math.random()*60) + '%';
+  }
+
+  function getFullscreenElement(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  function fullscreenSupported(el){ return !!(el.requestFullscreen || el.webkitRequestFullscreen); }
+  function toggleFullscreen(){
+    const modal = document.getElementById('videoModal');
+    if(getFullscreenElement()){
+      if(document.exitFullscreen) document.exitFullscreen();
+      else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } else if(fullscreenSupported(modal)){
+      const req = modal.requestFullscreen || modal.webkitRequestFullscreen;
+      req.call(modal).catch?.(() => {});
+    }
+  }
+
+  async function fetchVideoUrl(lectureId, accessToken){
+    const res = await fetch('/api/get-video-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
+      body: JSON.stringify({ lectureId })
+    });
+    return { res, result: await res.json() };
+  }
+
+  async function watchLecture(lectureId){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ renderAuth('login'); openModal('loginOverlay'); return; }
+    let { res, result } = await fetchVideoUrl(lectureId, session.access_token);
+    if(res.status === 401){
+      const refreshed = await sb.auth.refreshSession();
+      if(refreshed.data.session){
+        ({ res, result } = await fetchVideoUrl(lectureId, refreshed.data.session.access_token));
+      }
+    }
+    if(!res.ok){ alert(result.error || 'This video isn\'t available yet.'); return; }
+
+    const { data:{ session: freshSession } } = await sb.auth.getSession();
+    const { data: prof } = await sb.from('profiles').select('phone').eq('id', freshSession.user.id).maybeSingle();
+    document.getElementById('watermarkText').textContent = (prof && prof.phone) ? prof.phone : freshSession.user.email;
+    moveWatermark();
+    watermarkInterval = setInterval(moveWatermark, 4000);
+
+    document.getElementById('videoFrame').src = result.url;
+    document.getElementById('videoOverlay').classList.add('active');
+  }
+
+  function closeVideo(){
+    document.getElementById('videoOverlay').classList.remove('active');
+    document.getElementById('videoFrame').src = '';
+    clearInterval(watermarkInterval);
+  }
+
+  document.querySelectorAll('.overlay').forEach(ov => {
+    ov.addEventListener('click', e => { if(e.target === ov) ov.classList.remove('active'); });
+  });
+
+  function renderPage(){
+    const el = document.getElementById('content');
+    if(!course){
+      el.innerHTML = '<p class="empty" style="padding:60px 0;">Course not found.</p>';
+      return;
+    }
+    const isActive = enrollment && enrollment.status === 'active';
+    const isPending = enrollment && enrollment.status === 'pending';
+
+    const metaHtml = Object.entries(course.meta || {}).map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+
+    let priceHtml;
+    if(isActive){
+      priceHtml = `<span class="status-badge active">Active</span>`;
+    } else if(isPending){
+      priceHtml = `<span class="status-badge pending">Awaiting approval</span>`;
+    } else if(course.is_free){
+      priceHtml = `<span class="price free">Free</span><button class="btn btn-accent" onclick="openEnroll()">Enroll for free</button>`;
+    } else {
+      priceHtml = `<span class="price">${course.price}</span><button class="btn btn-accent" onclick="openEnroll()">Enroll</button>`;
+    }
+
+    const lectureRows = lectures.length === 0
+      ? '<p class="empty">No lectures uploaded yet.</p>'
+      : lectures.map(l => {
+          const unlocked = l.is_free || isActive;
+          return `
+            <div class="lecture">
+              <div class="lecture-title">${l.title}${l.is_free ? '<span class="lecture-free">FREE</span>' : ''}</div>
+              ${unlocked
+                ? `<button class="btn" onclick="watchLecture('${l.id}')">Watch</button>`
+                : `<span class="lecture-lock">&#128274; Locked</span>`}
+            </div>`;
+        }).join('');
+
+    el.innerHTML = `
+      <div class="course-head">
+        <div class="tag ${course.tag_color === 'green' ? 'green' : ''}">${course.tag_label || ''}</div>
+        <h1>${course.title}</h1>
+        ${course.teacher_name ? `<div class="byline">By. ${course.teacher_name}</div>` : ''}
+        <p class="desc">${course.description || ''}</p>
+        <div class="meta-grid">${metaHtml}</div>
+        <div class="price-box">${priceHtml}</div>
+      </div>
+      <div class="section">
+        <h2>Curriculum</h2>
+        ${lectureRows}
+      </div>
+    `;
+  }
+
+  async function updateNav(){
+    const { data:{ session } } = await sb.auth.getSession();
+    const loginBtn = document.getElementById('loginBtn');
+    if(session){
+      document.getElementById('myCoursesLink').style.display = '';
+      loginBtn.textContent = 'Log out';
+      loginBtn.onclick = async () => { await sb.auth.signOut(); location.reload(); };
+    } else {
+      loginBtn.textContent = 'Log in';
+      loginBtn.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
+    }
+  }
+
+  (async () => {
+    if(!slug){
+      document.getElementById('content').innerHTML = '<p class="empty" style="padding:60px 0;">No course specified.</p>';
+      return;
+    }
+    await updateNav();
+
+    const { data: courseData } = await sb.from('courses').select('*').eq('slug', slug).eq('status', 'published').maybeSingle();
+    course = courseData;
+
+    if(course){
+      const { data: lectureData } = await sb.from('lectures').select('*').eq('course_id', course.id).order('order_index');
+      lectures = lectureData || [];
+
+      const { data:{ session } } = await sb.auth.getSession();
+      if(session){
+        const { data: enr } = await sb.from('enrollments').select('status').eq('user_id', session.user.id).eq('course_slug', course.slug).maybeSingle();
+        enrollment = enr;
+      }
+    }
+    renderPage();
+  })();
+</script>
+
+</body>
+</html>

@@ -6,11 +6,6 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q
 
 const BUNNY_LIBRARY_ID = '738703';
 
-// Maps a course slug to its Bunny Stream video GUID. Add more as real course videos go up.
-const COURSE_VIDEOS = {
-  'grad-project': '265aa2e4-bbf1-4aea-b1ed-7659da9524a9'
-};
-
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -31,10 +26,9 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { courseSlug } = req.body || {};
-  const videoId = COURSE_VIDEOS[courseSlug];
-  if (!videoId) {
-    res.status(404).json({ error: 'No video for this course yet' });
+  const { lectureId } = req.body || {};
+  if (!lectureId) {
+    res.status(400).json({ error: 'Missing lectureId' });
     return;
   }
 
@@ -50,19 +44,39 @@ module.exports = async (req, res) => {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
-  const { data: enrollment, error: enrollErr } = await admin
-    .from('enrollments')
-    .select('status')
-    .eq('user_id', userId)
-    .eq('course_slug', courseSlug)
-    .eq('status', 'active')
+  const { data: lecture, error: lectureErr } = await admin
+    .from('lectures')
+    .select('id, course_id, bunny_video_id, is_free')
+    .eq('id', lectureId)
     .maybeSingle();
 
-  if (enrollErr || !enrollment) {
-    res.status(403).json({ error: 'Not enrolled or access not yet approved' });
+  if (lectureErr || !lecture || !lecture.bunny_video_id) {
+    res.status(404).json({ error: 'Video not available' });
     return;
   }
 
+  if (!lecture.is_free) {
+    const { data: course } = await admin
+      .from('courses')
+      .select('slug')
+      .eq('id', lecture.course_id)
+      .maybeSingle();
+
+    const { data: enrollment } = await admin
+      .from('enrollments')
+      .select('status')
+      .eq('user_id', userId)
+      .eq('course_slug', course?.slug)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (!enrollment) {
+      res.status(403).json({ error: 'Not enrolled or access not yet approved' });
+      return;
+    }
+  }
+
+  const videoId = lecture.bunny_video_id;
   const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
   const token = crypto.createHash('sha256').update(securityKey + videoId + expires).digest('hex');
   const url = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}?token=${token}&expires=${expires}&playsinline=true`;

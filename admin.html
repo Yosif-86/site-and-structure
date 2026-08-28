@@ -130,15 +130,7 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  const courseTitles = {
-    'grad-project': 'Graduation Project Making',
-    'foundation': 'Foundation Engineering',
-    'bridge': 'Bridge Design',
-    'rc': 'Reinforced Concrete',
-    'autocad': 'AutoCAD for Civil Engineering',
-    'qs': 'Quantity Survey',
-    'steel': 'Steel Design'
-  };
+  let courseTitles = {};
 
   document.getElementById('logoutBtn').onclick = async () => {
     await sb.auth.signOut();
@@ -239,6 +231,10 @@
     if(!session){ window.location.href = 'index.html'; return; }
     const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
     if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
+
+    const { data: allCourses } = await sb.from('courses').select('slug, title');
+    (allCourses || []).forEach(c => { courseTitles[c.slug] = c.title; });
+
     loadEnrollments();
     loadFlagged();
   })();
