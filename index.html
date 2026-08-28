@@ -348,7 +348,9 @@
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
   const DEVICE_KEY = 'ss_device_id';
+  const SESSION_KEY = 'ss_session_token';
   const MAX_DEVICES = 2;
+  let sessionCheckInterval = null;
 
   function makeToken(){
     if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -392,6 +394,33 @@
       device_label: navigator.userAgent
     });
     return true;
+  }
+
+  async function claimActiveSession(userId){
+    const token = makeToken();
+    localStorage.setItem(SESSION_KEY, token);
+    await sb.from('profiles').upsert({ id:userId, active_session_token:token });
+    startSessionWatch(userId);
+  }
+
+  function startSessionWatch(userId){
+    if(sessionCheckInterval) clearInterval(sessionCheckInterval);
+    sessionCheckInterval = setInterval(async () => {
+      const myToken = localStorage.getItem(SESSION_KEY);
+      const { data } = await sb.from('profiles').select('active_session_token').eq('id', userId).maybeSingle();
+      if(data && data.active_session_token !== myToken){
+        clearInterval(sessionCheckInterval);
+        sessionCheckInterval = null;
+        await sb.auth.signOut();
+        localStorage.removeItem(SESSION_KEY);
+        updateAuthUI();
+        alert('You were logged out because your account was used to log in on another device.');
+      }
+    }, 20000);
+  }
+
+  function stopSessionWatch(){
+    if(sessionCheckInterval){ clearInterval(sessionCheckInterval); sessionCheckInterval = null; }
   }
 
   function distanceKm(lat1, lon1, lat2, lon2){
@@ -492,6 +521,7 @@
       showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
       return;
     }
+    await claimActiveSession(data.user.id);
     logLoginEvent(data.user.id, data.user.email);
     closeModal('loginOverlay');
     updateAuthUI();
@@ -515,6 +545,7 @@
         showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
         return;
       }
+      await claimActiveSession(data.user.id);
       logLoginEvent(data.user.id, data.user.email);
     }
     document.getElementById('authBody').innerHTML = `
@@ -528,6 +559,8 @@
   }
 
   async function doLogout(){
+    stopSessionWatch();
+    localStorage.removeItem(SESSION_KEY);
     await sb.auth.signOut();
     updateAuthUI();
   }
@@ -537,6 +570,7 @@
     const loginBtn = document.getElementById('loginBtn');
     const loginBtn2 = document.getElementById('loginBtn2');
     if(session){
+      if(!sessionCheckInterval) startSessionWatch(session.user.id);
       loginBtn.textContent = 'Log out';
       loginBtn.onclick = doLogout;
       loginBtn2.textContent = 'Log out';
