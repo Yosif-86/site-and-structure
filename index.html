@@ -322,6 +322,44 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  const SESSION_KEY = 'ss_session_token';
+  let sessionCheckInterval = null;
+
+  function makeToken(){
+    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random()*16|0;
+      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
+    });
+  }
+
+  async function claimSession(userId){
+    const token = makeToken();
+    localStorage.setItem(SESSION_KEY, token);
+    await sb.from('profiles').upsert({ id:userId, active_session_token:token });
+    startSessionWatch(userId);
+  }
+
+  function startSessionWatch(userId){
+    if(sessionCheckInterval) clearInterval(sessionCheckInterval);
+    sessionCheckInterval = setInterval(async () => {
+      const myToken = localStorage.getItem(SESSION_KEY);
+      const { data } = await sb.from('profiles').select('active_session_token').eq('id', userId).maybeSingle();
+      if(data && data.active_session_token !== myToken){
+        clearInterval(sessionCheckInterval);
+        sessionCheckInterval = null;
+        await sb.auth.signOut();
+        localStorage.removeItem(SESSION_KEY);
+        updateAuthUI();
+        alert('You were logged out because your account was used to log in on another device.');
+      }
+    }, 20000);
+  }
+
+  function stopSessionWatch(){
+    if(sessionCheckInterval){ clearInterval(sessionCheckInterval); sessionCheckInterval = null; }
+  }
+
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
@@ -365,8 +403,9 @@
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
     if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
-    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showAuthErr(error.message); return; }
+    await claimSession(data.user.id);
     closeModal('loginOverlay');
     updateAuthUI();
   }
@@ -381,7 +420,9 @@
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
     if(data.user){
-      await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
+      const { error: profileErr } = await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
+      if(profileErr){ showAuthErr(profileErr.message); return; }
+      await claimSession(data.user.id);
     }
     document.getElementById('authBody').innerHTML = `
       <div class="success-box">
@@ -394,6 +435,8 @@
   }
 
   async function doLogout(){
+    stopSessionWatch();
+    localStorage.removeItem(SESSION_KEY);
     await sb.auth.signOut();
     updateAuthUI();
   }
@@ -403,6 +446,12 @@
     const loginBtn = document.getElementById('loginBtn');
     const loginBtn2 = document.getElementById('loginBtn2');
     if(session){
+      const myToken = localStorage.getItem(SESSION_KEY);
+      if(!myToken){
+        await claimSession(session.user.id);
+      } else if(!sessionCheckInterval){
+        startSessionWatch(session.user.id);
+      }
       loginBtn.textContent = 'Log out';
       loginBtn.onclick = doLogout;
       loginBtn2.textContent = 'Log out';
