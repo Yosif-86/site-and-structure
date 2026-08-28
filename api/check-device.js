@@ -15,6 +15,16 @@ module.exports = async (req, res) => {
     return;
   }
 
+  if (req.query.debug === '1') {
+    res.status(200).json({
+      keyLength: serviceRoleKey.length,
+      keyPrefix: serviceRoleKey.slice(0, 12),
+      keySuffix: serviceRoleKey.slice(-4),
+      hasWhitespace: /\s/.test(serviceRoleKey)
+    });
+    return;
+  }
+
   const authHeader = req.headers.authorization || '';
   const accessToken = authHeader.replace('Bearer ', '');
   if (!accessToken) {
