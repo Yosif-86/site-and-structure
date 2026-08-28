@@ -144,6 +144,14 @@
   }
   window.approve = approve;
 
+  async function removeEnrollment(enrollmentId, title, email){
+    if(!confirm(`Remove ${email} from "${title}"? This revokes their access.`)) return;
+    const { error } = await sb.from('enrollments').delete().eq('id', enrollmentId);
+    if(error){ alert('Failed to remove: ' + error.message); return; }
+    loadEnrollments();
+  }
+  window.removeEnrollment = removeEnrollment;
+
   async function viewProof(path){
     const { data, error } = await sb.storage.from('payment-proofs').createSignedUrl(path, 60);
     if(error){ alert('Failed to load proof: ' + error.message); return; }
@@ -190,6 +198,7 @@
           <td style="display:flex; gap:8px;">
             ${e.payment_proof_path ? `<button class="btn" onclick="viewProof('${e.payment_proof_path}')">View proof</button>` : ''}
             ${isActive ? '' : `<button class="btn btn-accent" onclick="approve('${e.id}')">Approve</button>`}
+            <button class="btn" onclick="removeEnrollment('${e.id}', '${title.replace(/'/g,"\\'")}', '${email.replace(/'/g,"\\'")}')">Remove</button>
           </td>
         </tr>`;
     }).join('');
