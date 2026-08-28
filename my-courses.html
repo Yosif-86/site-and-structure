@@ -204,7 +204,6 @@
     document.getElementById('videoOverlay').classList.add('active');
     document.getElementById('captureWarning').classList.remove('active');
 
-    window.addEventListener('blur', onFocusLoss);
     document.addEventListener('visibilitychange', onVisibilityChange);
   }
 
@@ -216,8 +215,18 @@
     wm.style.left = left + '%';
   }
 
-  function onFocusLoss(){ triggerCaptureWarning(); }
-  function onVisibilityChange(){ if(document.hidden) triggerCaptureWarning(); }
+  let hiddenTimeout = null;
+  function onVisibilityChange(){
+    if(document.hidden){
+      // Wait 2s before reacting so a quick, accidental tab switch doesn't false-trigger.
+      hiddenTimeout = setTimeout(() => {
+        if(document.hidden) triggerCaptureWarning();
+      }, 2000);
+    } else if(hiddenTimeout){
+      clearTimeout(hiddenTimeout);
+      hiddenTimeout = null;
+    }
+  }
 
   async function triggerCaptureWarning(){
     if(!document.getElementById('videoOverlay').classList.contains('active')) return;
@@ -254,7 +263,7 @@
     document.getElementById('captureWarning').classList.remove('active');
     document.getElementById('videoFrame').src = '';
     clearInterval(watermarkInterval);
-    window.removeEventListener('blur', onFocusLoss);
+    if(hiddenTimeout){ clearTimeout(hiddenTimeout); hiddenTimeout = null; }
     document.removeEventListener('visibilitychange', onVisibilityChange);
   }
 </script>
