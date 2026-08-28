@@ -546,7 +546,7 @@
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
     if(data.user){
-      const { error: profileErr } = await sb.from('profiles').upsert({ id:data.user.id, full_name:name, phone:phone });
+      const { error: profileErr } = await sb.from('profiles').insert({ id:data.user.id, full_name:name, phone:phone });
       if(profileErr){ showAuthErr(profileErr.message); return; }
       const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
       if(!allowed){
