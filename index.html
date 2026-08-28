@@ -22,6 +22,7 @@
     --muted2:#5F7291;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{overflow-x:hidden; max-width:100%;}
   body{
     background:
       linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
@@ -46,9 +47,16 @@
   .brand-mark span{transform:rotate(-45deg);}
   .brand-name{font-family:'Space Grotesk'; font-weight:600; font-size:17px; letter-spacing:0.2px;}
   .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted); font-weight:400; letter-spacing:1px;}
-  nav{display:flex; gap:28px; align-items:center;}
+  nav{display:flex; gap:28px; align-items:center; flex-wrap:wrap;}
   nav a{color:var(--muted); text-decoration:none; font-size:14px;}
   nav a:hover{color:var(--text);}
+
+  @media (max-width:700px){
+    header .wrap{flex-wrap:wrap; row-gap:12px;}
+    nav{gap:12px 16px; width:100%;}
+    .brand-name{font-size:14px;}
+    .brand-name small{font-size:8px;}
+  }
   .btn{
     font-family:'IBM Plex Mono'; font-size:12px; letter-spacing:0.5px; text-transform:uppercase;
     padding:9px 18px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;

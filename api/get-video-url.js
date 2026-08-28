@@ -65,7 +65,7 @@ module.exports = async (req, res) => {
 
   const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
   const token = crypto.createHash('sha256').update(securityKey + videoId + expires).digest('hex');
-  const url = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}?token=${token}&expires=${expires}`;
+  const url = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}?token=${token}&expires=${expires}&playsinline=true`;
 
   res.status(200).json({ url });
 };
