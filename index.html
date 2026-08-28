@@ -341,18 +341,50 @@
     startSessionWatch(userId);
   }
 
+  function distanceKm(lat1, lon1, lat2, lon2){
+    const R = 6371;
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  const FLAG_DISTANCE_KM = 300;
+
   async function logLoginEvent(userId, email){
-    let ip = null;
+    let geo = {};
     try{
-      const res = await fetch('https://api.ipify.org?format=json');
-      const json = await res.json();
-      ip = json.ip;
-    } catch(e){ /* IP lookup failed, log without it */ }
+      const res = await fetch('https://ipapi.co/json/');
+      geo = await res.json();
+    } catch(e){ /* location lookup failed, log without it */ }
+
+    let flagged = false;
+    let distance_km = null;
+    if(geo.latitude != null && geo.longitude != null){
+      const { data: prev } = await sb.from('login_events')
+        .select('lat, lon')
+        .eq('user_id', userId)
+        .not('lat', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if(prev && prev.lat != null && prev.lon != null){
+        distance_km = Math.round(distanceKm(prev.lat, prev.lon, geo.latitude, geo.longitude));
+        flagged = distance_km > FLAG_DISTANCE_KM;
+      }
+    }
+
     await sb.from('login_events').insert({
       user_id: userId,
       email: email,
       user_agent: navigator.userAgent,
-      ip: ip
+      ip: geo.ip || null,
+      city: geo.city || null,
+      country: geo.country_name || null,
+      lat: geo.latitude != null ? geo.latitude : null,
+      lon: geo.longitude != null ? geo.longitude : null,
+      flagged: flagged,
+      distance_km: distance_km
     });
   }
 
