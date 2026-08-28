@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Site & Structure — Engineering Course Platform</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
+<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -70,6 +71,18 @@
     cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; padding:0; line-height:1;
   }
   .theme-toggle:hover{background:var(--panel2);}
+  .lang-toggle{
+    height:38px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
+    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; font-family:'IBM Plex Mono'; letter-spacing:0.5px;
+  }
+  .lang-toggle:hover{background:var(--panel2);}
+
+  /* RTL / Arabic typography */
+  :root[dir="rtl"] body{font-family:'Cairo', 'Work Sans', sans-serif;}
+  :root[dir="rtl"] h1, :root[dir="rtl"] h2, :root[dir="rtl"] .brand-name{font-family:'Cairo', sans-serif; text-transform:none;}
+  :root[dir="rtl"] .card h3{font-family:'Cairo', sans-serif;}
+  :root[dir="rtl"] .eyebrow, :root[dir="rtl"] .section-tag, :root[dir="rtl"] .card-tag, :root[dir="rtl"] .status-badge{font-family:'Cairo', sans-serif; text-transform:none;}
+  :root[dir="rtl"] .eyebrow::before{content:'';}
 
   @media (max-width:700px){
     header .wrap{flex-wrap:wrap; row-gap:12px;}
@@ -146,7 +159,9 @@
     box-shadow:0 24px 60px -20px rgba(30,25,18,0.35);
     overflow:hidden; isolation:isolate;
   }
-  .modal-close{position:absolute; top:14px; right:14px; background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; font-family:'IBM Plex Mono';}
+  .modal-close{position:absolute; top:14px; right:14px; background:none; border:none; color:var(--red); font-size:18px; cursor:pointer; font-family:'IBM Plex Mono';}
+  .btn-close{color:var(--red); border-color:var(--red); background:transparent;}
+  .btn-close:hover{background:color-mix(in srgb, var(--red) 12%, transparent);}
   .modal h3{font-family:'Big Shoulders Display'; font-weight:800; font-size:22px; margin-bottom:6px; text-transform:uppercase;}
   .modal .sub{color:var(--muted); font-size:13px; margin-bottom:22px;}
   .field{margin-bottom:14px;}
@@ -170,8 +185,8 @@
   /* glass glare — follows the cursor via --mx/--my set in JS */
   .card::before, .modal::before{
     content:''; position:absolute; inset:0; z-index:2; pointer-events:none;
-    background:radial-gradient(480px circle at var(--mx) var(--my), var(--glare), transparent 60%);
-    opacity:0; transition:opacity .8s ease;
+    background:radial-gradient(260px circle at var(--mx) var(--my), var(--glare), transparent 70%);
+    opacity:0; transition:opacity .8s ease; mix-blend-mode:soft-light;
   }
   .card:hover::before, .modal:hover::before{ opacity:1; }
   @media (prefers-reduced-motion: reduce){
@@ -185,27 +200,28 @@
   <div class="wrap">
     <a href="index.html" class="brand">
       <div class="brand-mark"><span>&#9651;</span></div>
-      <div class="brand-name">SITE &amp; STRUCTURE<small>ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
     </a>
     <nav>
-      <a href="#courses">Courses</a>
-      <a href="#service">Project service</a>
-      <a href="my-courses.html" id="myCoursesLink" style="display:none;">My courses</a>
-      <a href="admin.html" id="adminLink" style="display:none;">Admin</a>
+      <a href="#courses" data-i18n="nav_courses">Courses</a>
+      <a href="#service" data-i18n="nav_service">Project service</a>
+      <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+      <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
       <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="btn" id="loginBtn">Log in</button>
+      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
+      <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
     </nav>
   </div>
 </header>
 
 <section class="hero">
   <div class="wrap">
-    <div class="eyebrow">Rev 01 — Prototype for review</div>
-    <h1>Built like a drawing set. <em>Taught</em> like a site walkthrough.</h1>
-    <p class="hero-sub">Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.</p>
+    <div class="eyebrow" data-i18n="hero_eyebrow">Rev 01 — Prototype for review</div>
+    <h1 data-i18n-html="hero_title">Built like a drawing set. <em>Taught</em> like a site walkthrough.</h1>
+    <p class="hero-sub" data-i18n="hero_sub">Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.</p>
     <div class="hero-cta">
-      <button class="btn btn-accent" onclick="document.getElementById('courses').scrollIntoView({behavior:'smooth'})">Browse courses</button>
-      <button class="btn" id="loginBtn2">Log in</button>
+      <button class="btn btn-accent" onclick="document.getElementById('courses').scrollIntoView({behavior:'smooth'})" data-i18n="browse_courses">Browse courses</button>
+      <button class="btn" id="loginBtn2" data-i18n="log_in">Log in</button>
     </div>
   </div>
 </section>
@@ -214,27 +230,27 @@
   <div class="wrap">
     <div class="section-head">
       <div>
-        <div class="section-tag">Sheet index</div>
-        <h2>Course catalogue</h2>
+        <div class="section-tag" data-i18n="sheet_index">Sheet index</div>
+        <h2 data-i18n="course_catalogue">Course catalogue</h2>
       </div>
     </div>
 
     <div class="grid" id="catalogueGrid">
-      <p style="color:var(--muted); grid-column:1/-1;">Loading courses…</p>
+      <p style="color:var(--muted); grid-column:1/-1;" data-i18n="loading_courses">Loading courses…</p>
     </div>
   </div>
 </section>
 
 <section class="section" id="service">
   <div class="wrap">
-    <div class="section-tag">Beyond the course</div>
-    <h2 style="margin-bottom:14px;">Graduation project service</h2>
-    <p style="color:var(--muted); max-width:560px;">Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.</p>
+    <div class="section-tag" data-i18n="beyond_course">Beyond the course</div>
+    <h2 style="margin-bottom:14px;" data-i18n="grad_service_title">Graduation project service</h2>
+    <p style="color:var(--muted); max-width:560px;" data-i18n="grad_service_desc">Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.</p>
   </div>
 </section>
 
 <footer>
-  <p>PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY</p>
+  <p data-i18n="footer_line">PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY</p>
 </footer>
 
 <!-- LOGIN / SIGNUP MODAL -->
@@ -246,6 +262,88 @@
 </div>
 
 <script>
+  const I18N = {
+    en: {
+      tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
+      nav_courses: 'Courses', nav_service: 'Project service', nav_mycourses: 'My courses', nav_admin: 'Admin',
+      log_in: 'Log in', log_out: 'Log out',
+      hero_eyebrow: 'Rev 01 — Prototype for review',
+      hero_title: 'Built like a drawing set. <em>Taught</em> like a site walkthrough.',
+      hero_sub: 'Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.',
+      browse_courses: 'Browse courses',
+      sheet_index: 'Sheet index', course_catalogue: 'Course catalogue',
+      loading_courses: 'Loading courses…', no_courses: 'No courses published yet.',
+      beyond_course: 'Beyond the course', grad_service_title: 'Graduation project service',
+      grad_service_desc: 'Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.',
+      footer_line: 'PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY',
+      card_view_course: 'View course', card_by: 'By.', card_free: 'Free',
+      auth_login_title: 'Log in', auth_login_sub: 'Access your enrolled courses.',
+      label_email: 'Email', ph_email: 'you@email.com', label_password: 'Password', ph_password: '••••••••',
+      forgot_password: 'Forgot password?', no_account: 'No account?', sign_up: 'Sign up',
+      auth_signup_title: 'Sign up', auth_signup_sub: 'Create your account.',
+      label_fullname: 'Full name', ph_fullname: 'Your name', label_phone: 'Phone number', ph_phone: '07XX XXX XXXX',
+      ph_password_signup: 'At least 6 characters',
+      already_account: 'Already have an account?',
+      auth_forgot_title: 'Reset password', auth_forgot_sub: "We'll email you a link to set a new password.",
+      btn_send_reset: 'Send reset link', back_to_login: 'Back to log in',
+      success_email_title: 'Check your email', success_email_sub: 'If an account exists for that email, a reset link is on its way.',
+      success_account_title: 'Account created', success_account_sub: "You're signed up and logged in.",
+      btn_close: 'Close',
+      alert_kicked: 'You were logged out because your account was used to log in on another device.',
+      err_enter_email: 'Enter your email.', err_enter_email_pass: 'Enter your email and password.',
+      err_device_limit: 'This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.',
+      err_fill_fields: 'Fill in all fields.', err_pass_length: 'Password must be at least 6 characters.'
+    },
+    ar: {
+      tagline: 'منصة دورات هندسية — نموذج أولي',
+      nav_courses: 'الدورات', nav_service: 'خدمة المشروع', nav_mycourses: 'دوراتي', nav_admin: 'الإدارة',
+      log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
+      hero_eyebrow: 'الإصدار ٠١ — نموذج للمراجعة',
+      hero_title: 'مبني كملف مخططات، <em>ويُدرَّس</em> كجولة ميدانية.',
+      hero_sub: 'ثلاثة مسارات دراسية لطلاب الهندسة المدنية — من معايير مشروع التخرج إلى المواد الأكاديمية الأساسية والأوتوكاد وحصر الكميات. عملية، جاهزة للامتحان، ومبنية على مخططات حقيقية.',
+      browse_courses: 'تصفح الدورات',
+      sheet_index: 'فهرس اللوحات', course_catalogue: 'فهرس الدورات',
+      loading_courses: 'جاري تحميل الدورات...', no_courses: 'لا توجد دورات منشورة بعد.',
+      beyond_course: 'ما بعد الدورة', grad_service_title: 'خدمة مشروع التخرج',
+      grad_service_desc: 'الطلاب الذين يكملون دورة إعداد مشروع التخرج ويستعينون بالمدرّس لتنفيذ مشروع كامل يحصلون على خصم من رسوم الدورة — يُطبَّق تلقائيًا عند الدفع.',
+      footer_line: 'نموذج أولي — لعرض بنية الموقع، وآلية تقييد الوصول، ومسار الدفع عبر زين كاش / كي كارد فقط',
+      card_view_course: 'عرض الدورة', card_by: 'بواسطة.', card_free: 'مجاني',
+      auth_login_title: 'تسجيل الدخول', auth_login_sub: 'الوصول إلى الدورات المسجَّل بها.',
+      label_email: 'البريد الإلكتروني', ph_email: 'you@email.com', label_password: 'كلمة المرور', ph_password: '••••••••',
+      forgot_password: 'نسيت كلمة المرور؟', no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب',
+      auth_signup_title: 'إنشاء حساب', auth_signup_sub: 'أنشئ حسابك.',
+      label_fullname: 'الاسم الكامل', ph_fullname: 'اسمك', label_phone: 'رقم الهاتف', ph_phone: '07XX XXX XXXX',
+      ph_password_signup: '٦ أحرف على الأقل',
+      already_account: 'لديك حساب بالفعل؟',
+      auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
+      btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
+      success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
+      success_account_title: 'تم إنشاء الحساب', success_account_sub: 'تم تسجيلك وتسجيل دخولك بنجاح.',
+      btn_close: 'إغلاق',
+      alert_kicked: 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
+      err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
+      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهازين (الحد الأقصى المسموح). تواصل مع الدعم لتحرير أحد الأجهزة.',
+      err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.'
+    }
+  };
+  let currentLang = document.documentElement.getAttribute('lang') || 'en';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+
+  function applyLang(lang){
+    currentLang = lang;
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    try{ localStorage.setItem('ss_lang', lang); }catch(e){}
+    const btn = document.getElementById('langToggle');
+    if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.getAttribute('data-i18n-html')); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+    if(typeof loadCatalogue === 'function') loadCatalogue();
+    if(typeof updateAuthUI === 'function') updateAuthUI();
+  }
+  function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
+
   const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -297,7 +395,7 @@
         await sb.auth.signOut();
         localStorage.removeItem(SESSION_KEY);
         updateAuthUI();
-        alert('You were logged out because your account was used to log in on another device.');
+        alert(t('alert_kicked'));
       }
     }, 20000);
   }
@@ -372,6 +470,7 @@
     applyTheme(cur === 'dark' ? 'light' : 'dark');
   }
   applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+  applyLang(currentLang);
 
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
@@ -379,48 +478,50 @@
   document.getElementById('loginBtn').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
   document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
 
+  let lastAuthMode = 'login';
   function renderAuth(mode){
+    lastAuthMode = mode;
     const body = document.getElementById('authBody');
     if(mode === 'login'){
       body.innerHTML = `
-        <h3>Log in</h3>
-        <p class="sub">Access your enrolled courses.</p>
-        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
-        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="••••••••"></div>
+        <h3>${t('auth_login_title')}</h3>
+        <p class="sub">${t('auth_login_sub')}</p>
+        <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
+        <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password')}"></div>
         <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">Log in</button>
+        <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">${t('auth_login_title')}</button>
         <p class="sub" style="margin-top:14px; text-align:center;">
-          <a href="#" onclick="renderAuth('forgot'); return false;" style="color:var(--muted);">Forgot password?</a>
+          <a href="#" onclick="renderAuth('forgot'); return false;" style="color:var(--muted);">${t('forgot_password')}</a>
         </p>
-        <p class="sub" style="margin-top:6px; text-align:center;">No account? <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">Sign up</a></p>
+        <p class="sub" style="margin-top:6px; text-align:center;">${t('no_account')} <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">${t('sign_up')}</a></p>
       `;
     } else if(mode === 'signup'){
       body.innerHTML = `
-        <h3>Sign up</h3>
-        <p class="sub">Create your account.</p>
-        <div class="field"><label>Full name</label><input type="text" id="authName" placeholder="Your name"></div>
-        <div class="field"><label>Phone number</label><input type="text" id="authPhone" placeholder="07XX XXX XXXX"></div>
-        <div class="field"><label>Email</label><input type="email" id="authEmail" placeholder="you@email.com"></div>
-        <div class="field"><label>Password</label><input type="password" id="authPass" placeholder="At least 6 characters"></div>
+        <h3>${t('auth_signup_title')}</h3>
+        <p class="sub">${t('auth_signup_sub')}</p>
+        <div class="field"><label>${t('label_fullname')}</label><input type="text" id="authName" placeholder="${t('ph_fullname')}"></div>
+        <div class="field"><label>${t('label_phone')}</label><input type="text" id="authPhone" placeholder="${t('ph_phone')}"></div>
+        <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
+        <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password_signup')}"></div>
         <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">Sign up</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">Already have an account? <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Log in</a></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">${t('auth_signup_title')}</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
       `;
     } else if(mode === 'forgot'){
       body.innerHTML = `
-        <h3>Reset password</h3>
-        <p class="sub">We'll email you a link to set a new password.</p>
-        <div class="field"><label>Email</label><input type="email" id="forgotEmail" placeholder="you@email.com"></div>
+        <h3>${t('auth_forgot_title')}</h3>
+        <p class="sub">${t('auth_forgot_sub')}</p>
+        <div class="field"><label>${t('label_email')}</label><input type="email" id="forgotEmail" placeholder="${t('ph_email')}"></div>
         <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitForgotPassword()">Send reset link</button>
-        <p class="sub" style="margin-top:14px; text-align:center;"><a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">Back to log in</a></p>
+        <button class="btn btn-accent modal-full-btn" onclick="submitForgotPassword()">${t('btn_send_reset')}</button>
+        <p class="sub" style="margin-top:14px; text-align:center;"><a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">${t('back_to_login')}</a></p>
       `;
     }
   }
 
   async function submitForgotPassword(){
     const email = document.getElementById('forgotEmail').value.trim();
-    if(!email){ showAuthErr('Enter your email.'); return; }
+    if(!email){ showAuthErr(t('err_enter_email')); return; }
     const { error } = await sb.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin + '/reset-password.html'
     });
@@ -428,9 +529,9 @@
     document.getElementById('authBody').innerHTML = `
       <div class="success-box">
         <div class="check">&#10003;</div>
-        <h3>Check your email</h3>
-        <p class="sub">If an account exists for that email, a reset link is on its way.</p>
-        <button class="btn modal-full-btn" onclick="closeModal('loginOverlay')">Close</button>
+        <h3>${t('success_email_title')}</h3>
+        <p class="sub">${t('success_email_sub')}</p>
+        <button class="btn btn-close modal-full-btn" onclick="closeModal('loginOverlay')">${t('btn_close')}</button>
       </div>`;
   }
 
@@ -443,13 +544,13 @@
   async function submitLogin(){
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
-    if(!email || !pass){ showAuthErr('Enter your email and password.'); return; }
+    if(!email || !pass){ showAuthErr(t('err_enter_email_pass')); return; }
     const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
     if(error){ showAuthErr(error.message); return; }
     const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
     if(!allowed){
       await sb.auth.signOut();
-      showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+      showAuthErr(t('err_device_limit'));
       return;
     }
     logLoginEvent(data.user.id, data.user.email);
@@ -462,8 +563,8 @@
     const phone = document.getElementById('authPhone').value.trim();
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
-    if(!name || !phone || !email || !pass){ showAuthErr('Fill in all fields.'); return; }
-    if(pass.length < 6){ showAuthErr('Password must be at least 6 characters.'); return; }
+    if(!name || !phone || !email || !pass){ showAuthErr(t('err_fill_fields')); return; }
+    if(pass.length < 6){ showAuthErr(t('err_pass_length')); return; }
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
     if(data.user){
@@ -472,7 +573,7 @@
       const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
       if(!allowed){
         await sb.auth.signOut();
-        showAuthErr('This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.');
+        showAuthErr(t('err_device_limit'));
         return;
       }
       logLoginEvent(data.user.id, data.user.email);
@@ -480,9 +581,9 @@
     document.getElementById('authBody').innerHTML = `
       <div class="success-box">
         <div class="check">&#10003;</div>
-        <h3>Account created</h3>
-        <p class="sub">You're signed up and logged in.</p>
-        <button class="btn modal-full-btn" onclick="closeModal('loginOverlay')">Close</button>
+        <h3>${t('success_account_title')}</h3>
+        <p class="sub">${t('success_account_sub')}</p>
+        <button class="btn btn-close modal-full-btn" onclick="closeModal('loginOverlay')">${t('btn_close')}</button>
       </div>`;
     updateAuthUI();
   }
@@ -500,53 +601,56 @@
     const loginBtn2 = document.getElementById('loginBtn2');
     if(session){
       if(!sessionCheckInterval) startSessionWatch(session.user.id);
-      loginBtn.textContent = 'Log out';
+      loginBtn.textContent = t('log_out');
       loginBtn.onclick = doLogout;
-      loginBtn2.textContent = 'Log out';
+      loginBtn2.textContent = t('log_out');
       loginBtn2.onclick = doLogout;
       document.getElementById('myCoursesLink').style.display = '';
       const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
       document.getElementById('adminLink').style.display = (prof && prof.is_admin) ? '' : 'none';
     } else {
-      loginBtn.textContent = 'Log in';
+      loginBtn.textContent = t('log_in');
       loginBtn.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
-      loginBtn2.textContent = 'Log in';
+      loginBtn2.textContent = t('log_in');
       loginBtn2.onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
       document.getElementById('myCoursesLink').style.display = 'none';
       document.getElementById('adminLink').style.display = 'none';
     }
   }
 
-  updateAuthUI();
-
   async function loadCatalogue(){
     const { data: courses, error } = await sb.from('courses').select('*').eq('status', 'published').order('created_at');
     const grid = document.getElementById('catalogueGrid');
     if(error || !courses || courses.length === 0){
-      grid.innerHTML = '<p style="color:var(--muted); grid-column:1/-1;">No courses published yet.</p>';
+      grid.innerHTML = `<p style="color:var(--muted); grid-column:1/-1;">${t('no_courses')}</p>`;
       return;
     }
+    const isAr = currentLang === 'ar';
     grid.innerHTML = courses.map(c => {
-      const metaHtml = Object.entries(c.meta || {}).map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+      const title = (isAr && c.title_ar) || c.title;
+      const description = (isAr && c.description_ar) || c.description;
+      const teacherName = (isAr && c.teacher_name_ar) || c.teacher_name;
+      const tagLabel = (isAr && c.tag_label_ar) || c.tag_label;
+      const badgeText = (isAr && c.badge_text_ar) || c.badge_text;
+      const meta = (isAr && c.meta_ar) || c.meta;
+      const metaHtml = Object.entries(meta || {}).map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
       const priceHtml = c.is_free
-        ? `<span class="price free">Free</span>${c.badge_text ? `<span class="badge">${c.badge_text}</span>` : ''}`
+        ? `<span class="price free">${t('card_free')}</span>${badgeText ? `<span class="badge">${badgeText}</span>` : ''}`
         : `<span class="price red-price">${c.price}</span>`;
       return `
         <div class="card crop">
           <div>
-            <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${c.tag_label || ''}</div>
-            <h3>${c.title}</h3>
-            ${c.teacher_name ? `<p class="card-byline">By. ${c.teacher_name}</p>` : ''}
-            <p>${c.description || ''}</p>
+            <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${tagLabel || ''}</div>
+            <h3>${title}</h3>
+            ${teacherName ? `<p class="card-byline">${t('card_by')} ${teacherName}</p>` : ''}
+            <p>${description || ''}</p>
           </div>
           <div class="titleblock">${metaHtml}</div>
           <div class="price-row">${priceHtml}</div>
-          <a class="btn modal-full-btn" href="course.html?slug=${c.slug}" style="text-align:center; text-decoration:none; display:block;">View course</a>
+          <a class="btn modal-full-btn" href="course.html?slug=${c.slug}" style="text-align:center; text-decoration:none; display:block;">${t('card_view_course')}</a>
         </div>`;
     }).join('');
   }
-
-  loadCatalogue();
 
   document.querySelectorAll('.overlay').forEach(ov => {
     ov.addEventListener('click', e => { if(e.target === ov) ov.classList.remove('active'); });
