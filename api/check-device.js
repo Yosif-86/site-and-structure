@@ -1,6 +1,7 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
 const MAX_DEVICES = 2;
 
 module.exports = async (req, res) => {
@@ -38,14 +39,19 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const admin = createClient(SUPABASE_URL, serviceRoleKey);
-
-  const { data: userData, error: userErr } = await admin.auth.getUser(accessToken);
+  // Separate client, never touched again, purely to verify the caller's identity.
+  const verifier = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  const { data: userData, error: userErr } = await verifier.auth.getUser(accessToken);
   if (userErr || !userData?.user) {
     res.status(401).json({ error: 'Invalid session' });
     return;
   }
   const userId = userData.user.id;
+
+  // Fresh privileged client, never given the caller's token, used only for the DB writes below.
+  const admin = createClient(SUPABASE_URL, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
 
   const { data: existing, error: selectErr } = await admin
     .from('trusted_devices')
