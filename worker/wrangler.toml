@@ -1,0 +1,11 @@
+name = "site-structure-videos"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "VIDEOS_BUCKET"
+bucket_name = "site-structure-videos"
+
+# Set the shared signing secret (must match BUNNY_STREAM_SECURITY_KEY's replacement
+# used in api/get-video-url.js) with:
+#   wrangler secret put SECURITY_KEY

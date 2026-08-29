@@ -13,8 +13,10 @@ module.exports = async (req, res) => {
   }
 
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const securityKey = process.env.BUNNY_STREAM_SECURITY_KEY;
-  if (!serviceRoleKey || !securityKey) {
+  const bunnySecurityKey = process.env.BUNNY_STREAM_SECURITY_KEY;
+  const r2SecurityKey = process.env.R2_SECURITY_KEY;
+  const r2WorkerBaseUrl = process.env.R2_WORKER_BASE_URL;
+  if (!serviceRoleKey) {
     res.status(500).json({ error: 'Server not configured' });
     return;
   }
@@ -46,11 +48,11 @@ module.exports = async (req, res) => {
 
   const { data: lecture, error: lectureErr } = await admin
     .from('lectures')
-    .select('id, course_id, bunny_video_id, is_free')
+    .select('id, course_id, bunny_video_id, r2_path, is_free')
     .eq('id', lectureId)
     .maybeSingle();
 
-  if (lectureErr || !lecture || !lecture.bunny_video_id) {
+  if (lectureErr || !lecture || (!lecture.bunny_video_id && !lecture.r2_path)) {
     res.status(404).json({ error: 'Video not available' });
     return;
   }
@@ -76,10 +78,29 @@ module.exports = async (req, res) => {
     }
   }
 
+  // New lectures: R2 + HLS via the Cloudflare Worker.
+  if (lecture.r2_path) {
+    if (!r2SecurityKey || !r2WorkerBaseUrl) {
+      res.status(500).json({ error: 'R2 video delivery not configured' });
+      return;
+    }
+    const path = `/${lecture.r2_path.replace(/^\/+/, '')}/master.m3u8`;
+    const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+    const token = crypto.createHash('sha256').update(r2SecurityKey + path + expires).digest('hex');
+    const url = `${r2WorkerBaseUrl.replace(/\/+$/, '')}${path}?token=${token}&expires=${expires}`;
+    res.status(200).json({ url, type: 'hls' });
+    return;
+  }
+
+  // Existing lectures: unchanged Bunny Stream path.
+  if (!bunnySecurityKey) {
+    res.status(500).json({ error: 'Server not configured' });
+    return;
+  }
   const videoId = lecture.bunny_video_id;
   const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-  const token = crypto.createHash('sha256').update(securityKey + videoId + expires).digest('hex');
+  const token = crypto.createHash('sha256').update(bunnySecurityKey + videoId + expires).digest('hex');
   const url = `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${videoId}?token=${token}&expires=${expires}&playsinline=true`;
 
-  res.status(200).json({ url });
+  res.status(200).json({ url, type: 'bunny' });
 };
