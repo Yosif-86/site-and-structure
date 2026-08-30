@@ -431,8 +431,12 @@
 
   async function removeDevice(deviceRowId, email){
     if(!confirm(t('confirm_remove_device').replace('{email}', email))) return;
-    const { error } = await sb.from('trusted_devices').delete().eq('id', deviceRowId);
+    const { data, error } = await sb.from('trusted_devices').delete().eq('id', deviceRowId).select();
     if(error){ alert(t('alert_remove_device_failed') + error.message); return; }
+    if(!data || data.length === 0){
+      alert(t('alert_remove_device_failed') + 'blocked by database policy (0 rows removed) — check device-admin-policy.sql was run.');
+      return;
+    }
     loadDevices();
   }
   window.removeDevice = removeDevice;
