@@ -42,33 +42,44 @@ class _WatermarkOverlayState extends State<WatermarkOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return AnimatedPositioned(
-          duration: const Duration(milliseconds: 900),
-          curve: Curves.easeInOut,
-          top: constraints.maxHeight * _top,
-          left: constraints.maxWidth * _left,
-          child: IgnorePointer(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.35),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: Text(
-                widget.label,
-                style: const TextStyle(
-                  color: Color(0xE6FFFFFF),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  shadows: [Shadow(blurRadius: 6, color: Colors.black)],
+    // Positioned.fill matches this widget's own parent Stack (the video
+    // player's Stack). LayoutBuilder sits inside that — fine, since it's not
+    // itself a ParentDataWidget. The AnimatedPositioned then needs its own
+    // fresh Stack as an immediate ancestor (LayoutBuilder doesn't count,
+    // it has its own RenderObject), so it's nested one level deeper here.
+    return Positioned.fill(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return Stack(
+            children: [
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeInOut,
+                top: constraints.maxHeight * _top,
+                left: constraints.maxWidth * _left,
+                child: IgnorePointer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      widget.label,
+                      style: const TextStyle(
+                        color: Color(0xE6FFFFFF),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        shadows: [Shadow(blurRadius: 6, color: Colors.black)],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        );
-      },
+            ],
+          );
+        },
+      ),
     );
   }
 }

@@ -145,6 +145,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         children: [
           if (_hlsController != null) VideoPlayer(_hlsController!),
           if (_webController != null) WebViewWidget(controller: _webController!),
+          if (_hlsController != null) _PlaybackControls(controller: _hlsController!),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
           if (_captureNotice)
             Container(
@@ -164,6 +165,58 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               child: VideoProgressIndicator(_hlsController!, allowScrubbing: true),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tap-to-toggle play/pause, plus a visible replay button once the video
+/// reaches the end (video_player has no built-in controls of its own).
+class _PlaybackControls extends StatelessWidget {
+  final VideoPlayerController controller;
+  const _PlaybackControls({required this.controller});
+
+  bool _hasEnded(VideoPlayerValue value) =>
+      value.isInitialized && value.duration > Duration.zero && value.position >= value.duration;
+
+  void _handleTap() {
+    final value = controller.value;
+    if (_hasEnded(value)) {
+      controller.seekTo(Duration.zero);
+      controller.play();
+    } else if (value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _handleTap,
+        child: ValueListenableBuilder<VideoPlayerValue>(
+          valueListenable: controller,
+          builder: (context, value, _) {
+            final ended = _hasEnded(value);
+            final showIcon = ended || !value.isPlaying;
+            if (!showIcon) return const SizedBox.shrink();
+            return Center(
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(color: Colors.black.withOpacity(0.45), shape: BoxShape.circle),
+                child: Icon(
+                  ended ? Icons.replay : Icons.play_arrow,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
