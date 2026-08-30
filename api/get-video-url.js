@@ -84,10 +84,14 @@ module.exports = async (req, res) => {
       res.status(500).json({ error: 'R2 video delivery not configured' });
       return;
     }
-    const path = `/${lecture.r2_path.replace(/^\/+/, '')}/master.m3u8`;
+    // Token is scoped to the whole lecture folder, not just master.m3u8 — the
+    // Worker rewrites playlists so every nested request (variant playlists,
+    // segments) reuses this same token, since those are separate HTTP
+    // requests the client makes on its own with no way for us to re-sign them.
+    const folderPrefix = `/${lecture.r2_path.replace(/^\/+/, '')}`;
     const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-    const token = crypto.createHash('sha256').update(r2SecurityKey + path + expires).digest('hex');
-    const url = `${r2WorkerBaseUrl.replace(/\/+$/, '')}${path}?token=${token}&expires=${expires}`;
+    const token = crypto.createHash('sha256').update(r2SecurityKey + folderPrefix + expires).digest('hex');
+    const url = `${r2WorkerBaseUrl.replace(/\/+$/, '')}${folderPrefix}/master.m3u8?token=${token}&expires=${expires}`;
     res.status(200).json({ url, type: 'hls' });
     return;
   }
