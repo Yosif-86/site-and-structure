@@ -59,18 +59,18 @@ class _WatermarkOverlayState extends State<WatermarkOverlay> {
                 left: constraints.maxWidth * _left,
                 child: IgnorePointer(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.35),
+                      color: Colors.black.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(3),
                     ),
                     child: Text(
                       widget.label,
                       style: const TextStyle(
-                        color: Color(0xE6FFFFFF),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                        shadows: [Shadow(blurRadius: 6, color: Colors.black)],
+                        color: Color(0x59FFFFFF), // ~35% white — legible but unobtrusive
+                        fontWeight: FontWeight.w500,
+                        fontSize: 12,
+                        shadows: [Shadow(blurRadius: 4, color: Color(0x99000000))],
                       ),
                     ),
                   ),

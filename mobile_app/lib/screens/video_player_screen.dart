@@ -202,23 +202,68 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 }
 
-/// Tapping the video itself (outside the bottom bar) also toggles play/pause,
-/// same convention as most video apps.
-class _TapToToggle extends StatelessWidget {
+/// Single tap toggles play/pause. Double-tap the right half to skip forward
+/// 10s, left half to skip back 10s — standard video-app convention.
+class _TapToToggle extends StatefulWidget {
   final VideoPlayerController controller;
   const _TapToToggle({required this.controller});
 
   @override
+  State<_TapToToggle> createState() => _TapToToggleState();
+}
+
+class _TapToToggleState extends State<_TapToToggle> {
+  Offset? _lastTapPosition;
+  bool _showSeekHint = false;
+  bool _seekForward = true;
+
+  void _seek(bool forward) {
+    final controller = widget.controller;
+    final current = controller.value.position;
+    final duration = controller.value.duration;
+    var target = forward ? current + const Duration(seconds: 10) : current - const Duration(seconds: 10);
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > duration) target = duration;
+    controller.seekTo(target);
+    setState(() { _showSeekHint = true; _seekForward = forward; });
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => _showSeekHint = false);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: () {
-          if (controller.value.isPlaying) {
-            controller.pause();
-          } else {
-            controller.play();
-          }
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () {
+              if (widget.controller.value.isPlaying) {
+                widget.controller.pause();
+              } else {
+                widget.controller.play();
+              }
+            },
+            onDoubleTapDown: (details) => _lastTapPosition = details.localPosition,
+            onDoubleTap: () {
+              if (_lastTapPosition == null) return;
+              _seek(_lastTapPosition!.dx > constraints.maxWidth / 2);
+            },
+            child: _showSeekHint
+                ? Align(
+                    alignment: _seekForward ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
+                      child: Icon(
+                        _seekForward ? Icons.forward_10 : Icons.replay_10,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ),
+                  )
+                : null,
+          );
         },
       ),
     );
@@ -290,6 +335,24 @@ class _ControlBar extends StatelessWidget {
                     style: const TextStyle(color: Colors.white, fontSize: 12),
                   ),
                   const Spacer(),
+                  PopupMenuButton<double>(
+                    initialValue: value.playbackSpeed,
+                    onSelected: controller.setPlaybackSpeed,
+                    color: const Color(0xFF1D1A16),
+                    itemBuilder: (context) => const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                        .map((speed) => PopupMenuItem<double>(
+                              value: speed,
+                              child: Text('${speed}x', style: const TextStyle(color: Colors.white)),
+                            ))
+                        .toList(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      child: Text(
+                        '${value.playbackSpeed}x',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
                   IconButton(
                     icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
                     onPressed: onToggleFullscreen,
