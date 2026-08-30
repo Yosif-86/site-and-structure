@@ -257,9 +257,9 @@
       no_enrollments: 'No enrollments yet.', no_flagged: 'No flagged logins.',
       confirm_remove: 'Remove {email} from "{title}"? This revokes their access.',
       alert_approve_failed: 'Failed to approve: ', alert_remove_failed: 'Failed to remove: ', alert_proof_failed: 'Failed to load proof: ',
-      device_management: 'Device management', trusted_devices: 'Trusted devices',
+      device_management: 'Device management', trusted_devices: 'Capped accounts',
       th_device: 'Device', th_first_seen: 'First seen', th_last_seen: 'Last seen',
-      no_devices: 'No trusted devices yet.',
+      no_devices: 'No accounts are at the device limit right now.',
       confirm_remove_device: 'Remove this device for {email}? They\'ll be able to log in on a new device again.',
       alert_remove_device_failed: 'Failed to remove device: '
     },
@@ -274,9 +274,9 @@
       no_enrollments: 'لا توجد تسجيلات بعد.', no_flagged: 'لا توجد تسجيلات دخول مشبوهة.',
       confirm_remove: 'إزالة {email} من "{title}"؟ سيؤدي هذا لإلغاء وصوله.',
       alert_approve_failed: 'فشلت الموافقة: ', alert_remove_failed: 'فشلت الإزالة: ', alert_proof_failed: 'فشل تحميل الإثبات: ',
-      device_management: 'إدارة الأجهزة', trusted_devices: 'الأجهزة الموثوقة',
+      device_management: 'إدارة الأجهزة', trusted_devices: 'الحسابات المكتملة الحد',
       th_device: 'الجهاز', th_first_seen: 'أول ظهور', th_last_seen: 'آخر ظهور',
-      no_devices: 'لا توجد أجهزة موثوقة بعد.',
+      no_devices: 'لا توجد حسابات وصلت للحد الأقصى للأجهزة حاليًا.',
       confirm_remove_device: 'إزالة هذا الجهاز لـ {email}؟ سيتمكن من تسجيل الدخول من جهاز جديد مرة أخرى.',
       alert_remove_device_failed: 'فشلت إزالة الجهاز: '
     }
@@ -437,6 +437,8 @@
   }
   window.removeDevice = removeDevice;
 
+  const MAX_DEVICES = 2; // must match api/check-device.js
+
   async function loadDevices(){
     const { data: devices, error } = await sb.from('trusted_devices')
       .select('id, user_id, device_label, first_seen, last_seen')
@@ -449,13 +451,17 @@
     const emailByUser = {};
     (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
 
+    const countByUser = {};
+    (devices || []).forEach(d => { countByUser[d.user_id] = (countByUser[d.user_id] || 0) + 1; });
+    const cappedDevices = (devices || []).filter(d => countByUser[d.user_id] >= MAX_DEVICES);
+
     const body = document.getElementById('deviceBody');
-    if(error || !devices || devices.length === 0){
+    if(error || cappedDevices.length === 0){
       body.innerHTML = `<tr><td colspan="5" class="empty">${t('no_devices')}</td></tr>`;
       return;
     }
 
-    body.innerHTML = devices.map(d => {
+    body.innerHTML = cappedDevices.map(d => {
       const email = emailByUser[d.user_id] || '—';
       const label = d.device_label || '—';
       const first = d.first_seen ? new Date(d.first_seen).toLocaleDateString() : '—';
