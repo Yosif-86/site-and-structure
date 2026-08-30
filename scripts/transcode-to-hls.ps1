@@ -24,10 +24,15 @@ if (-not (Test-Path $VideoPath)) {
     exit 1
 }
 
-$OutRoot = ".\hls-out\$LectureId"
-New-Item -ItemType Directory -Force -Path "$OutRoot\480p" | Out-Null
-New-Item -ItemType Directory -Force -Path "$OutRoot\720p" | Out-Null
-New-Item -ItemType Directory -Force -Path "$OutRoot\1080p" | Out-Null
+# Forward slashes throughout, deliberately — ffmpeg writes these path
+# templates verbatim into the playlist files as relative URLs. Windows file
+# I/O accepts forward slashes just fine, but HLS players resolve those
+# references as strict URIs and silently mis-resolve a literal backslash,
+# which is what caused segment fetches to 404 despite the playlists loading.
+$OutRoot = "./hls-out/$LectureId"
+New-Item -ItemType Directory -Force -Path "$OutRoot/480p" | Out-Null
+New-Item -ItemType Directory -Force -Path "$OutRoot/720p" | Out-Null
+New-Item -ItemType Directory -Force -Path "$OutRoot/1080p" | Out-Null
 
 Write-Host "Transcoding $VideoPath -> $OutRoot (480p/720p/1080p)..."
 
@@ -44,8 +49,8 @@ ffmpeg -y -i "$VideoPath" `
   -hls_segment_type mpegts `
   -master_pl_name master.m3u8 `
   -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:720p v:2,a:2,name:1080p" `
-  -hls_segment_filename "$OutRoot\%v\seg_%03d.ts" `
-  "$OutRoot\%v\index.m3u8"
+  -hls_segment_filename "$OutRoot/%v/seg_%03d.ts" `
+  "$OutRoot/%v/index.m3u8"
 
 Write-Host ""
 Write-Host "Done. HLS output at: $OutRoot"
