@@ -2,13 +2,13 @@
 # master playlist, ready to upload to R2 via upload-to-r2.ps1.
 #
 # Usage:
-#   .\transcode-to-hls.ps1 -Input "D:\path\to\video.mp4" -LectureId test-lecture-1
+#   .\transcode-to-hls.ps1 -VideoPath "D:\path\to\video.mp4" -LectureId test-lecture-1
 #
 # Produces .\hls-out\<lecture-id>\{master.m3u8, 480p\, 720p\, 1080p\}
 # Requires ffmpeg on PATH.
 
 param(
-    [Parameter(Mandatory=$true)][string]$Input,
+    [Parameter(Mandatory=$true)][string]$VideoPath,
     [Parameter(Mandatory=$true)][string]$LectureId
 )
 
@@ -19,8 +19,8 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if (-not (Test-Path $Input)) {
-    Write-Error "Input file not found: $Input"
+if (-not (Test-Path $VideoPath)) {
+    Write-Error "Input file not found: $VideoPath"
     exit 1
 }
 
@@ -29,9 +29,9 @@ New-Item -ItemType Directory -Force -Path "$OutRoot\480p" | Out-Null
 New-Item -ItemType Directory -Force -Path "$OutRoot\720p" | Out-Null
 New-Item -ItemType Directory -Force -Path "$OutRoot\1080p" | Out-Null
 
-Write-Host "Transcoding $Input -> $OutRoot (480p/720p/1080p)..."
+Write-Host "Transcoding $VideoPath -> $OutRoot (480p/720p/1080p)..."
 
-ffmpeg -y -i "$Input" `
+ffmpeg -y -i "$VideoPath" `
   -filter_complex "[0:v]split=3[v1][v2][v3]; [v1]scale=w=854:h=480[v1out]; [v2]scale=w=1280:h=720[v2out]; [v3]scale=w=1920:h=1080[v3out]" `
   -map "[v1out]" -c:v:0 h264 -b:v:0 900k  -maxrate:v:0 963k  -bufsize:v:0 1350k `
   -map "[v2out]" -c:v:1 h264 -b:v:1 2500k -maxrate:v:1 2675k -bufsize:v:1 3750k `
