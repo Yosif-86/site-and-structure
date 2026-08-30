@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -32,6 +33,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   String? _error;
   String _watermarkLabel = '';
   bool _captureNotice = false;
+  bool _isFullscreen = false;
 
   @override
   void initState() {
@@ -114,11 +116,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     });
   }
 
+  Future<void> _toggleFullscreen() async {
+    setState(() => _isFullscreen = !_isFullscreen);
+    if (_isFullscreen) {
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      await _restoreSystemUi();
+    }
+  }
+
+  Future<void> _restoreSystemUi() async {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+
   @override
   void dispose() {
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
     ScreenSecurity.onCapture(null);
+    if (_isFullscreen) _restoreSystemUi();
     super.dispose();
   }
 
@@ -126,26 +144,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Widget build(BuildContext context) {
     return Directionality(
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.black, title: Text(widget.title, overflow: TextOverflow.ellipsis)),
-        body: Center(child: _buildPlayer()),
+      child: PopScope(
+        canPop: !_isFullscreen,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && _isFullscreen) _toggleFullscreen();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: _isFullscreen
+              ? null
+              : AppBar(backgroundColor: Colors.black, title: Text(widget.title, overflow: TextOverflow.ellipsis)),
+          body: Center(child: _buildPlayer()),
+        ),
       ),
     );
   }
 
   Widget _buildPlayer() {
     if (_loading) return const CircularProgressIndicator();
-    if (_error != null) return Text(_error!, style: const TextStyle(color: AppColors.muted));
+    if (_error != null) return Text(_error!, style: const TextStyle(color: AppColors.muted), textAlign: TextAlign.center);
 
-    return AspectRatio(
+    final videoArea = AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
         fit: StackFit.expand,
         children: [
           if (_hlsController != null) VideoPlayer(_hlsController!),
           if (_webController != null) WebViewWidget(controller: _webController!),
-          if (_hlsController != null) _PlaybackControls(controller: _hlsController!),
+          if (_hlsController != null) _TapToToggle(controller: _hlsController!),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
           if (_captureNotice)
             Container(
@@ -159,64 +185,120 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
           if (_hlsController != null)
             Positioned(
-              bottom: 8,
-              right: 8,
-              left: 8,
-              child: VideoProgressIndicator(_hlsController!, allowScrubbing: true),
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _ControlBar(
+                controller: _hlsController!,
+                isFullscreen: _isFullscreen,
+                onToggleFullscreen: _toggleFullscreen,
+              ),
             ),
         ],
       ),
     );
+
+    return _isFullscreen ? SizedBox.expand(child: videoArea) : videoArea;
   }
 }
 
-/// Tap-to-toggle play/pause, plus a visible replay button once the video
-/// reaches the end (video_player has no built-in controls of its own).
-class _PlaybackControls extends StatelessWidget {
+/// Tapping the video itself (outside the bottom bar) also toggles play/pause,
+/// same convention as most video apps.
+class _TapToToggle extends StatelessWidget {
   final VideoPlayerController controller;
-  const _PlaybackControls({required this.controller});
-
-  bool _hasEnded(VideoPlayerValue value) =>
-      value.isInitialized && value.duration > Duration.zero && value.position >= value.duration;
-
-  void _handleTap() {
-    final value = controller.value;
-    if (_hasEnded(value)) {
-      controller.seekTo(Duration.zero);
-      controller.play();
-    } else if (value.isPlaying) {
-      controller.pause();
-    } else {
-      controller.play();
-    }
-  }
+  const _TapToToggle({required this.controller});
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: _handleTap,
-        child: ValueListenableBuilder<VideoPlayerValue>(
-          valueListenable: controller,
-          builder: (context, value, _) {
-            final ended = _hasEnded(value);
-            final showIcon = ended || !value.isPlaying;
-            if (!showIcon) return const SizedBox.shrink();
-            return Center(
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.45), shape: BoxShape.circle),
-                child: Icon(
-                  ended ? Icons.replay : Icons.play_arrow,
-                  color: Colors.white,
-                  size: 32,
+        onTap: () {
+          if (controller.value.isPlaying) {
+            controller.pause();
+          } else {
+            controller.play();
+          }
+        },
+      ),
+    );
+  }
+}
+
+String _formatDuration(Duration d) {
+  final minutes = d.inMinutes.remainder(60).toString().padLeft(1, '0');
+  final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
+}
+
+/// Bottom playback bar: play/pause, current/duration time, scrub bar,
+/// fullscreen toggle — the controls video_player doesn't provide on its own.
+class _ControlBar extends StatelessWidget {
+  final VideoPlayerController controller;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
+  const _ControlBar({required this.controller, required this.isFullscreen, required this.onToggleFullscreen});
+
+  bool _hasEnded(VideoPlayerValue value) =>
+      value.isInitialized && value.duration > Duration.zero && value.position >= value.duration;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.transparent, Color(0xCC000000)],
+        ),
+      ),
+      child: ValueListenableBuilder<VideoPlayerValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          final ended = _hasEnded(value);
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              VideoProgressIndicator(
+                controller,
+                allowScrubbing: true,
+                padding: EdgeInsets.zero,
+                colors: const VideoProgressColors(
+                  playedColor: AppColors.red,
+                  bufferedColor: Color(0x66FFFFFF),
+                  backgroundColor: Color(0x33FFFFFF),
                 ),
               ),
-            );
-          },
-        ),
+              Row(
+                children: [
+                  IconButton(
+                    icon: Icon(ended ? Icons.replay : (value.isPlaying ? Icons.pause : Icons.play_arrow), color: Colors.white),
+                    onPressed: () {
+                      if (ended) {
+                        controller.seekTo(Duration.zero);
+                        controller.play();
+                      } else if (value.isPlaying) {
+                        controller.pause();
+                      } else {
+                        controller.play();
+                      }
+                    },
+                  ),
+                  Text(
+                    '${_formatDuration(value.position)} / ${_formatDuration(value.duration)}',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
+                    onPressed: onToggleFullscreen,
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }
