@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -43,7 +45,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     // iOS: we can only detect a capture, not block it — react by blanking playback.
     ScreenSecurity.onCapture((_) => _onCaptureDetected());
 
-    await _loadWatermarkLabel();
+    // Run in parallel — a slow/hanging watermark fetch must never block video
+    // playback from starting. Each has its own timeout so nothing can hang
+    // forever without surfacing an error.
+    unawaited(_loadWatermarkLabel());
     await _loadVideo();
   }
 
@@ -51,10 +56,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final user = SupabaseService.instance.currentUser;
     if (user == null) return;
     try {
-      final prof = await SupabaseService.instance.client.from('profiles').select('phone').eq('id', user.id).maybeSingle();
+      final prof = await SupabaseService.instance.client
+          .from('profiles')
+          .select('phone')
+          .eq('id', user.id)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 10));
       final phone = prof?['phone'] as String?;
+      if (!mounted) return;
       setState(() => _watermarkLabel = (phone != null && phone.isNotEmpty) ? phone : (user.email ?? ''));
     } catch (_) {
+      if (!mounted) return;
       setState(() => _watermarkLabel = user.email ?? '');
     }
   }
@@ -65,23 +77,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() { _loading = false; _error = AppStrings.instance.t('err_video_unavailable'); });
       return;
     }
-    final result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken);
-    if (result.error != null || result.url == null) {
-      setState(() { _loading = false; _error = AppStrings.instance.t(result.error ?? 'err_video_unavailable'); });
-      return;
-    }
+    try {
+      final result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken)
+          .timeout(const Duration(seconds: 15));
+      if (result.error != null || result.url == null) {
+        setState(() { _loading = false; _error = AppStrings.instance.t(result.error ?? 'err_video_unavailable'); });
+        return;
+      }
 
-    if (result.type == 'hls') {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
-      await controller.initialize();
-      controller.play();
-      setState(() { _hlsController = controller; _loading = false; });
-    } else {
-      // Bunny iframe embed — needs a WebView, not the native player.
-      final controller = WebViewController()
-        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-        ..loadRequest(Uri.parse(result.url!));
-      setState(() { _webController = controller; _loading = false; });
+      if (result.type == 'hls') {
+        final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
+        await controller.initialize().timeout(const Duration(seconds: 20));
+        controller.play();
+        if (!mounted) { controller.dispose(); return; }
+        setState(() { _hlsController = controller; _loading = false; });
+      } else {
+        // Bunny iframe embed — needs a WebView, not the native player.
+        final controller = WebViewController()
+          ..setJavaScriptMode(JavaScriptMode.unrestricted)
+          ..loadRequest(Uri.parse(result.url!));
+        setState(() { _webController = controller; _loading = false; });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
     }
   }
 
