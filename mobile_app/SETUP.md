@@ -47,15 +47,6 @@ Pick an emulator/device when prompted. If something doesn't compile, that's
 expected on a first pass I couldn't test locally — send me the exact error
 and I'll fix it.
 
-## 6. Verify the `screen_protector` package API
-That package's exact method names can drift between versions. In
-`lib/screens/video_player_screen.dart`, the calls
-`ScreenProtector.preventScreenshotOn()/Off()` and `ScreenProtector.addListener(...)`
-target the commonly documented API — if `flutter pub get` or the analyzer flags
-those as unknown, open the installed package's `screen_protector.dart` (or its
-pub.dev page) and adjust the method names to match; the logic around them
-(when to call what) stays the same.
-
 ## iOS builds
 This machine can't compile iOS apps (Apple requires Xcode on macOS). Once the
 app runs on Android, we'll set up a Codemagic pipeline to build the iOS version

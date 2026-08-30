@@ -1,12 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:screen_protector/screen_protector.dart';
 import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../services/api_service.dart';
+import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/watermark_overlay.dart';
@@ -41,22 +39,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Future<void> _init() async {
     // Android: block screenshots/recording outright for as long as this screen is open.
-    if (Platform.isAndroid) {
-      await ScreenProtector.preventScreenshotOn();
-    }
+    await ScreenSecurity.enableSecure();
     // iOS: we can only detect a capture, not block it — react by blanking playback.
-    if (Platform.isIOS) {
-      ScreenProtector.addListener(
-        () {
-          // Screenshot taken.
-          _onCaptureDetected();
-        },
-        (isCaptured) {
-          // Screen recording state changed.
-          if (isCaptured) _onCaptureDetected();
-        },
-      );
-    }
+    ScreenSecurity.onCapture((_) => _onCaptureDetected());
 
     await _loadWatermarkLabel();
     await _loadVideo();
@@ -113,12 +98,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void dispose() {
     _hlsController?.dispose();
-    if (Platform.isAndroid) {
-      ScreenProtector.preventScreenshotOff();
-    }
-    if (Platform.isIOS) {
-      ScreenProtector.removeListener();
-    }
+    ScreenSecurity.disableSecure();
+    ScreenSecurity.onCapture(null);
     super.dispose();
   }
 
