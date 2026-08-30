@@ -66,7 +66,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: Text(t('no_enrollments'), style: const TextStyle(color: AppColors.muted), textAlign: TextAlign.center),
+                      child: Text(t('no_enrollments'), style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
                     ),
                   )
                 : RefreshIndicator(
@@ -94,10 +94,10 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(title, style: const TextStyle(color: AppColors.text, fontSize: 16, fontWeight: FontWeight.w600)),
+                                    Text(title, style: AppFonts.body(size: 16, weight: FontWeight.w600)),
                                     const SizedBox(height: 4),
                                     Text('${t('enrolled_on')} ${e.createdAt.toLocal().toString().split(' ').first}',
-                                        style: const TextStyle(color: AppColors.muted2, fontSize: 11)),
+                                        style: AppFonts.mono(size: 10.5, letterSpacing: 0.3)),
                                   ],
                                 ),
                               ),
@@ -113,8 +113,8 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                                   borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
-                                  e.isActive ? t('status_active') : t('status_pending'),
-                                  style: const TextStyle(color: AppColors.teal, fontSize: 10),
+                                  (e.isActive ? t('status_active') : t('status_pending')).toUpperCase(),
+                                  style: AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
                                 ),
                               ),
                             ],

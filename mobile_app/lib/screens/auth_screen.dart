@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/brand_title.dart';
 
 enum _AuthMode { login, signup, forgot, forgotSent }
 
@@ -83,13 +84,28 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(AppStrings.instance.t('app_name'))),
+      appBar: AppBar(title: const SizedBox.shrink()),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
-            child: _buildBody(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const BrandTitle(),
+                const SizedBox(height: 28),
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppColors.panel2,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: _buildBody(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -113,16 +129,16 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_t('auth_login_title'), style: const TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(_t('auth_login_title'), style: AppFonts.heading(size: 24)),
         const SizedBox(height: 6),
-        Text(_t('auth_login_sub'), style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text(_t('auth_login_sub'), style: AppFonts.body(size: 13, color: AppColors.muted)),
         const SizedBox(height: 20),
         TextField(controller: _emailCtrl, decoration: InputDecoration(labelText: _t('label_email'), hintText: _t('ph_email')), keyboardType: TextInputType.emailAddress),
         const SizedBox(height: 14),
         TextField(controller: _passCtrl, decoration: InputDecoration(labelText: _t('label_password')), obscureText: true),
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
+          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
         ],
         const SizedBox(height: 18),
         ElevatedButton(
@@ -137,7 +153,7 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Wrap(
             alignment: WrapAlignment.center,
             children: [
-              Text(_t('no_account'), style: const TextStyle(color: AppColors.muted)),
+              Text(_t('no_account'), style: AppFonts.body(color: AppColors.muted)),
               TextButton(onPressed: () => _switchMode(_AuthMode.signup), child: Text(_t('sign_up'))),
             ],
           ),
@@ -150,9 +166,9 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_t('auth_signup_title'), style: const TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(_t('auth_signup_title'), style: AppFonts.heading(size: 24)),
         const SizedBox(height: 6),
-        Text(_t('auth_signup_sub'), style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text(_t('auth_signup_sub'), style: AppFonts.body(size: 13, color: AppColors.muted)),
         const SizedBox(height: 20),
         TextField(controller: _nameCtrl, decoration: InputDecoration(labelText: _t('label_fullname'), hintText: _t('ph_fullname'))),
         const SizedBox(height: 14),
@@ -163,7 +179,7 @@ class _AuthScreenState extends State<AuthScreen> {
         TextField(controller: _passCtrl, decoration: InputDecoration(labelText: _t('label_password'), hintText: _t('ph_password')), obscureText: true),
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
+          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
         ],
         const SizedBox(height: 18),
         ElevatedButton(
@@ -175,7 +191,7 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Wrap(
             alignment: WrapAlignment.center,
             children: [
-              Text(_t('already_account'), style: const TextStyle(color: AppColors.muted)),
+              Text(_t('already_account'), style: AppFonts.body(color: AppColors.muted)),
               TextButton(onPressed: () => _switchMode(_AuthMode.login), child: Text(_t('auth_login_title'))),
             ],
           ),
@@ -188,14 +204,14 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_t('auth_forgot_title'), style: const TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(_t('auth_forgot_title'), style: AppFonts.heading(size: 24)),
         const SizedBox(height: 6),
-        Text(_t('auth_forgot_sub'), style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text(_t('auth_forgot_sub'), style: AppFonts.body(size: 13, color: AppColors.muted)),
         const SizedBox(height: 20),
         TextField(controller: _emailCtrl, decoration: InputDecoration(labelText: _t('label_email'), hintText: _t('ph_email')), keyboardType: TextInputType.emailAddress),
         if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
+          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
         ],
         const SizedBox(height: 18),
         ElevatedButton(
@@ -214,9 +230,9 @@ class _AuthScreenState extends State<AuthScreen> {
       children: [
         const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
         const SizedBox(height: 16),
-        Text(_t('success_email_title'), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(_t('success_email_title'), style: AppFonts.heading(size: 22)),
         const SizedBox(height: 8),
-        Text(_t('success_email_sub'), textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text(_t('success_email_sub'), textAlign: TextAlign.center, style: AppFonts.body(size: 13, color: AppColors.muted)),
         const SizedBox(height: 18),
         OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(_t('btn_close'))),
       ],

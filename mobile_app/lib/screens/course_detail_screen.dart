@@ -108,9 +108,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error == 'not_found'
-                ? Center(child: Text(_t('course_not_found'), style: const TextStyle(color: AppColors.muted)))
+                ? Center(child: Text(_t('course_not_found'), style: AppFonts.body(color: AppColors.muted)))
                 : _error != null
-                    ? Center(child: Text(_error!, style: const TextStyle(color: AppColors.muted)))
+                    ? Center(child: Text(_error!, style: AppFonts.body(color: AppColors.muted)))
                     : _buildContent(),
       ),
     );
@@ -130,17 +130,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        if (tag != null && tag.isNotEmpty)
-          Text(tag.toUpperCase(), style: const TextStyle(color: AppColors.red, fontSize: 12, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        Text(title, style: const TextStyle(color: AppColors.text, fontSize: 28, fontWeight: FontWeight.w800)),
+        if (tag != null && tag.isNotEmpty) Text(tag.toUpperCase(), style: AppFonts.eyebrow()),
+        const SizedBox(height: 10),
+        Text(title, style: AppFonts.heading(size: 30)),
         if (teacher != null && teacher.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text('${_t('by')} $teacher', style: const TextStyle(color: Color(0xFFA8496B), fontSize: 13)),
+          const SizedBox(height: 8),
+          Text('${_t('by')} $teacher', style: AppFonts.mono(size: 12, color: AppColors.byline, letterSpacing: 0.3)),
         ],
         if (desc != null && desc.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text(desc, style: const TextStyle(color: AppColors.muted, fontSize: 15)),
+          Text(desc, style: AppFonts.body(size: 15, color: AppColors.muted)),
         ],
         if (meta.isNotEmpty) ...[
           const SizedBox(height: 20),
@@ -153,10 +152,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         const SizedBox(height: 24),
         _buildPriceRow(isActive, isPending, course),
         const SizedBox(height: 32),
-        Text(_t('curriculum'), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(_t('curriculum').toUpperCase(), style: AppFonts.heading(size: 20)),
         const SizedBox(height: 12),
         if (_lectures.isEmpty)
-          Text(_t('no_lectures'), style: const TextStyle(color: AppColors.muted))
+          Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
         else
           ..._lectures.map((l) => _LectureRow(
                 lecture: l,
@@ -177,8 +176,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return Row(
       children: [
         course.isFree
-            ? Text(_t('card_free'), style: const TextStyle(color: AppColors.teal, fontSize: 26, fontWeight: FontWeight.w800))
-            : Text(course.price ?? '', style: const TextStyle(color: AppColors.text, fontSize: 26, fontWeight: FontWeight.w800)),
+            ? Text(_t('card_free'), style: AppFonts.heading(size: 28, color: AppColors.teal))
+            : Text(course.price ?? '', style: AppFonts.heading(size: 28)),
         const SizedBox(width: 16),
         ElevatedButton(
           onPressed: _openEnroll,
@@ -200,9 +199,9 @@ class _MetaItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: const TextStyle(color: AppColors.muted2, fontSize: 9.5, letterSpacing: 0.5)),
-          const SizedBox(height: 3),
-          Text(value, style: const TextStyle(color: AppColors.text, fontSize: 12.5, fontWeight: FontWeight.w500)),
+          Text(label.toUpperCase(), style: AppFonts.mono(size: 9.5, letterSpacing: 0.5)),
+          const SizedBox(height: 4),
+          Text(value, style: AppFonts.body(size: 12.5, weight: FontWeight.w500)),
         ],
       ),
     );
@@ -218,7 +217,7 @@ class _StatusBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(border: Border.all(color: color), borderRadius: BorderRadius.circular(999)),
-      child: Text(text.toUpperCase(), style: TextStyle(color: color, fontSize: 10.5, letterSpacing: 0.5)),
+      child: Text(text.toUpperCase(), style: AppFonts.mono(size: 10.5, color: color, letterSpacing: 0.5)),
     );
   }
 }
@@ -246,10 +245,10 @@ class _LectureRow extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
-                Flexible(child: Text(lecture.localizedTitle(ar), style: const TextStyle(color: AppColors.text, fontSize: 14))),
+                Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
                 if (lecture.isFree) ...[
                   const SizedBox(width: 8),
-                  Text(t('free_tag'), style: const TextStyle(color: AppColors.teal, fontSize: 10, fontWeight: FontWeight.w700)),
+                  Text(t('free_tag'), style: AppFonts.mono(size: 10, color: AppColors.teal, weight: FontWeight.w700)),
                 ],
               ],
             ),
@@ -259,7 +258,7 @@ class _LectureRow extends StatelessWidget {
               : Row(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
                   const SizedBox(width: 4),
-                  Text(t('locked'), style: const TextStyle(color: AppColors.muted2, fontSize: 13)),
+                  Text(t('locked'), style: AppFonts.body(size: 13, color: AppColors.muted2)),
                 ]),
         ],
       ),
@@ -306,18 +305,18 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
             ? Column(mainAxisSize: MainAxisSize.min, children: [
                 const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
                 const SizedBox(height: 12),
-                Text(t('enrolled'), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(t('enrolled'), style: AppFonts.heading(size: 22)),
                 const SizedBox(height: 16),
                 OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(t('btn_close'))),
                 const SizedBox(height: 12),
               ])
             : Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(widget.course.localizedTitle(ar), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(widget.course.localizedTitle(ar), style: AppFonts.heading(size: 22)),
                 const SizedBox(height: 6),
-                Text(t('free_course_sub'), style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                Text(t('free_course_sub'), style: AppFonts.body(size: 13, color: AppColors.muted)),
                 if (_error != null) ...[
                   const SizedBox(height: 10),
-                  Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
+                  Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
                 ],
                 const SizedBox(height: 18),
                 SizedBox(
@@ -404,17 +403,17 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
               ? Column(mainAxisSize: MainAxisSize.min, children: [
                   const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
                   const SizedBox(height: 12),
-                  Text(t('submitted'), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+                  Text(t('submitted'), style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 8),
-                  Text(t('pending_note'), textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                  Text(t('pending_note'), textAlign: TextAlign.center, style: AppFonts.body(size: 13, color: AppColors.muted)),
                   const SizedBox(height: 16),
                   OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(t('btn_close'))),
                   const SizedBox(height: 12),
                 ])
               : Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                  Text(widget.course.localizedTitle(ar), style: const TextStyle(color: AppColors.text, fontSize: 20, fontWeight: FontWeight.w800)),
+                  Text(widget.course.localizedTitle(ar), style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 4),
-                  Text('${widget.course.price ?? ''}${t('choose_payment_sub')}', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                  Text('${widget.course.price ?? ''}${t('choose_payment_sub')}', style: AppFonts.body(size: 13, color: AppColors.muted)),
                   const SizedBox(height: 16),
                   Row(children: [
                     Expanded(child: _PayOption(label: t('zain_cash'), sub: t('zain_sub'), selected: _method == 'zain', onTap: () => setState(() => _method = 'zain'))),
@@ -431,7 +430,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 10),
-                    Text(_error!, style: const TextStyle(color: AppColors.red, fontSize: 12.5)),
+                    Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
                   ],
                   const SizedBox(height: 18),
                   ElevatedButton(onPressed: _loading ? null : _submit, child: Text(t('confirm_payment'))),
@@ -463,9 +462,9 @@ class _PayOption extends StatelessWidget {
           color: selected ? AppColors.teal.withOpacity(0.08) : null,
         ),
         child: Column(children: [
-          Text(label, style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w600)),
+          Text(label, style: AppFonts.body(weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text(sub, style: const TextStyle(color: AppColors.muted2, fontSize: 10)),
+          Text(sub, style: AppFonts.mono(size: 10, letterSpacing: 0.3)),
         ]),
       ),
     );

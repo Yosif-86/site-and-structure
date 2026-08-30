@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
@@ -67,11 +68,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(t('app_name')),
+          title: const BrandTitle(),
           actions: [
             IconButton(
               tooltip: 'Toggle language',
-              icon: const Text('AR/EN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+              icon: Text('AR/EN', style: AppFonts.mono(size: 11, color: AppColors.muted, weight: FontWeight.w700)),
               onPressed: () => AppStrings.instance.toggle(),
             ),
             if (loggedIn)

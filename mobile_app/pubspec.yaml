@@ -17,6 +17,7 @@ dependencies:
   shared_preferences: ^2.2.3
   provider: ^6.1.2
   uuid: ^4.4.0
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
