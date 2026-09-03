@@ -41,13 +41,18 @@ Write-Host "Uploading $LocalDir -> r2://$($env:R2_BUCKET)/$RemotePrefix ..."
 aws s3 cp "$LocalDir" "s3://$($env:R2_BUCKET)/$RemotePrefix" `
   --recursive `
   --endpoint-url "$Endpoint" `
-  --exclude "*.ts" `
+  --exclude "*" --include "*.m3u8" `
   --content-type "application/vnd.apple.mpegurl"
 
+# .ts segments and the AES-128 enc.key both get a generic type here — the
+# Worker always overrides content-type by extension when serving anyway
+# (worker/src/index.js's contentTypeFor), so this only matters for tidiness.
+# enc.keyinfo is a local-only ffmpeg input (holds an absolute local path) and
+# is deliberately never uploaded.
 aws s3 cp "$LocalDir" "s3://$($env:R2_BUCKET)/$RemotePrefix" `
   --recursive `
   --endpoint-url "$Endpoint" `
-  --exclude "*.m3u8" `
+  --exclude "*.m3u8" --exclude "*.keyinfo" `
   --content-type "video/mp2t"
 
 Write-Host ""

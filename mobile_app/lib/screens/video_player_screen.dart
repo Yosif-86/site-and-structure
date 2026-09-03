@@ -34,6 +34,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   String _watermarkLabel = '';
   bool _captureNotice = false;
   bool _isFullscreen = false;
+  Timer? _progressTimer;
 
   @override
   void initState() {
@@ -60,13 +61,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     try {
       final prof = await SupabaseService.instance.client
           .from('profiles')
-          .select('phone')
+          .select('full_name, phone')
           .eq('id', user.id)
           .maybeSingle()
           .timeout(const Duration(seconds: 10));
+      final name = prof?['full_name'] as String?;
       final phone = prof?['phone'] as String?;
+      final parts = [
+        if (name != null && name.isNotEmpty) name,
+        if (phone != null && phone.isNotEmpty) phone,
+      ];
       if (!mounted) return;
-      setState(() => _watermarkLabel = (phone != null && phone.isNotEmpty) ? phone : (user.email ?? ''));
+      setState(() => _watermarkLabel = parts.isNotEmpty ? parts.join(' · ') : (user.email ?? ''));
     } catch (_) {
       if (!mounted) return;
       setState(() => _watermarkLabel = user.email ?? '');
@@ -90,9 +96,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       if (result.type == 'hls') {
         final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
         await controller.initialize().timeout(const Duration(seconds: 20));
+        final resumeAt = await _loadResumePosition();
+        if (resumeAt != null && resumeAt < controller.value.duration - const Duration(seconds: 5)) {
+          await controller.seekTo(resumeAt);
+        }
         controller.play();
         if (!mounted) { controller.dispose(); return; }
         setState(() { _hlsController = controller; _loading = false; });
+        _startProgressSaving();
       } else {
         // Bunny iframe embed — needs a WebView, not the native player.
         final controller = WebViewController()
@@ -103,6 +114,53 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
+    }
+  }
+
+  Future<Duration?> _loadResumePosition() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) return null;
+    try {
+      final row = await SupabaseService.instance.client
+          .from('lesson_progress')
+          .select('position_seconds, completed')
+          .eq('user_id', user.id)
+          .eq('lecture_id', widget.lectureId)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 8));
+      if (row == null || row['completed'] == true) return null;
+      final seconds = row['position_seconds'] as int?;
+      if (seconds == null || seconds <= 0) return null;
+      return Duration(seconds: seconds);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _startProgressSaving() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 15), (_) => _saveProgress());
+  }
+
+  Future<void> _saveProgress() async {
+    final controller = _hlsController;
+    final user = SupabaseService.instance.currentUser;
+    if (controller == null || user == null || !controller.value.isInitialized) return;
+    final position = controller.value.position;
+    final duration = controller.value.duration;
+    if (duration <= Duration.zero) return;
+    final completed = position >= duration - const Duration(seconds: 15);
+    try {
+      await SupabaseService.instance.client.from('lesson_progress').upsert({
+        'user_id': user.id,
+        'lecture_id': widget.lectureId,
+        'position_seconds': position.inSeconds,
+        'duration_seconds': duration.inSeconds,
+        'completed': completed,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, onConflict: 'user_id,lecture_id');
+    } catch (_) {
+      // Best-effort — resume position is a convenience, not critical data.
     }
   }
 
@@ -133,6 +191,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   @override
   void dispose() {
+    _progressTimer?.cancel();
+    unawaited(_saveProgress());
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
     ScreenSecurity.onCapture(null);

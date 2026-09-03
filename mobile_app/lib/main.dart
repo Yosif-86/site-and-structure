@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'i18n/strings.dart';
@@ -8,12 +10,27 @@ import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
+// No crash-reporting service is wired up yet (no Sentry/Firebase project
+// configured) — this at least stops a release crash from vanishing
+// silently, by routing every uncaught error through one place. Point
+// _reportError at Sentry.captureException/Crashlytics.recordError once a
+// service is set up; until then it just logs, same as an unhandled error
+// would have shown in debug.
+void _reportError(Object error, StackTrace stack) {
+  debugPrint('Uncaught error: $error\n$stack');
+}
+
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await SupabaseService.init();
-  SupabaseService.instance.resumeSessionWatchIfLoggedIn();
-  SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
-  runApp(const SiteAndStructureApp());
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (details) {
+      _reportError(details.exception, details.stack ?? StackTrace.empty);
+    };
+    await SupabaseService.init();
+    SupabaseService.instance.resumeSessionWatchIfLoggedIn();
+    SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
+    runApp(const SiteAndStructureApp());
+  }, _reportError);
 }
 
 void _showForcedLogoutDialog() {

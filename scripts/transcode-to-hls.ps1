@@ -34,7 +34,22 @@ New-Item -ItemType Directory -Force -Path "$OutRoot/480p" | Out-Null
 New-Item -ItemType Directory -Force -Path "$OutRoot/720p" | Out-Null
 New-Item -ItemType Directory -Force -Path "$OutRoot/1080p" | Out-Null
 
-Write-Host "Transcoding $VideoPath -> $OutRoot (480p/720p/1080p)..."
+# AES-128 HLS encryption: one random key shared by all renditions of this
+# lecture, referenced from each rendition's playlist via "../enc.key" (one
+# level up from e.g. 480p/index.m3u8, landing on $OutRoot/enc.key). The
+# Worker's folder-prefix check only looks at /videos/<lectureId>, so that
+# relative path still resolves to something it authorizes the same as any
+# segment request — no Worker changes needed beyond the playlist-rewrite fix.
+# No IV is set here; ffmpeg derives one per segment from its sequence number,
+# which is the documented default and standard practice.
+$KeyBytes = New-Object byte[] 16
+[System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($KeyBytes)
+$KeyPath = "$OutRoot/enc.key"
+[System.IO.File]::WriteAllBytes($KeyPath, $KeyBytes)
+$KeyInfoPath = "$OutRoot/enc.keyinfo"
+"../enc.key`n$KeyPath" | Out-File -FilePath $KeyInfoPath -Encoding ascii -NoNewline
+
+Write-Host "Transcoding $VideoPath -> $OutRoot (480p/720p/1080p, AES-128 encrypted)..."
 
 ffmpeg -y -i "$VideoPath" `
   -filter_complex "[0:v]split=3[v1][v2][v3]; [v1]scale=w=854:h=480[v1out]; [v2]scale=w=1280:h=720[v2out]; [v3]scale=w=1920:h=1080[v3out]" `
@@ -47,6 +62,7 @@ ffmpeg -y -i "$VideoPath" `
   -f hls -hls_time 6 -hls_playlist_type vod `
   -hls_flags independent_segments `
   -hls_segment_type mpegts `
+  -hls_key_info_file "$KeyInfoPath" `
   -master_pl_name master.m3u8 `
   -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:720p v:2,a:2,name:1080p" `
   -hls_segment_filename "$OutRoot/%v/seg_%03d.ts" `

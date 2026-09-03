@@ -13,10 +13,14 @@
  * serves an .m3u8 file it rewrites every line in it to carry the same
  * still-valid token+expires, so each subsequent fetch is already signed.
  *
- * URL shape: https://<worker-domain>/videos/<lectureId>/<...file>?token=<hex>&expires=<unix>
- * Token = sha256(SECURITY_KEY + folderPrefix + expires), hex-encoded, where
- * folderPrefix is "/videos/<lectureId>" — the same value for every file
- * under that lecture, which is what get-video-url.js signs.
+ * URL shape: https://<worker-domain>/videos/<lectureId>/<...file>?token=<hex>&expires=<unix>&uid=<userId>
+ * Token = sha256(SECURITY_KEY + folderPrefix + uid + expires), hex-encoded,
+ * where folderPrefix is "/videos/<lectureId>" — the same value for every
+ * file under that lecture, which is what get-video-url.js signs. Binding the
+ * hash to uid ties each minted URL to the specific account it was issued to
+ * (for logging/traceability); it does not by itself stop the URL from being
+ * replayed by someone else before it expires — that's bounded by expiry and
+ * gated at mint time by get-video-url.js's device/session check.
  *
  * Bind the R2 bucket in wrangler.toml as `VIDEOS_BUCKET`, and set the
  * `SECURITY_KEY` secret via `wrangler secret put SECURITY_KEY` (never commit it).
@@ -40,17 +44,30 @@ function folderPrefixOf(path) {
   return '/' + parts.slice(1, 3).join('/');
 }
 
-// Appends the given token/expires to every URI line in an m3u8 playlist so
-// nested fetches (variant playlists, segments) stay authorized. Leaves
-// #EXT... metadata lines and blank lines untouched.
-function signPlaylist(text, token, expires) {
+function withAuth(uri, token, expires, uid) {
+  const sep = uri.includes('?') ? '&' : '?';
+  return `${uri}${sep}token=${token}&expires=${expires}&uid=${encodeURIComponent(uid)}`;
+}
+
+// Appends the given token/expires/uid to every URI line in an m3u8 playlist
+// so nested fetches (variant playlists, segments) stay authorized. Also
+// rewrites the URI inside an #EXT-X-KEY tag (the AES-128 key request) —
+// unlike other #EXT... metadata lines, this one names an actual resource the
+// player will fetch, and without a token that fetch would 403 (or, if the
+// Worker didn't require one, would let anyone with just the playlist pull
+// the decryption key with no auth at all). Every other #EXT... line and
+// blank lines are left untouched.
+function signPlaylist(text, token, expires, uid) {
   return text
     .split('\n')
     .map((line) => {
       const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) return line;
-      const sep = trimmed.includes('?') ? '&' : '?';
-      return `${trimmed}${sep}token=${token}&expires=${expires}`;
+      if (!trimmed) return line;
+      if (trimmed.startsWith('#EXT-X-KEY')) {
+        return line.replace(/URI="([^"]+)"/, (_match, uri) => `URI="${withAuth(uri, token, expires, uid)}"`);
+      }
+      if (trimmed.startsWith('#')) return line;
+      return withAuth(trimmed, token, expires, uid);
     })
     .join('\n');
 }
@@ -61,8 +78,9 @@ export default {
     const path = url.pathname; // e.g. /videos/<lectureId>/480p/index.m3u8
     const token = url.searchParams.get('token');
     const expires = url.searchParams.get('expires');
+    const uid = url.searchParams.get('uid');
 
-    if (!token || !expires) {
+    if (!token || !expires || !uid) {
       return new Response('Missing token', { status: 403 });
     }
 
@@ -72,7 +90,7 @@ export default {
     }
 
     const prefix = folderPrefixOf(path);
-    const expected = await sha256Hex(env.SECURITY_KEY + prefix + expires);
+    const expected = await sha256Hex(env.SECURITY_KEY + prefix + uid + expires);
     if (expected !== token) {
       return new Response('Invalid token', { status: 403 });
     }
@@ -90,7 +108,7 @@ export default {
     if (path.endsWith('.m3u8')) {
       const text = await object.text();
       headers.set('content-type', contentTypeFor(path));
-      return new Response(signPlaylist(text, token, expires), { headers });
+      return new Response(signPlaylist(text, token, expires, uid), { headers });
     }
 
     headers.set('content-type', contentTypeFor(path));

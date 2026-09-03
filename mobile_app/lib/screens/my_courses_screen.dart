@@ -17,6 +17,7 @@ class MyCoursesScreen extends StatefulWidget {
 class _MyCoursesScreenState extends State<MyCoursesScreen> {
   List<Enrollment>? _enrollments;
   Map<String, Map<String, dynamic>> _coursesBySlug = {};
+  String? _error;
 
   @override
   void initState() {
@@ -28,26 +29,30 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      setState(() => _enrollments = []);
+      setState(() { _enrollments = []; _error = null; });
       return;
     }
-    final rows = await sb
-        .from('enrollments')
-        .select('id, course_slug, status, created_at')
-        .eq('user_id', user.id)
-        .order('created_at', ascending: false);
-    final enrollments = (rows as List).map((r) => Enrollment.fromJson(r as Map<String, dynamic>)).toList();
+    try {
+      final rows = await sb
+          .from('enrollments')
+          .select('id, course_slug, status, created_at')
+          .eq('user_id', user.id)
+          .order('created_at', ascending: false);
+      final enrollments = (rows as List).map((r) => Enrollment.fromJson(r as Map<String, dynamic>)).toList();
 
-    if (enrollments.isNotEmpty) {
-      final slugs = enrollments.map((e) => e.courseSlug).toList();
-      final courseRows = await sb.from('courses').select('slug, title, title_ar').inFilter('slug', slugs);
-      final map = <String, Map<String, dynamic>>{};
-      for (final c in (courseRows as List)) {
-        map[c['slug'] as String] = c as Map<String, dynamic>;
+      if (enrollments.isNotEmpty) {
+        final slugs = enrollments.map((e) => e.courseSlug).toList();
+        final courseRows = await sb.from('courses').select('slug, title, title_ar').inFilter('slug', slugs);
+        final map = <String, Map<String, dynamic>>{};
+        for (final c in (courseRows as List)) {
+          map[c['slug'] as String] = c as Map<String, dynamic>;
+        }
+        setState(() { _enrollments = enrollments; _coursesBySlug = map; _error = null; });
+      } else {
+        setState(() { _enrollments = enrollments; _error = null; });
       }
-      setState(() { _enrollments = enrollments; _coursesBySlug = map; });
-    } else {
-      setState(() => _enrollments = enrollments);
+    } catch (e) {
+      setState(() => _error = e.toString());
     }
   }
 
@@ -60,7 +65,18 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(title: Text(t('my_courses'))),
-        body: _enrollments == null
+        body: _error != null
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_error!, style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    OutlinedButton(onPressed: _load, child: Text(t('retry'))),
+                  ],
+                ),
+              )
+            : _enrollments == null
             ? const Center(child: CircularProgressIndicator())
             : _enrollments!.isEmpty
                 ? Center(

@@ -565,10 +565,12 @@
   }
 
   async function fetchVideoUrl(lectureId, accessToken){
+    const deviceId = getDeviceId();
+    const sessionToken = localStorage.getItem('ss_session_token');
     const res = await fetch('/api/get-video-url', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
-      body: JSON.stringify({ lectureId })
+      body: JSON.stringify({ lectureId, deviceId, sessionToken })
     });
     return { res, result: await res.json() };
   }

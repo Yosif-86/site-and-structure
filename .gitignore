@@ -1,0 +1,8 @@
+node_modules/
+package-lock.json
+
+# Wrangler local dev state
+worker/.wrangler/
+
+# Local ffmpeg transcode output — regenerated per lecture, never committed
+scripts/hls-out/

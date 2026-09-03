@@ -32,7 +32,19 @@ fi
 
 mkdir -p "$OUT_ROOT/480p" "$OUT_ROOT/720p" "$OUT_ROOT/1080p"
 
-echo "Transcoding $INPUT -> $OUT_ROOT (480p/720p/1080p)..."
+# AES-128 HLS encryption: one random key shared by all renditions of this
+# lecture, referenced from each rendition's playlist via "../enc.key" (one
+# level up from e.g. 480p/index.m3u8, landing on $OUT_ROOT/enc.key). The
+# Worker's folder-prefix check only looks at /videos/<lectureId>, so that
+# relative path still resolves to something it authorizes the same as any
+# segment request — no Worker changes needed beyond the playlist-rewrite fix.
+# No IV is set here; ffmpeg derives one per segment from its sequence number,
+# which is the documented default and standard practice.
+openssl rand 16 > "$OUT_ROOT/enc.key"
+KEYINFO="$OUT_ROOT/enc.keyinfo"
+printf '../enc.key\n%s\n' "$OUT_ROOT/enc.key" > "$KEYINFO"
+
+echo "Transcoding $INPUT -> $OUT_ROOT (480p/720p/1080p, AES-128 encrypted)..."
 
 # One ffmpeg run producing all three renditions + segmented HLS output per rendition.
 ffmpeg -y -i "$INPUT" \
@@ -49,6 +61,7 @@ ffmpeg -y -i "$INPUT" \
   -f hls -hls_time 6 -hls_playlist_type vod \
   -hls_flags independent_segments \
   -hls_segment_type mpegts \
+  -hls_key_info_file "$KEYINFO" \
   -master_pl_name master.m3u8 \
   -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:720p v:2,a:2,name:1080p" \
   -hls_segment_filename "$OUT_ROOT/%v/seg_%03d.ts" \

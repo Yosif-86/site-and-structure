@@ -49,6 +49,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           .order('created_at');
       setState(() {
         _courses = (rows as List).map((r) => Course.fromJson(r as Map<String, dynamic>)).toList();
+        _error = null;
       });
     } catch (e) {
       setState(() => _error = e.toString());
@@ -104,7 +105,16 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   Widget _buildBody(String Function(String) t) {
     if (_error != null) {
-      return Center(child: Text(_error!, style: const TextStyle(color: AppColors.muted)));
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_error!, style: const TextStyle(color: AppColors.muted), textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: _load, child: Text(t('retry'))),
+          ],
+        ),
+      );
     }
     if (_courses == null) {
       return Center(child: Text(t('loading_courses'), style: const TextStyle(color: AppColors.muted)));

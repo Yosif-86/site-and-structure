@@ -104,6 +104,9 @@ class AppStrings extends ChangeNotifier {
       'err_upload_failed': 'Screenshot upload failed: ',
       'err_video_unavailable': "This video isn't available yet.",
       'capture_detected': 'Screen capture detected — video paused.',
+      'err_untrusted_device': 'This device is no longer trusted. Please log in again.',
+      'err_session_kicked': 'Your session ended because your account logged in elsewhere.',
+      'retry': 'Retry',
     },
     'ar': {
       'app_name': 'Site & Structure',
@@ -183,6 +186,9 @@ class AppStrings extends ChangeNotifier {
       'err_upload_failed': 'فشل رفع لقطة الشاشة: ',
       'err_video_unavailable': 'هذا الفيديو غير متاح بعد.',
       'capture_detected': 'تم رصد تصوير للشاشة — تم إيقاف الفيديو.',
+      'err_untrusted_device': 'هذا الجهاز لم يعد موثوقًا. الرجاء تسجيل الدخول مرة أخرى.',
+      'err_session_kicked': 'تم إنهاء جلستك لأن حسابك سجّل الدخول من جهاز آخر.',
+      'retry': 'إعادة المحاولة',
     },
   };
 }

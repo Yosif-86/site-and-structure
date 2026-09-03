@@ -24,6 +24,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Course? _course;
   List<Lecture> _lectures = [];
   String? _enrollmentStatus; // 'active' | 'pending' | null
+  Set<String> _completedLectureIds = {};
   bool _loading = true;
   String? _error;
 
@@ -47,16 +48,28 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       final lectures = (lectureRows as List).map((r) => Lecture.fromJson(r as Map<String, dynamic>)).toList();
 
       String? status;
+      var completedIds = <String>{};
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
         final enr = await sb.from('enrollments').select('status').eq('user_id', user.id).eq('course_slug', course.slug).maybeSingle();
         status = enr?['status'] as String?;
+
+        if (lectures.isNotEmpty) {
+          final progressRows = await sb
+              .from('lesson_progress')
+              .select('lecture_id')
+              .eq('user_id', user.id)
+              .eq('completed', true)
+              .inFilter('lecture_id', lectures.map((l) => l.id).toList());
+          completedIds = (progressRows as List).map((r) => r['lecture_id'] as String).toSet();
+        }
       }
 
       setState(() {
         _course = course;
         _lectures = lectures;
         _enrollmentStatus = status;
+        _completedLectureIds = completedIds;
         _loading = false;
       });
     } catch (e) {
@@ -72,7 +85,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       if (!SupabaseService.instance.isLoggedIn) return;
     }
     if (!mounted) return;
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => VideoPlayerScreen(lectureId: lecture.id, title: lecture.localizedTitle(AppStrings.instance.isAr))));
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => VideoPlayerScreen(lectureId: lecture.id, title: lecture.localizedTitle(AppStrings.instance.isAr))));
+    if (mounted) _load();
   }
 
   Future<void> _openEnroll() async {
@@ -160,6 +174,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           ..._lectures.map((l) => _LectureRow(
                 lecture: l,
                 unlocked: l.isFree || isActive,
+                completed: _completedLectureIds.contains(l.id),
                 onWatch: () => _watchLecture(l),
               )),
       ],
@@ -225,8 +240,9 @@ class _StatusBadge extends StatelessWidget {
 class _LectureRow extends StatelessWidget {
   final Lecture lecture;
   final bool unlocked;
+  final bool completed;
   final VoidCallback onWatch;
-  const _LectureRow({required this.lecture, required this.unlocked, required this.onWatch});
+  const _LectureRow({required this.lecture, required this.unlocked, required this.completed, required this.onWatch});
 
   @override
   Widget build(BuildContext context) {
@@ -245,6 +261,10 @@ class _LectureRow extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
+                if (completed) ...[
+                  const Icon(Icons.check_circle, size: 15, color: AppColors.teal),
+                  const SizedBox(width: 6),
+                ],
                 Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
                 if (lecture.isFree) ...[
                   const SizedBox(width: 8),

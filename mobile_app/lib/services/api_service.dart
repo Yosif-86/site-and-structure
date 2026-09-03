@@ -13,13 +13,15 @@ class VideoUrlResult {
 
 class ApiService {
   static Future<VideoUrlResult> getVideoUrl(String lectureId, String accessToken) async {
+    final deviceId = await SupabaseService.instance.getDeviceId();
+    final sessionToken = await SupabaseService.instance.getSessionToken();
     final res = await http.post(
       Uri.parse('$kApiBaseUrl/api/get-video-url'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $accessToken',
       },
-      body: jsonEncode({'lectureId': lectureId}),
+      body: jsonEncode({'lectureId': lectureId, 'deviceId': deviceId, 'sessionToken': sessionToken}),
     );
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {
