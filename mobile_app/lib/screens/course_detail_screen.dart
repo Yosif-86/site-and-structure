@@ -8,6 +8,7 @@ import '../models/course.dart';
 import '../models/lecture.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
 import 'video_player_screen.dart';
 
@@ -44,7 +45,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         return;
       }
       final course = Course.fromJson(courseRow);
-      final lectureRows = await sb.from('lectures').select('*').eq('course_id', course.id).order('order_index');
+      // ascending must be explicit — postgrest's order() defaults it to
+      // false, which was silently reversing the curriculum (Episode 2
+      // before Episode 1) until this was caught by visual testing.
+      final lectureRows =
+          await sb.from('lectures').select('*').eq('course_id', course.id).order('order_index', ascending: true);
       final lectures = (lectureRows as List).map((r) => Lecture.fromJson(r as Map<String, dynamic>)).toList();
 
       String? status;
@@ -140,65 +145,241 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final meta = course.localizedMeta(ar) ?? {};
     final isActive = _enrollmentStatus == 'active';
     final isPending = _enrollmentStatus == 'pending';
+    final freeLecture = _lectures.where((l) => l.isFree).isEmpty ? null : _lectures.firstWhere((l) => l.isFree);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.zero,
       children: [
-        if (tag != null && tag.isNotEmpty) Text(tag.toUpperCase(), style: AppFonts.eyebrow()),
-        const SizedBox(height: 10),
-        Text(title, style: AppFonts.heading(size: 30)),
-        if (teacher != null && teacher.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text('${_t('by')} $teacher', style: AppFonts.mono(size: 12, color: AppColors.byline, letterSpacing: 0.3)),
-        ],
-        if (desc != null && desc.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(desc, style: AppFonts.body(size: 15, color: AppColors.muted)),
-        ],
-        if (meta.isNotEmpty) ...[
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 20,
-            runSpacing: 12,
-            children: meta.entries.map((e) => _MetaItem(label: e.key, value: '${e.value}')).toList(),
+        _CourseHero(
+          tag: tag,
+          previewLabel: freeLecture != null ? _t('preview_course') : null,
+          onPreview: freeLecture != null ? () => _watchLecture(freeLecture) : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppFonts.heading(size: 30)),
+              if (teacher != null && teacher.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('${_t('by')} $teacher', style: AppFonts.mono(size: 12, color: AppColors.byline, letterSpacing: 0.3)),
+              ],
+              if (desc != null && desc.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(desc, style: AppFonts.body(size: 15, color: AppColors.muted)),
+              ],
+              if (meta.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 12,
+                  children: meta.entries.map((e) => _MetaItem(label: e.key, value: '${e.value}')).toList(),
+                ),
+              ],
+              const SizedBox(height: 24),
+              _buildPriceCard(isActive, isPending, course),
+              const SizedBox(height: 28),
+              if (_lectures.isNotEmpty) _buildFeatureBullets(course, freeLecture),
+              const SizedBox(height: 28),
+              Text(
+                '${_t('curriculum').toUpperCase()} · ${_lectures.length} ${_t('lectures_count')}',
+                style: AppFonts.heading(size: 20),
+              ),
+              const SizedBox(height: 14),
+              if (_lectures.isEmpty)
+                Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
+              else
+                _CurriculumCard(
+                  lectures: _lectures,
+                  isActive: isActive,
+                  completedIds: _completedLectureIds,
+                  onWatch: _watchLecture,
+                ),
+            ],
           ),
-        ],
-        const SizedBox(height: 24),
-        _buildPriceRow(isActive, isPending, course),
-        const SizedBox(height: 32),
-        Text(_t('curriculum').toUpperCase(), style: AppFonts.heading(size: 20)),
-        const SizedBox(height: 12),
-        if (_lectures.isEmpty)
-          Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
-        else
-          ..._lectures.map((l) => _LectureRow(
-                lecture: l,
-                unlocked: l.isFree || isActive,
-                completed: _completedLectureIds.contains(l.id),
-                onWatch: () => _watchLecture(l),
-              )),
+        ),
       ],
     );
   }
 
-  Widget _buildPriceRow(bool isActive, bool isPending, Course course) {
+  Widget _buildFeatureBullets(Course course, Lecture? freeLecture) {
+    final freeCount = _lectures.where((l) => l.isFree).length;
+    final items = <String>[
+      '${_lectures.length} ${_t('feature_video_lectures')}',
+      _t('feature_lifetime_access'),
+      if (freeCount > 0) '$freeCount ${_t('feature_free_preview')}',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: items
+          .map((label) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, size: 16, color: AppColors.teal),
+                    const SizedBox(width: 10),
+                    Expanded(child: Text(label, style: AppFonts.body(size: 13.5))),
+                  ],
+                ),
+              ))
+          .toList(),
+    );
+  }
+
+  Widget _buildPriceCard(bool isActive, bool isPending, Course course) {
     if (isActive) {
-      return _StatusBadge(text: _t('status_active'), color: AppColors.teal);
+      return GlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: AppColors.teal, size: 22),
+            const SizedBox(width: 12),
+            Expanded(child: Text(_t('status_active').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
+          ],
+        ),
+      );
     }
     if (isPending) {
-      return _StatusBadge(text: _t('status_pending'), color: AppColors.teal);
-    }
-    return Row(
-      children: [
-        course.isFree
-            ? Text(_t('card_free'), style: AppFonts.heading(size: 28, color: AppColors.teal))
-            : Text(course.price ?? '', style: AppFonts.heading(size: 28)),
-        const SizedBox(width: 16),
-        ElevatedButton(
-          onPressed: _openEnroll,
-          child: Text(course.isFree ? _t('enroll_free') : _t('enroll')),
+      return GlassCard(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.hourglass_top, color: AppColors.teal, size: 22),
+            const SizedBox(width: 12),
+            Expanded(child: Text(_t('status_pending').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
+          ],
         ),
-      ],
+      );
+    }
+    return GlassCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          course.isFree
+              ? Text(_t('card_free'), style: AppFonts.heading(size: 32, color: AppColors.teal))
+              : Text(course.price ?? '', style: AppFonts.heading(size: 32)),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: _openEnroll,
+              child: Text(course.isFree ? _t('enroll_free') : _t('enroll'), style: AppFonts.body(size: 15, weight: FontWeight.w700, color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hero panel at the top of the course page — a stylized gradient in lieu of
+/// a real thumbnail image (no thumbnail_url column exists yet), with the
+/// course tag overlaid and, when a free lecture exists, a preview affordance.
+class _CourseHero extends StatelessWidget {
+  final String? tag;
+  final String? previewLabel;
+  final VoidCallback? onPreview;
+  const _CourseHero({this.tag, this.previewLabel, this.onPreview});
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.panel2, AppColors.bg],
+              ),
+            ),
+          ),
+          Positioned(
+            right: -40,
+            top: -40,
+            child: Container(
+              width: 200,
+              height: 200,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [AppColors.red.withValues(alpha: 0.22), Colors.transparent]),
+              ),
+            ),
+          ),
+          if (tag != null && tag!.isNotEmpty)
+            Positioned(
+              left: 16,
+              top: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(color: AppColors.bg.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(999)),
+                child: Text(tag!.toUpperCase(), style: AppFonts.eyebrow()),
+              ),
+            ),
+          if (onPreview != null)
+            Center(
+              child: GestureDetector(
+                onTap: onPreview,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.red,
+                        boxShadow: [BoxShadow(color: AppColors.red.withValues(alpha: 0.4), blurRadius: 24, spreadRadius: 2)],
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(previewLabel!, style: AppFonts.mono(size: 11, color: AppColors.text, weight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Curriculum list grouped inside one card with dividers, instead of
+/// separate floating rows — reads as a single structured section.
+class _CurriculumCard extends StatelessWidget {
+  final List<Lecture> lectures;
+  final bool isActive;
+  final Set<String> completedIds;
+  final void Function(Lecture) onWatch;
+  const _CurriculumCard({required this.lectures, required this.isActive, required this.completedIds, required this.onWatch});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.panel2,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < lectures.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: AppColors.line),
+            _LectureRow(
+              lecture: lectures[i],
+              unlocked: lectures[i].isFree || isActive,
+              completed: completedIds.contains(lectures[i].id),
+              onWatch: () => onWatch(lectures[i]),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -223,20 +404,6 @@ class _MetaItem extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String text;
-  final Color color;
-  const _StatusBadge({required this.text, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(border: Border.all(color: color), borderRadius: BorderRadius.circular(999)),
-      child: Text(text.toUpperCase(), style: AppFonts.mono(size: 10.5, color: color, letterSpacing: 0.5)),
-    );
-  }
-}
-
 class _LectureRow extends StatelessWidget {
   final Lecture lecture;
   final bool unlocked;
@@ -248,14 +415,8 @@ class _LectureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ar = AppStrings.instance.isAr;
     final t = AppStrings.instance.t;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.panel2,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
-      ),
       child: Row(
         children: [
           Expanded(

@@ -107,6 +107,11 @@ class AppStrings extends ChangeNotifier {
       'err_untrusted_device': 'This device is no longer trusted. Please log in again.',
       'err_session_kicked': 'Your session ended because your account logged in elsewhere.',
       'retry': 'Retry',
+      'preview_course': 'Preview course',
+      'lectures_count': 'lectures',
+      'feature_video_lectures': 'video lectures',
+      'feature_lifetime_access': 'Lifetime access',
+      'feature_free_preview': 'free preview lectures',
     },
     'ar': {
       'app_name': 'Site & Structure',
@@ -189,6 +194,11 @@ class AppStrings extends ChangeNotifier {
       'err_untrusted_device': 'هذا الجهاز لم يعد موثوقًا. الرجاء تسجيل الدخول مرة أخرى.',
       'err_session_kicked': 'تم إنهاء جلستك لأن حسابك سجّل الدخول من جهاز آخر.',
       'retry': 'إعادة المحاولة',
+      'preview_course': 'معاينة الدورة',
+      'lectures_count': 'محاضرة',
+      'feature_video_lectures': 'محاضرة فيديو',
+      'feature_lifetime_access': 'وصول مدى الحياة',
+      'feature_free_preview': 'محاضرة مجانية للتجربة',
     },
   };
 }

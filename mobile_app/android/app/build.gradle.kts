@@ -51,7 +51,10 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = file(keystoreProperties["storeFile"] as String)
+                // rootProject.file, not file() — key.properties and the .jks
+                // both live in android/, one level up from this app module,
+                // so a plain file() (relative to android/app/) would miss it.
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
                 keyAlias = keystoreProperties["keyAlias"] as String
                 keyPassword = keystoreProperties["keyPassword"] as String
