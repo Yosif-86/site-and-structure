@@ -4,5 +4,8 @@ package-lock.json
 # Wrangler local dev state
 worker/.wrangler/
 
-# Local ffmpeg transcode output — regenerated per lecture, never committed
+# Local ffmpeg transcode output — regenerated per lecture, never committed.
+# Lands wherever the script is invoked from (relative path), not fixed to
+# scripts/ — both covered here.
+hls-out/
 scripts/hls-out/
