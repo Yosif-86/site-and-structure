@@ -87,7 +87,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Future<void> _watchLecture(Lecture lecture) async {
     if (!SupabaseService.instance.isLoggedIn) {
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
-      if (!SupabaseService.instance.isLoggedIn) return;
+      if (!SupabaseService.instance.isLoggedIn || !mounted) return;
+      await _load();
     }
     if (!mounted) return;
     final isActive = _enrollmentStatus == 'active';
@@ -106,6 +107,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     if (!SupabaseService.instance.isLoggedIn) {
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
       if (!SupabaseService.instance.isLoggedIn || !mounted) return;
+      // Logging in can reveal an enrollment that already exists under this
+      // account (_enrollmentStatus was fetched while logged out, so it's
+      // stale null) — reload before showing the enroll sheet, otherwise a
+      // free/paid course the user already owns lets them submit again and
+      // hit enrollments' unique(user_id, course_slug) constraint.
+      await _load();
+      if (!mounted) return;
     }
     if (!mounted) return;
     final course = _course!;
