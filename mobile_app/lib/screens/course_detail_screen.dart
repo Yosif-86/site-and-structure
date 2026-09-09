@@ -114,6 +114,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       // hit enrollments' unique(user_id, course_slug) constraint.
       await _load();
       if (!mounted) return;
+      // Reload can reveal an existing enrollment under this account; if so
+      // the page behind already reflects it, so skip the enroll sheet.
+      if (_enrollmentStatus != null) return;
     }
     if (!mounted) return;
     final course = _course!;
