@@ -32,12 +32,20 @@ where schemaname = 'storage' and tablename = 'objects' and qual ilike '%payment-
 -- silently replaceable after submission.
 -- ============================================================
 
+-- course.html's <input type="file" accept="image/*"> is a client-side hint
+-- only — nothing stops a direct API call from uploading an .html/.svg/.exe
+-- under a legitimate-looking name straight into storage. Restrict by file
+-- extension here since that's what a `with check` can see cheaply; it's not
+-- as strong as a real content-type/magic-byte check but blocks the obvious
+-- abuse (uploading an executable or an HTML file an admin might later open
+-- directly from a signed URL).
 drop policy if exists "Users can upload own payment proof" on storage.objects;
 create policy "Users can upload own payment proof"
   on storage.objects for insert
   with check (
     bucket_id = 'payment-proofs'
     and (storage.foldername(name))[1] = auth.uid()::text
+    and lower(storage.extension(name)) in ('png', 'jpg', 'jpeg', 'webp', 'heic', 'pdf')
   );
 
 drop policy if exists "Users can view own payment proof" on storage.objects;
