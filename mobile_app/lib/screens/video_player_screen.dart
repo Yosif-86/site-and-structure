@@ -35,6 +35,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _captureNotice = false;
   bool _isFullscreen = false;
   Timer? _progressTimer;
+  String? _hlsMasterUrl;
+  String _currentQuality = 'auto';
+  static const _qualities = ['auto', '480p', '720p', '1080p'];
 
   @override
   void initState() {
@@ -94,6 +97,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
 
       if (result.type == 'hls') {
+        _hlsMasterUrl = result.url!;
         final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
         await controller.initialize().timeout(const Duration(seconds: 20));
         final resumeAt = await _loadResumePosition();
@@ -161,6 +165,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }, onConflict: 'user_id,lecture_id');
     } catch (_) {
       // Best-effort — resume position is a convenience, not critical data.
+    }
+  }
+
+  // Derived client-side from the master playlist URL rather than requested
+  // from the server — the Worker authorizes by folder prefix, not by file,
+  // so the same token already covers every rendition's playlist. Swapping
+  // straight to a quality's own index.m3u8 (instead of master.m3u8, which
+  // lets ExoPlayer's adaptive logic pick) is what makes a manual quality
+  // pick actually stick rather than getting overridden by ABR.
+  String _urlForQuality(String quality) {
+    final master = _hlsMasterUrl!;
+    if (quality == 'auto') return master;
+    return master.replaceFirst('master.m3u8', '$quality/index.m3u8');
+  }
+
+  Future<void> _switchQuality(String quality) async {
+    if (quality == _currentQuality || _hlsMasterUrl == null) return;
+    final old = _hlsController;
+    final position = old?.value.position ?? Duration.zero;
+    final wasPlaying = old?.value.isPlaying ?? true;
+    setState(() => _loading = true);
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(_urlForQuality(quality)));
+      await controller.initialize().timeout(const Duration(seconds: 20));
+      await controller.seekTo(position);
+      if (wasPlaying) controller.play();
+      if (!mounted) { controller.dispose(); return; }
+      setState(() { _hlsController = controller; _currentQuality = quality; _loading = false; });
+      await old?.dispose();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
     }
   }
 
@@ -257,6 +293,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 controller: _hlsController!,
                 isFullscreen: _isFullscreen,
                 onToggleFullscreen: _toggleFullscreen,
+                currentQuality: _currentQuality,
+                qualities: _qualities,
+                onQualityChanged: _switchQuality,
               ),
             ),
         ],
@@ -352,7 +391,17 @@ class _ControlBar extends StatelessWidget {
   final VideoPlayerController controller;
   final bool isFullscreen;
   final VoidCallback onToggleFullscreen;
-  const _ControlBar({required this.controller, required this.isFullscreen, required this.onToggleFullscreen});
+  final String currentQuality;
+  final List<String> qualities;
+  final ValueChanged<String> onQualityChanged;
+  const _ControlBar({
+    required this.controller,
+    required this.isFullscreen,
+    required this.onToggleFullscreen,
+    required this.currentQuality,
+    required this.qualities,
+    required this.onQualityChanged,
+  });
 
   bool _hasEnded(VideoPlayerValue value) =>
       value.isInitialized && value.duration > Duration.zero && value.position >= value.duration;
@@ -426,6 +475,24 @@ class _ControlBar extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                       child: Text(
                         '${value.playbackSpeed}x',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    initialValue: currentQuality,
+                    onSelected: onQualityChanged,
+                    color: const Color(0xFF1D1A16),
+                    itemBuilder: (context) => qualities
+                        .map((q) => PopupMenuItem<String>(
+                              value: q,
+                              child: Text(q == 'auto' ? 'Auto' : q, style: const TextStyle(color: Colors.white)),
+                            ))
+                        .toList(),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      child: Text(
+                        currentQuality == 'auto' ? 'Auto' : currentQuality,
                         style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ),
