@@ -57,46 +57,26 @@ module.exports = async (req, res) => {
     auth: { autoRefreshToken: false, persistSession: false }
   });
 
-  const { data: existing, error: selectErr } = await admin
-    .from('trusted_devices')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('device_id', deviceId)
-    .maybeSingle();
+  // claim_device_slot (security-hardening-atomic-device-claim.sql) does the
+  // existing-device lookup, the device-count check, and the insert/update
+  // inside one plpgsql function serialized by a per-user advisory lock —
+  // replaces a check-then-insert that raced under concurrent requests from
+  // the same account (both could pass the count check before either insert
+  // landed, letting the account exceed MAX_DEVICES).
+  const { data: allowed, error: claimErr } = await admin.rpc('claim_device_slot', {
+    p_user_id: userId,
+    p_device_id: deviceId,
+    p_device_label: safeDeviceLabel || null,
+    p_max_devices: MAX_DEVICES
+  });
 
   // DB error detail is logged server-side only — the client gets a generic
   // message so a probing client can't learn table/column names or Postgres
   // internals from error text (checklist: no verbose errors / no info leak).
-  if (selectErr) {
-    console.error('check-device: select failed', selectErr);
+  if (claimErr) {
+    console.error('check-device: claim_device_slot failed', claimErr);
     res.status(500).json({ error: 'Could not check device.' });
     return;
-  }
-
-  let allowed;
-  if (existing) {
-    const { error: updateErr } = await admin.from('trusted_devices').update({ last_seen: new Date().toISOString() }).eq('id', existing.id);
-    if (updateErr) { console.error('check-device: update failed', updateErr); res.status(500).json({ error: 'Could not check device.' }); return; }
-    allowed = true;
-  } else {
-    const { count, error: countErr } = await admin
-      .from('trusted_devices')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId);
-
-    if (countErr) { console.error('check-device: count failed', countErr); res.status(500).json({ error: 'Could not check device.' }); return; }
-
-    if (count >= MAX_DEVICES) {
-      allowed = false;
-    } else {
-      const { error: insertErr } = await admin.from('trusted_devices').insert({
-        user_id: userId,
-        device_id: deviceId,
-        device_label: safeDeviceLabel || null
-      });
-      if (insertErr) { console.error('check-device: insert failed', insertErr); res.status(500).json({ error: 'Could not check device.' }); return; }
-      allowed = true;
-    }
   }
 
   if (!allowed) {
