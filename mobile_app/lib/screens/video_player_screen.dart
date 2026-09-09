@@ -420,8 +420,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
             if (!_hlsController!.value.isPlaying && widget.playlist.isNotEmpty)
               Positioned(
-                left: 8,
-                bottom: 64,
+                right: 8,
+                top: 8,
                 child: _EpisodeListButton(
                   open: _showEpisodeList,
                   onTap: () => setState(() => _showEpisodeList = !_showEpisodeList),
@@ -429,8 +429,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
             if (_showEpisodeList)
               Positioned(
-                left: 8,
-                bottom: 100,
+                right: 8,
+                top: 48,
                 child: _EpisodeList(
                   playlist: widget.playlist,
                   currentLectureId: widget.lectureId,
