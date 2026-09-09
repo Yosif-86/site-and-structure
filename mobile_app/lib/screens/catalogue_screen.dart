@@ -129,7 +129,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 380,
-        mainAxisExtent: 220,
+        // Tall enough for a card with a cover image (thumbnail + text +
+        // price row); cards without one just have a bit of empty space
+        // above the price row, which the card's own Spacer already handles.
+        mainAxisExtent: 400,
         crossAxisSpacing: 14,
         mainAxisSpacing: 14,
       ),

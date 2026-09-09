@@ -25,6 +25,22 @@ class CourseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (course.thumbnailUrl != null) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Image.network(
+                  course.thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+                  loadingBuilder: (context, child, progress) =>
+                      progress == null ? child : Container(color: AppColors.panel2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (tag != null && tag.isNotEmpty)
             Text(tag.toUpperCase(), style: AppFonts.eyebrow(color: course.tagColor == 'green' ? AppColors.teal : AppColors.red)),
           const SizedBox(height: 8),

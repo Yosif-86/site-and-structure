@@ -160,6 +160,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       children: [
         _CourseHero(
           tag: tag,
+          thumbnailUrl: course.thumbnailUrl,
           previewLabel: freeLecture != null ? _t('preview_course') : null,
           onPreview: freeLecture != null ? () => _watchLecture(freeLecture) : null,
         ),
@@ -287,9 +288,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 /// course tag overlaid and, when a free lecture exists, a preview affordance.
 class _CourseHero extends StatelessWidget {
   final String? tag;
+  final String? thumbnailUrl;
   final String? previewLabel;
   final VoidCallback? onPreview;
-  const _CourseHero({this.tag, this.previewLabel, this.onPreview});
+  const _CourseHero({this.tag, this.thumbnailUrl, this.previewLabel, this.onPreview});
 
   @override
   Widget build(BuildContext context) {
@@ -298,27 +300,28 @@ class _CourseHero extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.panel2, AppColors.bg],
+          if (thumbnailUrl != null)
+            Image.network(
+              thumbnailUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => const _HeroGradientFallback(),
+              loadingBuilder: (context, child, progress) => progress == null ? child : const _HeroGradientFallback(),
+            )
+          else
+            const _HeroGradientFallback(),
+          if (thumbnailUrl == null)
+            Positioned(
+              right: -40,
+              top: -40,
+              child: Container(
+                width: 200,
+                height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [AppColors.red.withValues(alpha: 0.22), Colors.transparent]),
+                ),
               ),
             ),
-          ),
-          Positioned(
-            right: -40,
-            top: -40,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(colors: [AppColors.red.withValues(alpha: 0.22), Colors.transparent]),
-              ),
-            ),
-          ),
           if (tag != null && tag!.isNotEmpty)
             Positioned(
               left: 16,
@@ -353,6 +356,22 @@ class _CourseHero extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _HeroGradientFallback extends StatelessWidget {
+  const _HeroGradientFallback();
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.panel2, AppColors.bg],
+        ),
       ),
     );
   }

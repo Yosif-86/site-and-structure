@@ -16,6 +16,7 @@ class Course {
   final Map<String, dynamic>? meta;
   final Map<String, dynamic>? metaAr;
   final String status;
+  final String? thumbnailUrl;
 
   Course({
     required this.id,
@@ -35,6 +36,7 @@ class Course {
     this.meta,
     this.metaAr,
     required this.status,
+    this.thumbnailUrl,
   });
 
   factory Course.fromJson(Map<String, dynamic> json) => Course(
@@ -55,6 +57,7 @@ class Course {
         meta: json['meta'] as Map<String, dynamic>?,
         metaAr: json['meta_ar'] as Map<String, dynamic>?,
         status: json['status'] as String? ?? 'draft',
+        thumbnailUrl: json['thumbnail_url'] as String?,
       );
 
   String localizedTitle(bool ar) => (ar && titleAr != null && titleAr!.isNotEmpty) ? titleAr! : title;
