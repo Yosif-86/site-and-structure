@@ -463,7 +463,7 @@
   async function logLoginEvent(userId, email){
     let geo = {};
     try{
-      const res = await fetch('https://ipapi.co/json/');
+      const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) });
       geo = await res.json();
     } catch(e){ /* location lookup failed, log without it */ }
 

@@ -104,6 +104,7 @@ export default {
     const headers = new Headers();
     headers.set('cache-control', 'private, max-age=60');
     headers.set('accept-ranges', 'bytes');
+    headers.set('x-content-type-options', 'nosniff');
 
     if (path.endsWith('.m3u8')) {
       const text = await object.text();

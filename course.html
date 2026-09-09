@@ -427,7 +427,7 @@
 
   async function logLoginEvent(userId, email){
     let geo = {};
-    try{ const r = await fetch('https://ipapi.co/json/'); geo = await r.json(); } catch(e){}
+    try{ const r = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) }); geo = await r.json(); } catch(e){}
     let flagged = false, distance_km = null;
     if(geo.latitude != null && geo.longitude != null){
       const { data: prev } = await sb.from('login_events').select('lat, lon').eq('user_id', userId).not('lat', 'is', null).order('created_at', { ascending:false }).limit(1).maybeSingle();
