@@ -231,7 +231,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         children: [
           if (_hlsController != null) VideoPlayer(_hlsController!),
           if (_webController != null) WebViewWidget(controller: _webController!),
-          if (_hlsController != null) _TapToToggle(controller: _hlsController!),
+          // bottomInset keeps this layer's tap/double-tap gestures from
+          // competing with the scrub bar in _ControlBar below — without it,
+          // touches meant for the (thin) progress bar were landing on this
+          // translucent full-screen layer instead and getting read as
+          // skip-forward/back taps.
+          if (_hlsController != null) _TapToToggle(controller: _hlsController!, bottomInset: 90),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
           if (_captureNotice)
             Container(
@@ -266,7 +271,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 /// 10s, left half to skip back 10s — standard video-app convention.
 class _TapToToggle extends StatefulWidget {
   final VideoPlayerController controller;
-  const _TapToToggle({required this.controller});
+  final double bottomInset;
+  const _TapToToggle({required this.controller, this.bottomInset = 0});
 
   @override
   State<_TapToToggle> createState() => _TapToToggleState();
@@ -293,7 +299,11 @@ class _TapToToggleState extends State<_TapToToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: widget.bottomInset,
       child: LayoutBuilder(
         builder: (context, constraints) {
           return GestureDetector(
@@ -368,7 +378,14 @@ class _ControlBar extends StatelessWidget {
               VideoProgressIndicator(
                 controller,
                 allowScrubbing: true,
-                padding: EdgeInsets.zero,
+                // Generous vertical padding, not just visual spacing — the
+                // package wraps this padding inside the same GestureDetector
+                // that handles drag/tap, so it directly enlarges how much of
+                // a touch target the bar has. Zero padding here previously
+                // meant the draggable area matched the (very thin) visual
+                // bar almost exactly, so touches routinely missed it and
+                // landed on the tap-to-skip layer behind instead.
+                padding: const EdgeInsets.symmetric(vertical: 14),
                 colors: const VideoProgressColors(
                   playedColor: AppColors.red,
                   bufferedColor: Color(0x66FFFFFF),
