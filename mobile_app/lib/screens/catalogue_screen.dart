@@ -46,10 +46,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           .from('courses')
           .select('*')
           .eq('status', 'published')
-          // The postgrest package defaults `ascending` to false (unlike the
-          // REST API's own default), so this must be explicit or courses
-          // render newest-first instead of in creation order.
-          .order('created_at', ascending: true);
+          // Every course row shares the exact same created_at (bulk-seeded
+          // together), so that was never a real sort key — order_index is
+          // the actual, deterministic display order.
+          .order('order_index', ascending: true);
       setState(() {
         _courses = (rows as List).map((r) => Course.fromJson(r as Map<String, dynamic>)).toList();
         _error = null;

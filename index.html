@@ -669,7 +669,7 @@
   }
 
   async function loadCatalogue(){
-    const { data: courses, error } = await sb.from('courses').select('*').eq('status', 'published').order('created_at');
+    const { data: courses, error } = await sb.from('courses').select('*').eq('status', 'published').order('order_index');
     const grid = document.getElementById('catalogueGrid');
     if(error || !courses || courses.length === 0){
       grid.innerHTML = `<p style="color:var(--muted); grid-column:1/-1;">${t('no_courses')}</p>`;
