@@ -302,6 +302,19 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  // Every value below (email, name, phone, payment details, device labels,
+  // login-event city/country) originates from a user account, not from us —
+  // admin.html renders it with innerHTML for table layout, so without
+  // escaping, a user could set e.g. their full_name or a device label to
+  // `<img src=x onerror=...>` and run script in the *admin's* browser session
+  // the next time an admin opens this dashboard (stored XSS -> admin
+  // account takeover, since the admin session can approve/delete anything).
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
   let courseTitles = {};
 
   document.addEventListener('mousemove', (e) => {
@@ -389,19 +402,23 @@
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       const payment = e.payment_method ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : '')) : '—';
+      // onclick args are attribute-quoted with double quotes below and
+      // escaped as HTML, since escapeHtml alone doesn't neutralize a lone
+      // single quote breaking out of a '...' JS string inside onclick.
+      const jsArg = (v) => escapeHtml(v).replace(/"/g, '&quot;');
       return `
         <tr>
-          <td>${email}</td>
-          <td>${prof.full_name || '—'}</td>
-          <td>${prof.phone || '—'}</td>
-          <td>${title}</td>
+          <td>${escapeHtml(email)}</td>
+          <td>${escapeHtml(prof.full_name) || '—'}</td>
+          <td>${escapeHtml(prof.phone) || '—'}</td>
+          <td>${escapeHtml(title)}</td>
           <td><span class="status ${isActive ? 'active' : 'pending'}">${isActive ? t('status_active') : t('status_pending')}</span></td>
-          <td>${payment}</td>
+          <td>${escapeHtml(payment)}</td>
           <td>${date}</td>
           <td style="display:flex; gap:8px;">
-            ${e.payment_proof_path ? `<button class="btn" onclick="viewProof('${e.payment_proof_path}')">${t('view_proof')}</button>` : ''}
-            ${isActive ? '' : `<button class="btn btn-accent" onclick="approve('${e.id}')">${t('approve')}</button>`}
-            <button class="btn" onclick="removeEnrollment('${e.id}', '${title.replace(/'/g,"\\'")}', '${email.replace(/'/g,"\\'")}')">${t('remove')}</button>
+            ${e.payment_proof_path ? `<button class="btn" onclick="viewProof(&quot;${jsArg(e.payment_proof_path)}&quot;)">${t('view_proof')}</button>` : ''}
+            ${isActive ? '' : `<button class="btn btn-accent" onclick="approve(&quot;${jsArg(e.id)}&quot;)">${t('approve')}</button>`}
+            <button class="btn" onclick="removeEnrollment(&quot;${jsArg(e.id)}&quot;, &quot;${jsArg(title)}&quot;, &quot;${jsArg(email)}&quot;)">${t('remove')}</button>
           </td>
         </tr>`;
     }).join('');
@@ -421,10 +438,10 @@
     }
     body.innerHTML = flagged.map(f => `
       <tr>
-        <td>${f.email || '—'}</td>
-        <td>${f.city || '—'}</td>
-        <td>${f.country || '—'}</td>
-        <td class="flagged-yes">${f.distance_km} km</td>
+        <td>${escapeHtml(f.email) || '—'}</td>
+        <td>${escapeHtml(f.city) || '—'}</td>
+        <td>${escapeHtml(f.country) || '—'}</td>
+        <td class="flagged-yes">${Number(f.distance_km)} km</td>
         <td>${new Date(f.created_at).toLocaleString()}</td>
       </tr>`).join('');
   }
@@ -472,11 +489,11 @@
       const last = d.last_seen ? new Date(d.last_seen).toLocaleString() : '—';
       return `
         <tr>
-          <td>${email}</td>
-          <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${label}</td>
+          <td>${escapeHtml(email)}</td>
+          <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(label)}</td>
           <td>${first}</td>
           <td>${last}</td>
-          <td><button class="btn" onclick="removeDevice('${d.id}', '${email.replace(/'/g,"\\'")}')">${t('remove')}</button></td>
+          <td><button class="btn" onclick="removeDevice(&quot;${escapeHtml(d.id)}&quot;, &quot;${escapeHtml(email)}&quot;)">${t('remove')}</button></td>
         </tr>`;
     }).join('');
   }
