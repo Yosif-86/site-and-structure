@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
+import '../models/lecture.dart';
 import '../services/api_service.dart';
 import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
@@ -20,7 +21,23 @@ import '../widgets/watermark_overlay.dart';
 class VideoPlayerScreen extends StatefulWidget {
   final String lectureId;
   final String title;
-  const VideoPlayerScreen({super.key, required this.lectureId, required this.title});
+  /// Sibling lectures in this course (in order), for the prev/next buttons
+  /// and the episode list. Pass an empty list if this lecture is being
+  /// watched outside a course context.
+  final List<Lecture> playlist;
+  /// Whether a given playlist entry is accessible (free, or the viewer has
+  /// an active enrollment) — governs whether prev/next/episode-list entries
+  /// are tappable.
+  final bool Function(Lecture) isUnlocked;
+  const VideoPlayerScreen({
+    super.key,
+    required this.lectureId,
+    required this.title,
+    this.playlist = const [],
+    this.isUnlocked = _alwaysUnlocked,
+  });
+
+  static bool _alwaysUnlocked(Lecture _) => true;
 
   @override
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -38,6 +55,15 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   String? _hlsMasterUrl;
   String _currentQuality = 'auto';
   static const _qualities = ['auto', '480p', '720p', '1080p'];
+
+  // Controls overlay: a tap shows/hides it (YouTube-style), it never toggles
+  // playback directly — that's what was making a double-tap-to-skip also
+  // pause/resume the video, since a single tap and the first half of a
+  // double tap look identical to the gesture recognizer. Only the explicit
+  // play/pause button changes playback state now.
+  bool _controlsVisible = true;
+  bool _showEpisodeList = false;
+  Timer? _hideControlsTimer;
 
   @override
   void initState() {
@@ -108,6 +134,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         if (!mounted) { controller.dispose(); return; }
         setState(() { _hlsController = controller; _loading = false; });
         _startProgressSaving();
+        _scheduleAutoHide();
       } else {
         // Bunny iframe embed — needs a WebView, not the native player.
         final controller = WebViewController()
@@ -225,9 +252,68 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
+  // Controls fade out automatically while playing (matches YouTube), but
+  // stay put while paused or while the episode list is open, so the viewer
+  // always has something to tap to bring them back or act on.
+  void _scheduleAutoHide() {
+    _hideControlsTimer?.cancel();
+    if (_hlsController?.value.isPlaying != true) return;
+    _hideControlsTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted || _showEpisodeList) return;
+      setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _toggleControlsVisible() {
+    setState(() {
+      _controlsVisible = !_controlsVisible;
+      if (!_controlsVisible) _showEpisodeList = false;
+    });
+    if (_controlsVisible) _scheduleAutoHide();
+  }
+
+  void _togglePlayback() {
+    final controller = _hlsController;
+    if (controller == null) return;
+    final ended = controller.value.duration > Duration.zero && controller.value.position >= controller.value.duration;
+    if (ended) {
+      controller.seekTo(Duration.zero);
+      controller.play();
+    } else if (controller.value.isPlaying) {
+      controller.pause();
+    } else {
+      controller.play();
+    }
+    setState(() {}); // isPlaying flips synchronously on the controller's value
+    _scheduleAutoHide();
+  }
+
+  int get _currentIndex => widget.playlist.indexWhere((l) => l.id == widget.lectureId);
+  Lecture? get _prevLecture {
+    final i = _currentIndex;
+    return i > 0 ? widget.playlist[i - 1] : null;
+  }
+  Lecture? get _nextLecture {
+    final i = _currentIndex;
+    return (i >= 0 && i < widget.playlist.length - 1) ? widget.playlist[i + 1] : null;
+  }
+
+  void _playLecture(Lecture lecture) {
+    if (!widget.isUnlocked(lecture)) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+      builder: (_) => VideoPlayerScreen(
+        lectureId: lecture.id,
+        title: lecture.localizedTitle(AppStrings.instance.isAr),
+        playlist: widget.playlist,
+        isUnlocked: widget.isUnlocked,
+      ),
+    ));
+  }
+
   @override
   void dispose() {
     _progressTimer?.cancel();
+    _hideControlsTimer?.cancel();
     unawaited(_saveProgress());
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
@@ -267,12 +353,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         children: [
           if (_hlsController != null) VideoPlayer(_hlsController!),
           if (_webController != null) WebViewWidget(controller: _webController!),
-          // bottomInset keeps this layer's tap/double-tap gestures from
-          // competing with the scrub bar in _ControlBar below — without it,
-          // touches meant for the (thin) progress bar were landing on this
-          // translucent full-screen layer instead and getting read as
-          // skip-forward/back taps.
-          if (_hlsController != null) _TapToToggle(controller: _hlsController!, bottomInset: 90),
+          if (_hlsController != null)
+            _GestureLayer(
+              controller: _hlsController!,
+              onSingleTap: _toggleControlsVisible,
+            ),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
           if (_captureNotice)
             Container(
@@ -284,7 +369,75 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 style: const TextStyle(color: Colors.white, fontSize: 14),
               ),
             ),
-          if (_hlsController != null)
+          if (_hlsController != null && _controlsVisible) ...[
+            // Dim scrim so the center controls stay legible over bright video.
+            IgnorePointer(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x66000000), Colors.transparent, Colors.transparent, Color(0x66000000)],
+                    stops: [0, 0.3, 0.7, 1],
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _SideButton(
+                    icon: Icons.skip_previous_rounded,
+                    enabled: _prevLecture != null && widget.isUnlocked(_prevLecture!),
+                    onTap: _prevLecture == null ? null : () => _playLecture(_prevLecture!),
+                  ),
+                  const SizedBox(width: 28),
+                  GestureDetector(
+                    onTap: _togglePlayback,
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.45)),
+                      child: Icon(
+                        _hlsController!.value.duration > Duration.zero &&
+                                _hlsController!.value.position >= _hlsController!.value.duration
+                            ? Icons.replay
+                            : (_hlsController!.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                        color: Colors.white,
+                        size: 36,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 28),
+                  _SideButton(
+                    icon: Icons.skip_next_rounded,
+                    enabled: _nextLecture != null && widget.isUnlocked(_nextLecture!),
+                    onTap: _nextLecture == null ? null : () => _playLecture(_nextLecture!),
+                  ),
+                ],
+              ),
+            ),
+            if (!_hlsController!.value.isPlaying && widget.playlist.isNotEmpty)
+              Positioned(
+                left: 8,
+                bottom: 64,
+                child: _EpisodeListButton(
+                  open: _showEpisodeList,
+                  onTap: () => setState(() => _showEpisodeList = !_showEpisodeList),
+                ),
+              ),
+            if (_showEpisodeList)
+              Positioned(
+                left: 8,
+                bottom: 100,
+                child: _EpisodeList(
+                  playlist: widget.playlist,
+                  currentLectureId: widget.lectureId,
+                  isUnlocked: widget.isUnlocked,
+                  onSelect: _playLecture,
+                ),
+              ),
             Positioned(
               left: 0,
               right: 0,
@@ -296,8 +449,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 currentQuality: _currentQuality,
                 qualities: _qualities,
                 onQualityChanged: _switchQuality,
+                onInteract: _scheduleAutoHide,
               ),
             ),
+          ],
         ],
       ),
     );
@@ -306,18 +461,21 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 }
 
-/// Single tap toggles play/pause. Double-tap the right half to skip forward
-/// 10s, left half to skip back 10s — standard video-app convention.
-class _TapToToggle extends StatefulWidget {
+/// Owns tap-to-show/hide-controls and double-tap-to-skip. Deliberately does
+/// NOT touch playback on a single tap — that was the bug: a plain single
+/// tap and the first half of a double tap are indistinguishable to Flutter's
+/// gesture arena, so a single-tap-toggles-play handler would pause and then
+/// immediately resume on every double-tap skip.
+class _GestureLayer extends StatefulWidget {
   final VideoPlayerController controller;
-  final double bottomInset;
-  const _TapToToggle({required this.controller, this.bottomInset = 0});
+  final VoidCallback onSingleTap;
+  const _GestureLayer({required this.controller, required this.onSingleTap});
 
   @override
-  State<_TapToToggle> createState() => _TapToToggleState();
+  State<_GestureLayer> createState() => _GestureLayerState();
 }
 
-class _TapToToggleState extends State<_TapToToggle> {
+class _GestureLayerState extends State<_GestureLayer> {
   Offset? _lastTapPosition;
   bool _showSeekHint = false;
   bool _seekForward = true;
@@ -338,22 +496,12 @@ class _TapToToggleState extends State<_TapToToggle> {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 0,
-      right: 0,
-      top: 0,
-      bottom: widget.bottomInset,
+    return Positioned.fill(
       child: LayoutBuilder(
         builder: (context, constraints) {
           return GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onTap: () {
-              if (widget.controller.value.isPlaying) {
-                widget.controller.pause();
-              } else {
-                widget.controller.play();
-              }
-            },
+            onTap: widget.onSingleTap,
             onDoubleTapDown: (details) => _lastTapPosition = details.localPosition,
             onDoubleTap: () {
               if (_lastTapPosition == null) return;
@@ -379,6 +527,126 @@ class _TapToToggleState extends State<_TapToToggle> {
   }
 }
 
+class _SideButton extends StatelessWidget {
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback? onTap;
+  const _SideButton({required this.icon, required this.enabled, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Opacity(
+        opacity: onTap == null ? 0.25 : (enabled ? 1 : 0.4),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.35)),
+          child: Icon(icon, color: Colors.white, size: 26),
+        ),
+      ),
+    );
+  }
+}
+
+class _EpisodeListButton extends StatelessWidget {
+  final bool open;
+  final VoidCallback onTap;
+  const _EpisodeListButton({required this.open, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(open ? Icons.close : Icons.playlist_play, color: Colors.white, size: 18),
+            const SizedBox(width: 4),
+            Text(AppStrings.instance.t('episodes'), style: const TextStyle(color: Colors.white, fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small "up next"-style list shown bottom-left while paused, mirroring the
+/// mobile YouTube pattern the request asked to match.
+class _EpisodeList extends StatelessWidget {
+  final List<Lecture> playlist;
+  final String currentLectureId;
+  final bool Function(Lecture) isUnlocked;
+  final void Function(Lecture) onSelect;
+  const _EpisodeList({
+    required this.playlist,
+    required this.currentLectureId,
+    required this.isUnlocked,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = AppStrings.instance.isAr;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220, maxHeight: 220),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          itemCount: playlist.length,
+          separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+          itemBuilder: (context, i) {
+            final lecture = playlist[i];
+            final isCurrent = lecture.id == currentLectureId;
+            final unlocked = isUnlocked(lecture);
+            return InkWell(
+              onTap: unlocked ? () => onSelect(lecture) : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                child: Row(
+                  children: [
+                    Icon(
+                      isCurrent ? Icons.play_arrow : (unlocked ? Icons.play_circle_outline : Icons.lock_outline),
+                      color: isCurrent ? AppColors.red : Colors.white70,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        lecture.localizedTitle(ar),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isCurrent ? AppColors.red : (unlocked ? Colors.white : Colors.white38),
+                          fontSize: 12.5,
+                          fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
 String _formatDuration(Duration d) {
   final minutes = d.inMinutes.remainder(60).toString().padLeft(1, '0');
   final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -394,6 +662,7 @@ class _ControlBar extends StatelessWidget {
   final String currentQuality;
   final List<String> qualities;
   final ValueChanged<String> onQualityChanged;
+  final VoidCallback onInteract;
   const _ControlBar({
     required this.controller,
     required this.isFullscreen,
@@ -401,6 +670,7 @@ class _ControlBar extends StatelessWidget {
     required this.currentQuality,
     required this.qualities,
     required this.onQualityChanged,
+    required this.onInteract,
   });
 
   bool _hasEnded(VideoPlayerValue value) =>
@@ -446,6 +716,7 @@ class _ControlBar extends StatelessWidget {
                   IconButton(
                     icon: Icon(ended ? Icons.replay : (value.isPlaying ? Icons.pause : Icons.play_arrow), color: Colors.white),
                     onPressed: () {
+                      onInteract();
                       if (ended) {
                         controller.seekTo(Duration.zero);
                         controller.play();
@@ -463,7 +734,7 @@ class _ControlBar extends StatelessWidget {
                   const Spacer(),
                   PopupMenuButton<double>(
                     initialValue: value.playbackSpeed,
-                    onSelected: controller.setPlaybackSpeed,
+                    onSelected: (v) { onInteract(); controller.setPlaybackSpeed(v); },
                     color: const Color(0xFF1D1A16),
                     itemBuilder: (context) => const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
                         .map((speed) => PopupMenuItem<double>(
@@ -481,7 +752,7 @@ class _ControlBar extends StatelessWidget {
                   ),
                   PopupMenuButton<String>(
                     initialValue: currentQuality,
-                    onSelected: onQualityChanged,
+                    onSelected: (q) { onInteract(); onQualityChanged(q); },
                     color: const Color(0xFF1D1A16),
                     itemBuilder: (context) => qualities
                         .map((q) => PopupMenuItem<String>(
@@ -499,7 +770,7 @@ class _ControlBar extends StatelessWidget {
                   ),
                   IconButton(
                     icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
-                    onPressed: onToggleFullscreen,
+                    onPressed: () { onInteract(); onToggleFullscreen(); },
                   ),
                 ],
               ),

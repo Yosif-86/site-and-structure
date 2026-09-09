@@ -90,7 +90,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       if (!SupabaseService.instance.isLoggedIn) return;
     }
     if (!mounted) return;
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => VideoPlayerScreen(lectureId: lecture.id, title: lecture.localizedTitle(AppStrings.instance.isAr))));
+    final isActive = _enrollmentStatus == 'active';
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => VideoPlayerScreen(
+        lectureId: lecture.id,
+        title: lecture.localizedTitle(AppStrings.instance.isAr),
+        playlist: _lectures,
+        isUnlocked: (l) => l.isFree || isActive,
+      ),
+    ));
     if (mounted) _load();
   }
 
