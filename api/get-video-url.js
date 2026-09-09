@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
 const crypto = require('crypto');
+const { allow, clientIp } = require('./_rate-limit');
 
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
@@ -9,6 +10,14 @@ const BUNNY_LIBRARY_ID = '738703';
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  // This mints a signed, hours-long video URL per call — throttle it so a
+  // script can't spam mint calls (DB load, and each call is a free re-check
+  // of enrollment/device gates that costs real Supabase queries).
+  if (!allow('get-video-url:' + clientIp(req), 30, 60 * 1000)) {
+    res.status(429).json({ error: 'Too many requests, try again shortly.' });
     return;
   }
 
