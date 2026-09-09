@@ -42,7 +42,10 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
 
       if (enrollments.isNotEmpty) {
         final slugs = enrollments.map((e) => e.courseSlug).toList();
-        final courseRows = await sb.from('courses').select('slug, title, title_ar').inFilter('slug', slugs);
+        // title_ar isn't an actual column on courses (the migration for it
+        // was never run against production) — fetching it explicitly 400s,
+        // unlike select('*') elsewhere which just silently omits it.
+        final courseRows = await sb.from('courses').select('slug, title').inFilter('slug', slugs);
         final map = <String, Map<String, dynamic>>{};
         for (final c in (courseRows as List)) {
           map[c['slug'] as String] = c as Map<String, dynamic>;
@@ -94,9 +97,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen> {
                       itemBuilder: (context, i) {
                         final e = _enrollments![i];
                         final c = _coursesBySlug[e.courseSlug];
-                        final title = (ar && c?['title_ar'] != null && (c!['title_ar'] as String).isNotEmpty)
-                            ? c['title_ar'] as String
-                            : (c?['title'] as String? ?? e.courseSlug);
+                        final title = c?['title'] as String? ?? e.courseSlug;
                         return Container(
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                           decoration: BoxDecoration(
