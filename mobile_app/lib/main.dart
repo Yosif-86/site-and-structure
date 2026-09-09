@@ -26,6 +26,7 @@ Future<void> main() async {
     FlutterError.onError = (details) {
       _reportError(details.exception, details.stack ?? StackTrace.empty);
     };
+    await AppTheme.instance.init();
     await SupabaseService.init();
     SupabaseService.instance.resumeSessionWatchIfLoggedIn();
     SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
@@ -40,7 +41,7 @@ void _showForcedLogoutDialog() {
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: AppColors.panel,
-      content: Text(AppStrings.instance.t('alert_kicked'), style: const TextStyle(color: AppColors.text)),
+      content: Text(AppStrings.instance.t('alert_kicked'), style: TextStyle(color: AppColors.text)),
       actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
     ),
   );
@@ -52,7 +53,7 @@ class SiteAndStructureApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: AppStrings.instance,
+      animation: Listenable.merge([AppStrings.instance, AppTheme.instance]),
       builder: (context, _) {
         return MaterialApp(
           navigatorKey: navigatorKey,

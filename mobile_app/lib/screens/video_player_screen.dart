@@ -344,7 +344,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
   Widget _buildPlayer() {
     if (_loading) return const CircularProgressIndicator();
-    if (_error != null) return Text(_error!, style: const TextStyle(color: AppColors.muted), textAlign: TextAlign.center);
+    if (_error != null) return Text(_error!, style: TextStyle(color: AppColors.muted), textAlign: TextAlign.center);
 
     final videoArea = AspectRatio(
       aspectRatio: 16 / 9,
@@ -721,7 +721,7 @@ class _ControlBar extends StatelessWidget {
                 // bar almost exactly, so touches routinely missed it and
                 // landed on the tap-to-skip layer behind instead.
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                colors: const VideoProgressColors(
+                colors: VideoProgressColors(
                   playedColor: AppColors.red,
                   bufferedColor: Color(0x66FFFFFF),
                   backgroundColor: Color(0x33FFFFFF),

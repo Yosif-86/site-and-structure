@@ -28,17 +28,26 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     _load();
     AppStrings.instance.addListener(_onLangChange);
     SupabaseService.instance.addListener(_onAuthChange);
+    AppTheme.instance.addListener(_onThemeChange);
   }
 
   @override
   void dispose() {
     AppStrings.instance.removeListener(_onLangChange);
     SupabaseService.instance.removeListener(_onAuthChange);
+    AppTheme.instance.removeListener(_onThemeChange);
     super.dispose();
   }
 
   void _onLangChange() => setState(() {});
   void _onAuthChange() => setState(() {});
+  // AppColors' fields are mutable but plain — nothing subscribes to them on
+  // its own. Theme.of(context)-based widgets (Scaffold's background, etc.)
+  // pick up a new ThemeData automatically via InheritedWidget, but anything
+  // reading AppColors.xxx directly (which is most of this app) only shows
+  // the new value once ITS OWN build() re-runs — hence this listener, same
+  // as the language one just above.
+  void _onThemeChange() => setState(() {});
 
   Future<void> _load() async {
     try {
@@ -74,6 +83,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         appBar: AppBar(
           title: const BrandTitle(),
           actions: [
+            IconButton(
+              tooltip: 'Toggle theme',
+              icon: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+              onPressed: () => AppTheme.instance.toggle(),
+            ),
             IconButton(
               tooltip: 'Toggle language',
               icon: Text('AR/EN', style: AppFonts.mono(size: 11, color: AppColors.muted, weight: FontWeight.w700)),
@@ -112,7 +126,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: const TextStyle(color: AppColors.muted), textAlign: TextAlign.center),
+            Text(_error!, style: TextStyle(color: AppColors.muted), textAlign: TextAlign.center),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _load, child: Text(t('retry'))),
           ],
@@ -120,10 +134,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       );
     }
     if (_courses == null) {
-      return Center(child: Text(t('loading_courses'), style: const TextStyle(color: AppColors.muted)));
+      return Center(child: Text(t('loading_courses'), style: TextStyle(color: AppColors.muted)));
     }
     if (_courses!.isEmpty) {
-      return Center(child: Text(t('no_courses'), style: const TextStyle(color: AppColors.muted)));
+      return Center(child: Text(t('no_courses'), style: TextStyle(color: AppColors.muted)));
     }
     return GridView.builder(
       padding: const EdgeInsets.all(16),

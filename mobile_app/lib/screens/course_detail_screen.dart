@@ -226,7 +226,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, size: 16, color: AppColors.teal),
+                    Icon(Icons.check_circle, size: 16, color: AppColors.teal),
                     const SizedBox(width: 10),
                     Expanded(child: Text(label, style: AppFonts.body(size: 13.5))),
                   ],
@@ -242,7 +242,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            const Icon(Icons.check_circle, color: AppColors.teal, size: 22),
+            Icon(Icons.check_circle, color: AppColors.teal, size: 22),
             const SizedBox(width: 12),
             Expanded(child: Text(_t('status_active').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
           ],
@@ -254,7 +254,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            const Icon(Icons.hourglass_top, color: AppColors.teal, size: 22),
+            Icon(Icons.hourglass_top, color: AppColors.teal, size: 22),
             const SizedBox(width: 12),
             Expanded(child: Text(_t('status_pending').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
           ],
@@ -365,7 +365,7 @@ class _HeroGradientFallback extends StatelessWidget {
   const _HeroGradientFallback();
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
+    return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -397,7 +397,7 @@ class _CurriculumCard extends StatelessWidget {
       child: Column(
         children: [
           for (var i = 0; i < lectures.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: AppColors.line),
+            if (i > 0) Divider(height: 1, color: AppColors.line),
             _LectureRow(
               lecture: lectures[i],
               unlocked: lectures[i].isFree || isActive,
@@ -450,7 +450,7 @@ class _LectureRow extends StatelessWidget {
             child: Row(
               children: [
                 if (completed) ...[
-                  const Icon(Icons.check_circle, size: 15, color: AppColors.teal),
+                  Icon(Icons.check_circle, size: 15, color: AppColors.teal),
                   const SizedBox(width: 6),
                 ],
                 Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
@@ -464,7 +464,7 @@ class _LectureRow extends StatelessWidget {
           unlocked
               ? OutlinedButton(onPressed: onWatch, child: Text(t('watch')))
               : Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
+                  Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
                   const SizedBox(width: 4),
                   Text(t('locked'), style: AppFonts.body(size: 13, color: AppColors.muted2)),
                 ]),
@@ -511,7 +511,7 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
       child: SafeArea(
         child: _done
             ? Column(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
+                Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
                 const SizedBox(height: 12),
                 Text(t('enrolled'), style: AppFonts.heading(size: 22)),
                 const SizedBox(height: 16),
@@ -609,7 +609,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         child: SingleChildScrollView(
           child: _done
               ? Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
+                  Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
                   const SizedBox(height: 12),
                   Text(t('submitted'), style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 8),

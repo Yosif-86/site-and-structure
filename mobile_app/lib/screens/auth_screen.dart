@@ -228,7 +228,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
+        Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
         const SizedBox(height: 16),
         Text(_t('success_email_title'), style: AppFonts.heading(size: 22)),
         const SizedBox(height: 8),
