@@ -325,7 +325,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      // Player controls (prev/next order, fullscreen icon, scrub bar) are a
+      // universal convention, not translated UI — keep them LTR regardless
+      // of app language instead of mirroring like Arabic text does.
+      textDirection: TextDirection.ltr,
       child: PopScope(
         canPop: !_isFullscreen,
         onPopInvokedWithResult: (didPop, _) {
@@ -347,7 +350,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (_error != null) return Text(_error!, style: TextStyle(color: AppColors.muted), textAlign: TextAlign.center);
 
     final videoArea = AspectRatio(
-      aspectRatio: 16 / 9,
+      aspectRatio: _hlsController?.value.aspectRatio ?? 16 / 9,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -473,7 +476,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       ),
     );
 
-    return _isFullscreen ? SizedBox.expand(child: videoArea) : videoArea;
+    // Center (not SizedBox.expand) so AspectRatio keeps room to size itself
+    // within the available space instead of being forced to fill it and
+    // stretch — SizedBox.expand imposes tight constraints that AspectRatio
+    // can't reconcile with the video's real ratio.
+    return Center(child: videoArea);
   }
 }
 

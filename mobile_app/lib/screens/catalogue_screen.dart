@@ -6,6 +6,7 @@ import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
+import 'admin_screen.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
@@ -21,26 +22,45 @@ class CatalogueScreen extends StatefulWidget {
 class _CatalogueScreenState extends State<CatalogueScreen> {
   List<Course>? _courses;
   String? _error;
+  bool _isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadAdminFlag();
     AppStrings.instance.addListener(_onLangChange);
-    SupabaseService.instance.addListener(_onAuthChange);
+    SupabaseService.instance.addListener(_onAuthChangeAndAdmin);
     AppTheme.instance.addListener(_onThemeChange);
+  }
+
+  Future<void> _loadAdminFlag() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isAdmin = false);
+      return;
+    }
+    try {
+      final prof = await SupabaseService.instance.client.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
+      if (mounted) setState(() => _isAdmin = prof?['is_admin'] == true);
+    } catch (_) {
+      if (mounted) setState(() => _isAdmin = false);
+    }
   }
 
   @override
   void dispose() {
     AppStrings.instance.removeListener(_onLangChange);
-    SupabaseService.instance.removeListener(_onAuthChange);
+    SupabaseService.instance.removeListener(_onAuthChangeAndAdmin);
     AppTheme.instance.removeListener(_onThemeChange);
     super.dispose();
   }
 
   void _onLangChange() => setState(() {});
-  void _onAuthChange() => setState(() {});
+  void _onAuthChangeAndAdmin() {
+    setState(() {});
+    _loadAdminFlag();
+  }
   // AppColors' fields are mutable but plain — nothing subscribes to them on
   // its own. Theme.of(context)-based widgets (Scaffold's background, etc.)
   // pick up a new ThemeData automatically via InheritedWidget, but anything
@@ -80,6 +100,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     return Directionality(
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
+        drawer: _buildDrawer(t, loggedIn),
         appBar: AppBar(
           title: const BrandTitle(),
           actions: [
@@ -115,6 +136,59 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         body: RefreshIndicator(
           onRefresh: _load,
           child: _buildBody(t),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDrawer(String Function(String) t, bool loggedIn) {
+    return Drawer(
+      backgroundColor: AppColors.panel,
+      child: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line))),
+              child: Align(alignment: Alignment.bottomLeft, child: Text(t('menu'), style: AppFonts.heading(size: 20))),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: Text(t('nav_home')),
+              onTap: () => Navigator.of(context).pop(),
+            ),
+            if (loggedIn)
+              ListTile(
+                leading: const Icon(Icons.school_outlined),
+                title: Text(t('my_courses')),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen()));
+                },
+              ),
+            if (loggedIn && _isAdmin)
+              ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: Text(t('nav_admin')),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminScreen()));
+                },
+              ),
+            const Divider(),
+            ListTile(
+              leading: Icon(loggedIn ? Icons.logout : Icons.login),
+              title: Text(loggedIn ? t('log_out') : t('log_in')),
+              onTap: () async {
+                Navigator.of(context).pop();
+                if (loggedIn) {
+                  await SupabaseService.instance.logout();
+                } else {
+                  _openAuth();
+                }
+              },
+            ),
+          ],
         ),
       ),
     );
