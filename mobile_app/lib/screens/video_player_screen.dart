@@ -393,21 +393,30 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     onTap: _prevLecture == null ? null : () => _playLecture(_prevLecture!),
                   ),
                   const SizedBox(width: 28),
-                  GestureDetector(
-                    onTap: _togglePlayback,
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.45)),
-                      child: Icon(
-                        _hlsController!.value.duration > Duration.zero &&
-                                _hlsController!.value.position >= _hlsController!.value.duration
-                            ? Icons.replay
-                            : (_hlsController!.value.isPlaying ? Icons.pause : Icons.play_arrow),
-                        color: Colors.white,
-                        size: 36,
-                      ),
-                    ),
+                  // Wrapped in its own ValueListenableBuilder — this icon
+                  // must reflect live controller state, not just state set
+                  // by tapping this same button. Without it, pressing the
+                  // bottom bar's separate play/pause button changed actual
+                  // playback but left this icon showing the stale, opposite
+                  // state until something else happened to rebuild it.
+                  ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: _hlsController!,
+                    builder: (context, value, _) {
+                      final ended = value.duration > Duration.zero && value.position >= value.duration;
+                      return GestureDetector(
+                        onTap: _togglePlayback,
+                        child: Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.45)),
+                          child: Icon(
+                            ended ? Icons.replay : (value.isPlaying ? Icons.pause : Icons.play_arrow),
+                            color: Colors.white,
+                            size: 36,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 28),
                   _SideButton(
@@ -449,7 +458,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 currentQuality: _currentQuality,
                 qualities: _qualities,
                 onQualityChanged: _switchQuality,
-                onInteract: _scheduleAutoHide,
+                // Any bottom-bar interaction can change playback state (the
+                // play/pause button most directly), and this parent widget
+                // has other bits — the episode-list button's visibility,
+                // notably — that read _hlsController.value directly rather
+                // than through a listener, so they only ever see fresh state
+                // when something forces this widget to rebuild. Cheap to
+                // always do; wrong not to.
+                onInteract: () { setState(() {}); _scheduleAutoHide(); },
               ),
             ),
           ],
