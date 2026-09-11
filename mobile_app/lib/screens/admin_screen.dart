@@ -66,7 +66,10 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
     setState(() => _error = null);
     try {
       final sb = SupabaseService.instance.client;
-      final courses = await sb.from('courses').select('slug, title, title_ar');
+      // title_ar isn't an actual column on courses in production (that
+      // migration was never run) — select('*') would silently omit it, but
+      // naming it explicitly 400s, same issue noted in my_courses_screen.dart.
+      final courses = await sb.from('courses').select('slug, title');
       final logins = await sb.from('login_events').select('user_id, email, created_at').order('created_at', ascending: false);
       final profiles = await sb.from('profiles').select('id, full_name, phone');
       final enrollments = await sb
@@ -123,9 +126,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   String _courseTitle(String slug) {
     final c = _courseBySlug[slug];
     if (c == null) return slug;
-    final ar = AppStrings.instance.isAr;
-    final titleAr = c['title_ar'] as String?;
-    return (ar && titleAr != null && titleAr.isNotEmpty) ? titleAr : (c['title'] as String? ?? slug);
+    return c['title'] as String? ?? slug;
   }
 
   Future<void> _approve(String enrollmentId) async {

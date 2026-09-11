@@ -393,12 +393,11 @@
       return;
     }
 
-    const isAr = currentLang === 'ar';
     body.innerHTML = enrollments.map(e => {
       const prof = profileByUser[e.user_id] || {};
       const email = emailByUser[e.user_id] || '—';
       const c = courseTitles[e.course_slug];
-      const title = (c && ((isAr && c.title_ar) || c.title)) || e.course_slug;
+      const title = (c && c.title) || e.course_slug;
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       const payment = e.payment_method ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : '')) : '—';
@@ -509,7 +508,11 @@
     const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
     if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
 
-    const { data: allCourses } = await sb.from('courses').select('slug, title, title_ar');
+    // title_ar isn't an actual column on courses in production (that
+    // migration was never run against the live DB) — naming it explicitly
+    // here 400s the whole query, unlike select('*') elsewhere which just
+    // silently omits it.
+    const { data: allCourses } = await sb.from('courses').select('slug, title');
     (allCourses || []).forEach(c => { courseTitles[c.slug] = c; });
 
     loadEnrollments();

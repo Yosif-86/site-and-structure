@@ -291,10 +291,9 @@
       list.innerHTML = `<p class="empty">${t('no_enrollments')} <a href="index.html#courses" style="color:var(--yellow);">${t('browse_catalogue')}</a>.</p>`;
       return;
     }
-    const isAr = currentLang === 'ar';
     list.innerHTML = enrollments.map(e => {
       const c = titleBySlug[e.course_slug];
-      const title = (c && ((isAr && c.title_ar) || c.title)) || e.course_slug;
+      const title = (c && c.title) || e.course_slug;
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       return `
@@ -325,7 +324,10 @@
 
     if(!enrollments || enrollments.length === 0){ renderList(enrollments); return; }
 
-    const { data: courses } = await sb.from('courses').select('slug, title, title_ar').in('slug', enrollments.map(e => e.course_slug));
+    // title_ar isn't an actual column on courses in production — naming it
+    // explicitly 400s the whole query, unlike select('*') elsewhere which
+    // just silently omits it.
+    const { data: courses } = await sb.from('courses').select('slug, title').in('slug', enrollments.map(e => e.course_slug));
     (courses || []).forEach(c => { titleBySlug[c.slug] = c; });
 
     renderList(enrollments);
