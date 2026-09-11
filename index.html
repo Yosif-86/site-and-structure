@@ -525,7 +525,6 @@
   // right after the account is created — see there for why redemption
   // happens post-signup rather than before.
   const inviteToken = new URLSearchParams(location.search).get('invite');
-  if(inviteToken){ renderAuth('signup'); openModal('loginOverlay'); }
 
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
@@ -537,6 +536,7 @@
   document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
 
   let lastAuthMode = 'login';
+  if(inviteToken){ renderAuth('signup'); openModal('loginOverlay'); }
   function renderAuth(mode){
     lastAuthMode = mode;
     const body = document.getElementById('authBody');
