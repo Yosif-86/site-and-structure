@@ -139,6 +139,8 @@
   </div>
   <div class="drawer-links">
     <a href="index.html" data-i18n="nav_home">Home</a>
+    <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+    <a href="admin.html" id="adminLinkDrawer" style="display:none;" data-i18n="nav_admin">Admin</a>
     <button class="link" data-action="go-view" data-view="overview" data-i18n="nav_overview">Overview</button>
     <button class="link" data-action="go-view" data-view="courses" data-i18n="nav_my_courses_teacher">My courses</button>
     <button class="link" data-action="go-view" data-view="profile" data-i18n="nav_profile">Profile</button>
@@ -293,7 +295,7 @@
 <script>
   const I18N = {
     en: {
-      tagline: 'TEACHER DASHBOARD', nav_home: 'Home', log_out: 'Log out', menu: 'Menu',
+      tagline: 'TEACHER DASHBOARD', nav_home: 'Home', nav_courses: 'Courses', nav_admin: 'Admin', log_out: 'Log out', menu: 'Menu',
       nav_overview: 'Overview', nav_my_courses_teacher: 'My courses', nav_profile: 'Profile',
       stat_students: 'Total students', stat_courses: 'Courses', stat_earnings: 'Earnings (est.)',
       my_courses_teacher: 'My courses', new_course: '+ New course',
@@ -320,6 +322,7 @@
       opt_percent: 'Percentage off', opt_fixed: 'Fixed amount off', label_discount_value: 'Value',
       label_max_uses: 'Max uses', label_expires: 'Expires', btn_create: 'Create code',
       err_code_required: 'Enter a code.', err_value_required: 'Enter a value.', err_expires_required: 'Set an expiry date.',
+      err_expires_past: 'Expiry must be in the future.',
       status_active: 'Active', status_inactive: 'Revoked', btn_stop: 'Revoke',
       teacher_profile: 'Teacher profile', public_info: 'Public info', label_fullname: 'Full name',
       label_specialty: 'Specialty', label_bio: 'Short bio', label_photo: 'Photo',
@@ -328,7 +331,7 @@
       alert_generic_failed: 'Something went wrong: ', current_file: 'Current: ', free_label: 'Free'
     },
     ar: {
-      tagline: 'لوحة المدرس', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج', menu: 'القائمة',
+      tagline: 'لوحة المدرس', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_admin: 'الإدارة', log_out: 'تسجيل الخروج', menu: 'القائمة',
       nav_overview: 'نظرة عامة', nav_my_courses_teacher: 'دوراتي', nav_profile: 'الملف الشخصي',
       stat_students: 'إجمالي الطلاب', stat_courses: 'الدورات', stat_earnings: 'الأرباح (تقديري)',
       my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
@@ -355,6 +358,7 @@
       opt_percent: 'نسبة مئوية', opt_fixed: 'مبلغ ثابت', label_discount_value: 'القيمة',
       label_max_uses: 'الحد الأقصى للاستخدام', label_expires: 'تاريخ الانتهاء', btn_create: 'إنشاء الكود',
       err_code_required: 'أدخل كودًا.', err_value_required: 'أدخل قيمة.', err_expires_required: 'حدد تاريخ انتهاء.',
+      err_expires_past: 'يجب أن يكون تاريخ الانتهاء في المستقبل.',
       status_active: 'فعال', status_inactive: 'ملغى', btn_stop: 'إلغاء',
       teacher_profile: 'الملف الشخصي للمدرس', public_info: 'معلومات عامة', label_fullname: 'الاسم الكامل',
       label_specialty: 'التخصص', label_bio: 'نبذة قصيرة', label_photo: 'الصورة',
@@ -692,6 +696,7 @@
     const maxUses = Number(document.getElementById('dMaxUses').value) || 1;
     const expiresLocal = document.getElementById('dExpires').value;
     if(!expiresLocal){ errEl.textContent = t('err_expires_required'); return; }
+    if(new Date(expiresLocal).getTime() <= Date.now()){ errEl.textContent = t('err_expires_past'); return; }
 
     try{
       const { error } = await sb.from('discount_codes').insert({
@@ -769,9 +774,10 @@
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ window.location.href = 'index.html'; return; }
-    const { data: prof } = await sb.from('profiles').select('is_teacher').eq('id', session.user.id).maybeSingle();
+    const { data: prof } = await sb.from('profiles').select('is_teacher, is_admin').eq('id', session.user.id).maybeSingle();
     if(!prof || !prof.is_teacher){ window.location.href = 'index.html'; return; }
     currentUser = session.user;
+    document.getElementById('adminLinkDrawer').style.display = prof.is_admin ? '' : 'none';
 
     applyLang(currentLang);
     goView('overview');

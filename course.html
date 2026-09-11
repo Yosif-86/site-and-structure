@@ -185,6 +185,8 @@
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
         <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+        <a href="teacher.html" id="teacherLink" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
+        <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
         <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
@@ -203,6 +205,8 @@
     <a href="index.html" data-i18n="nav_home">Home</a>
     <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
     <a href="my-courses.html" id="myCoursesLinkDrawer" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+    <a href="teacher.html" id="teacherLinkDrawer" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
+    <a href="admin.html" id="adminLinkDrawer" style="display:none;" data-i18n="nav_admin">Admin</a>
     <button class="btn btn-accent" id="loginBtnDrawer" data-i18n="log_in">Log in</button>
   </div>
 </div>
@@ -248,7 +252,7 @@
   const I18N = {
     en: {
       tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
-      nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', log_in: 'Log in', log_out: 'Log out',
+      nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', nav_admin: 'Admin', log_in: 'Log in', log_out: 'Log out',
       menu: 'Menu',
       loading_course: 'Loading course…', course_not_found: 'Course not found.', no_course_specified: 'No course specified.',
       curriculum: 'Curriculum', no_lectures: 'No lectures uploaded yet.', free_tag: 'FREE', watch: 'Watch', locked: '🔒 Locked',
@@ -280,7 +284,7 @@
     },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
-      nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
+      nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة', log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
       menu: 'القائمة',
       loading_course: 'جاري تحميل الدورة...', course_not_found: 'الدورة غير موجودة.', no_course_specified: 'لم يتم تحديد دورة.',
       curriculum: 'المنهج', no_lectures: 'لم تُرفع محاضرات بعد.', free_tag: 'مجاني', watch: 'مشاهدة', locked: '🔒 مقفل',
@@ -719,6 +723,13 @@
     if(session){
       document.getElementById('myCoursesLink').style.display = '';
       document.getElementById('myCoursesLinkDrawer').style.display = '';
+      const { data: prof } = await sb.from('profiles').select('is_admin, is_teacher').eq('id', session.user.id).maybeSingle();
+      const showAdmin = (prof && prof.is_admin) ? '' : 'none';
+      document.getElementById('adminLink').style.display = showAdmin;
+      document.getElementById('adminLinkDrawer').style.display = showAdmin;
+      const showTeacher = (prof && prof.is_teacher) ? '' : 'none';
+      document.getElementById('teacherLink').style.display = showTeacher;
+      document.getElementById('teacherLinkDrawer').style.display = showTeacher;
       [loginBtn, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_out'); btn.onclick = async () => { await sb.auth.signOut(); location.reload(); }; });
     } else {
       const openLogin = () => { closeDrawer(); renderAuth('login'); openModal('loginOverlay'); };

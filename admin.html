@@ -174,6 +174,9 @@
       <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
       <div class="nav-links-desktop">
         <a href="index.html" data-i18n="nav_home">Home</a>
+        <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+        <a href="my-courses.html" data-i18n="nav_mycourses">My courses</a>
+        <a href="teacher.html" id="teacherLink" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
         <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
@@ -190,6 +193,9 @@
   </div>
   <div class="drawer-links">
     <a href="index.html" data-i18n="nav_home">Home</a>
+    <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+    <a href="my-courses.html" data-i18n="nav_mycourses">My courses</a>
+    <a href="teacher.html" id="teacherLinkDrawer" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
     <button class="btn btn-accent" id="logoutBtnDrawer" data-i18n="log_out">Log out</button>
   </div>
 </div>
@@ -308,7 +314,7 @@
 <script>
   const I18N = {
     en: {
-      tagline: 'ADMIN DASHBOARD', nav_home: 'Home', log_out: 'Log out',
+      tagline: 'ADMIN DASHBOARD', nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', log_out: 'Log out',
       menu: 'Menu', enrollments: 'Enrollments', students_courses: 'Students & courses',
       th_email: 'Email', th_name: 'Name', th_phone: 'Phone', th_course: 'Course', th_status: 'Status',
       th_payment: 'Payment', th_enrolled: 'Enrolled', th_approved_by: 'Approved by', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
@@ -341,7 +347,7 @@
       alert_publish_video_failed: 'Failed: ', alert_publish_video_empty: 'Enter a Bunny video ID or an R2 path first.'
     },
     ar: {
-      tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج',
+      tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', log_out: 'تسجيل الخروج',
       menu: 'القائمة', enrollments: 'التسجيلات', students_courses: 'الطلاب والدورات',
       th_email: 'البريد الإلكتروني', th_name: 'الاسم', th_phone: 'الهاتف', th_course: 'الدورة', th_status: 'الحالة',
       th_payment: 'الدفع', th_enrolled: 'تاريخ التسجيل', th_approved_by: 'وافق عليه', th_city: 'المدينة', th_country: 'الدولة', th_distance: 'المسافة', th_when: 'الوقت',
@@ -794,8 +800,11 @@
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ window.location.href = 'index.html'; return; }
-    const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+    const { data: prof } = await sb.from('profiles').select('is_admin, is_teacher').eq('id', session.user.id).maybeSingle();
     if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
+    const showTeacher = prof.is_teacher ? '' : 'none';
+    document.getElementById('teacherLink').style.display = showTeacher;
+    document.getElementById('teacherLinkDrawer').style.display = showTeacher;
 
     // title_ar isn't an actual column on courses in production (that
     // migration was never run against the live DB) — naming it explicitly
