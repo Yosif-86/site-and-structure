@@ -42,7 +42,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
-const PAGES = ['index.html', 'course.html', 'admin.html', 'my-courses.html', 'reset-password.html'];
+const PAGES = ['index.html', 'course.html', 'admin.html', 'my-courses.html', 'reset-password.html', 'teacher.html'];
 const VERCEL_JSON = path.join(ROOT, 'vercel.json');
 
 // --- Origins the pages legitimately talk to ------------------------------
@@ -120,8 +120,9 @@ function buildCsp(hashes) {
     // execution, which is a far smaller risk than relaxing script-src.
     `style-src 'self' 'unsafe-inline' ${FONT_CSS_ORIGIN}`,
     `font-src 'self' ${FONT_FILE_ORIGIN}`,
-    // The pages use no <img> tags today; 'self' covers the favicon request.
-    "img-src 'self' data:",
+    // teacher.html renders course-thumbnail/profile-photo <img> tags whose
+    // src is a public Supabase Storage URL (course-thumbnails bucket).
+    `img-src 'self' data: ${SUPABASE_ORIGIN}`,
     // fetch/XHR targets: /api/* on the same origin, Supabase, ipapi.co, and
     // the video Worker.
     `connect-src 'self' ${SUPABASE_ORIGIN} ${GEO_ORIGIN} ${R2_WORKER_ORIGIN}`,

@@ -210,6 +210,23 @@
 <section class="section">
   <div class="wrap">
     <div class="section-head">
+      <div class="section-tag" data-i18n="teacher_courses_tag">Teacher submissions</div>
+      <h2 data-i18n="course_review">Course review</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="reviewTable">
+        <thead>
+          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th><th data-i18n="th_price">Price</th><th></th></tr>
+        </thead>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
       <div class="section-tag" data-i18n="account_sharing_watch">Account sharing watch</div>
       <h2 data-i18n="flagged_logins">Flagged logins</h2>
     </div>
@@ -261,7 +278,12 @@
       th_device: 'Device', th_first_seen: 'First seen', th_last_seen: 'Last seen',
       no_devices: 'No accounts are at the device limit right now.',
       confirm_remove_device: 'Remove this device for {email}? They\'ll be able to log in on a new device again.',
-      alert_remove_device_failed: 'Failed to remove device: '
+      alert_remove_device_failed: 'Failed to remove device: ',
+      teacher_courses_tag: 'Teacher submissions', course_review: 'Course review',
+      th_teacher: 'Teacher', th_price: 'Price', no_pending_courses: 'No courses waiting for review.',
+      publish: 'Publish', reject: 'Send back',
+      confirm_reject_course: 'Send "{title}" back to draft? The teacher can edit and resubmit it.',
+      alert_review_failed: 'Failed: '
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج',
@@ -278,7 +300,12 @@
       th_device: 'الجهاز', th_first_seen: 'أول ظهور', th_last_seen: 'آخر ظهور',
       no_devices: 'لا توجد حسابات وصلت للحد الأقصى للأجهزة حاليًا.',
       confirm_remove_device: 'إزالة هذا الجهاز لـ {email}؟ سيتمكن من تسجيل الدخول من جهاز جديد مرة أخرى.',
-      alert_remove_device_failed: 'فشلت إزالة الجهاز: '
+      alert_remove_device_failed: 'فشلت إزالة الجهاز: ',
+      teacher_courses_tag: 'دورات المدرسين', course_review: 'مراجعة الدورات',
+      th_teacher: 'المدرس', th_price: 'السعر', no_pending_courses: 'لا توجد دورات بانتظار المراجعة.',
+      publish: 'نشر', reject: 'إرجاع',
+      confirm_reject_course: 'إرجاع "{title}" إلى المسودة؟ يمكن للمدرس تعديلها وإعادة إرسالها.',
+      alert_review_failed: 'فشل: '
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -293,6 +320,7 @@
     if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
     if(typeof loadEnrollments === 'function') loadEnrollments();
+    if(typeof loadReview === 'function') loadReview();
     if(typeof loadFlagged === 'function') loadFlagged();
     if(typeof loadDevices === 'function') loadDevices();
   }
@@ -429,6 +457,52 @@
     }).join('');
   }
 
+  async function publishCourse(id){
+    const { error } = await sb.from('courses').update({ status: 'published' }).eq('id', id);
+    if(error){ alert(t('alert_review_failed') + error.message); return; }
+    loadReview();
+  }
+
+  async function rejectCourse(id, title){
+    if(!confirm(t('confirm_reject_course').replace('{title}', title))) return;
+    const { error } = await sb.from('courses').update({ status: 'draft' }).eq('id', id);
+    if(error){ alert(t('alert_review_failed') + error.message); return; }
+    loadReview();
+  }
+
+  async function loadReview(){
+    const { data: pending, error } = await sb.from('courses')
+      .select('id, title, price, is_free, teacher_id')
+      .eq('status', 'pending_review')
+      .order('created_at', { ascending: false });
+    const body = document.getElementById('reviewBody');
+    if(error || !pending || pending.length === 0){
+      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_pending_courses')}</td></tr>`;
+      return;
+    }
+    const teacherIds = [...new Set(pending.map(c => c.teacher_id).filter(Boolean))];
+    const { data: teachers } = teacherIds.length
+      ? await sb.from('profiles').select('id, full_name').in('id', teacherIds)
+      : { data: [] };
+    const nameById = {};
+    (teachers || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    body.innerHTML = pending.map(c => {
+      const jsArg = (v) => escapeHtml(v).replace(/"/g, '&quot;');
+      const teacherName = nameById[c.teacher_id] || '—';
+      return `
+        <tr>
+          <td>${escapeHtml(c.title)}</td>
+          <td>${escapeHtml(teacherName)}</td>
+          <td>${c.is_free ? t('card_free') || 'Free' : escapeHtml(String(c.price))}</td>
+          <td style="display:flex; gap:8px;">
+            <button class="btn btn-accent" data-action="publish-course" data-id="${jsArg(c.id)}">${t('publish')}</button>
+            <button class="btn" data-action="reject-course" data-id="${jsArg(c.id)}" data-title="${jsArg(c.title)}">${t('reject')}</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
   async function loadFlagged(){
     const { data: flagged } = await sb.from('login_events')
       .select('email, city, country, distance_km, created_at')
@@ -516,6 +590,7 @@
     (allCourses || []).forEach(c => { courseTitles[c.slug] = c; });
 
     loadEnrollments();
+    loadReview();
     loadFlagged();
     loadDevices();
   })();
@@ -539,7 +614,9 @@
     'view-proof': (el) => viewProof(el.dataset.path),
     'approve': (el) => approve(el.dataset.id),
     'remove-enrollment': (el) => removeEnrollment(el.dataset.id, el.dataset.title, el.dataset.email),
-    'remove-device': (el) => removeDevice(el.dataset.id, el.dataset.email)
+    'remove-device': (el) => removeDevice(el.dataset.id, el.dataset.email),
+    'publish-course': (el) => publishCourse(el.dataset.id),
+    'reject-course': (el) => rejectCourse(el.dataset.id, el.dataset.title)
   };
   document.addEventListener('click', (ev) => {
     const el = ev.target.closest('[data-action]');

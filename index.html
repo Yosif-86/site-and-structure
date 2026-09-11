@@ -234,6 +234,7 @@
         <a href="#courses" data-i18n="nav_courses">Courses</a>
         <a href="#service" data-i18n="nav_service">Project service</a>
         <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+        <a href="teacher.html" id="teacherLink" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
         <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
         <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
       </div>
@@ -253,6 +254,7 @@
     <a href="#courses" data-action="close-drawer" data-i18n="nav_courses">Courses</a>
     <a href="#service" data-action="close-drawer" data-i18n="nav_service">Project service</a>
     <a href="my-courses.html" id="myCoursesLinkDrawer" style="display:none;" data-i18n="nav_mycourses">My courses</a>
+    <a href="teacher.html" id="teacherLinkDrawer" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
     <a href="admin.html" id="adminLinkDrawer" style="display:none;" data-i18n="nav_admin">Admin</a>
     <button class="btn btn-accent" id="loginBtnDrawer" data-i18n="log_in">Log in</button>
   </div>
@@ -309,7 +311,7 @@
   const I18N = {
     en: {
       tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
-      nav_courses: 'Courses', nav_service: 'Project service', nav_mycourses: 'My courses', nav_admin: 'Admin',
+      nav_courses: 'Courses', nav_service: 'Project service', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', nav_admin: 'Admin',
       log_in: 'Log in', log_out: 'Log out',
       hero_eyebrow: 'Rev 01 — Prototype for review',
       hero_title: 'Built like a drawing set. <em>Taught</em> like a site walkthrough.',
@@ -341,7 +343,7 @@
     },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
-      nav_courses: 'الدورات', nav_service: 'خدمة المشروع', nav_mycourses: 'دوراتي', nav_admin: 'الإدارة',
+      nav_courses: 'الدورات', nav_service: 'خدمة المشروع', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة',
       log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
       hero_eyebrow: 'الإصدار ٠١ — نموذج للمراجعة',
       hero_title: 'مبني كملف مخططات، <em>ويُدرَّس</em> كجولة ميدانية.',
@@ -654,10 +656,13 @@
       [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_out'); btn.onclick = doLogout; });
       document.getElementById('myCoursesLink').style.display = '';
       document.getElementById('myCoursesLinkDrawer').style.display = '';
-      const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+      const { data: prof } = await sb.from('profiles').select('is_admin, is_teacher').eq('id', session.user.id).maybeSingle();
       const showAdmin = (prof && prof.is_admin) ? '' : 'none';
       document.getElementById('adminLink').style.display = showAdmin;
       document.getElementById('adminLinkDrawer').style.display = showAdmin;
+      const showTeacher = (prof && prof.is_teacher) ? '' : 'none';
+      document.getElementById('teacherLink').style.display = showTeacher;
+      document.getElementById('teacherLinkDrawer').style.display = showTeacher;
     } else {
       const openLogin = () => { closeDrawer(); renderAuth('login'); openModal('loginOverlay'); };
       [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_in'); btn.onclick = openLogin; });
@@ -665,6 +670,8 @@
       document.getElementById('myCoursesLinkDrawer').style.display = 'none';
       document.getElementById('adminLink').style.display = 'none';
       document.getElementById('adminLinkDrawer').style.display = 'none';
+      document.getElementById('teacherLink').style.display = 'none';
+      document.getElementById('teacherLinkDrawer').style.display = 'none';
     }
   }
 

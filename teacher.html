@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher Dashboard — Site & Structure</title>
+<script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
+<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#14120F; --panel:#1D1A16; --panel2:#26221C; --line:rgba(243,237,228,0.12);
+    --red:#E8622C; --yellow:#6FA8A0; --green:#6FA8A0; --text:#F3EDE4; --muted:#AFA492; --muted2:#7D7362;
+    --glass-bg:rgba(38,34,28,0.5); --glass-border:rgba(243,237,228,0.16);
+  }
+  :root[data-theme="light"]{
+    --bg:#F3EFE7; --panel:#FFFFFF; --panel2:#EAE3D6; --line:rgba(30,25,18,0.14);
+    --red:#C94E1F; --yellow:#3E7D74; --green:#3E7D74; --text:#1E1912; --muted:#5C5344; --muted2:#8C8171;
+    --glass-bg:rgba(255,255,255,0.55); --glass-border:rgba(255,255,255,0.7);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{overflow-x:hidden; max-width:100%;}
+  body{background:var(--bg); color:var(--text); font-family:'Work Sans', sans-serif; line-height:1.6; transition:background .2s ease, color .2s ease;}
+  .wrap{max-width:1100px; margin:0 auto; padding:0 24px;}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit; min-width:0;}
+  .brand-mark{width:34px; height:34px; border-radius:8px; background:linear-gradient(145deg, var(--red), color-mix(in srgb, var(--red) 55%, black)); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:#fff; flex-shrink:0;}
+  .brand-name{font-family:'Big Shoulders Display'; font-weight:800; font-size:19px; letter-spacing:0.2px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); font-weight:400; letter-spacing:1px; text-transform:none;}
+  nav{display:flex; gap:10px; align-items:center; flex-shrink:0;}
+  .theme-toggle, .hamburger-btn{width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; padding:0; flex-shrink:0;}
+  .theme-toggle:hover, .hamburger-btn:hover{background:var(--panel2);}
+  .lang-toggle{height:38px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; font-size:12px; font-weight:700; font-family:'IBM Plex Mono'; letter-spacing:0.5px;}
+  .lang-toggle:hover{background:var(--panel2);}
+  :root[dir="rtl"] body{font-family:'Cairo', 'Work Sans', sans-serif;}
+  :root[dir="rtl"] h2, :root[dir="rtl"] h3, :root[dir="rtl"] .brand-name{font-family:'Cairo', sans-serif; text-transform:none;}
+
+  .drawer-backdrop{display:none; position:fixed; inset:0; background:rgba(10,8,6,0.6); z-index:199;}
+  .drawer-backdrop.open{display:block;}
+  .drawer{position:fixed; top:0; bottom:0; width:min(300px,82vw); z-index:200; background:var(--panel); padding:20px; display:flex; flex-direction:column; gap:6px; transition:transform .3s cubic-bezier(0.16,1,0.3,1); overflow-y:auto;}
+  :root:not([dir="rtl"]) .drawer{left:0; transform:translateX(-100%); border-right:1px solid var(--line);}
+  :root:not([dir="rtl"]) .drawer.open{transform:translateX(0);}
+  :root[dir="rtl"] .drawer{right:0; transform:translateX(100%); border-left:1px solid var(--line);}
+  :root[dir="rtl"] .drawer.open{transform:translateX(0);}
+  .drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .drawer-title{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px; text-transform:uppercase;}
+  .drawer-close{background:none; border:none; color:var(--red); font-size:20px; cursor:pointer; line-height:1;}
+  .drawer-links{display:flex; flex-direction:column; gap:4px;}
+  .drawer-links a, .drawer-links button.link{color:var(--text); text-decoration:none; font-size:15px; padding:12px 8px; border-radius:8px; background:none; border:none; text-align:inherit; cursor:pointer; font-family:inherit;}
+  .drawer-links a:hover, .drawer-links button.link:hover{background:var(--panel2);}
+  :root[dir="rtl"] .drawer-links a, :root[dir="rtl"] .drawer-links button.link{text-align:right;}
+
+  .btn{font-family:'Work Sans'; font-size:13px; font-weight:600; padding:10px 18px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; transition:background .15s ease;}
+  .btn:hover{background:var(--panel2);}
+  .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
+  .btn-accent:hover{background:color-mix(in srgb, var(--red) 88%, black);}
+  .btn-small{padding:6px 12px; font-size:12px;}
+  .btn:disabled{opacity:0.5; cursor:not-allowed;}
+
+  .tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin:24px 0; overflow-x:auto;}
+  .tab-btn{padding:12px 16px; border:none; background:none; color:var(--muted); font-family:'Work Sans'; font-size:14px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;}
+  .tab-btn.active{color:var(--text); border-bottom-color:var(--red);}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:14px; margin-bottom:32px;}
+  .stat-card{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:20px;}
+  .stat-num{font-family:'Big Shoulders Display'; font-weight:800; font-size:32px;}
+  .stat-label{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;}
+
+  .section-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap;}
+  h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:22px; text-transform:uppercase;}
+  h3{font-family:'Big Shoulders Display'; font-weight:700; font-size:17px;}
+
+  .course-list{display:grid; gap:14px;}
+  .course-card{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:16px; display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap;}
+  .course-thumb{width:96px; height:64px; border-radius:8px; object-fit:cover; background:var(--panel); flex-shrink:0;}
+  .course-info{flex:1; min-width:180px;}
+  .course-meta{color:var(--muted); font-size:12.5px; margin-top:4px;}
+  .course-actions{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px;}
+  .badge{font-family:'IBM Plex Mono'; font-size:10px; padding:3px 9px; border-radius:999px; border:1px solid var(--line); text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap;}
+  .badge.draft{color:var(--muted2);}
+  .badge.pending_review{color:var(--yellow); border-color:var(--yellow);}
+  .badge.published{color:var(--green); border-color:var(--green);}
+  .badge.active{color:var(--green); border-color:var(--green);}
+  .badge.inactive{color:var(--muted2);}
+  .badge.pending_upload{color:var(--yellow); border-color:var(--yellow);}
+
+  .form-box{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:20px;}
+  label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; margin-top:14px;}
+  label:first-child{margin-top:0;}
+  input[type=text], input[type=number], input[type=file], input[type=datetime-local], textarea, select{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:'Work Sans'; font-size:14px;
+  }
+  textarea{min-height:90px; resize:vertical;}
+  .field-hint{color:var(--muted2); font-size:11.5px; margin-top:4px;}
+  .toggle-row{display:flex; align-items:center; gap:10px; margin-top:14px;}
+  .form-actions{display:flex; gap:10px; margin-top:18px;}
+  .form-error{color:var(--red); font-size:13px; margin-top:10px;}
+  .empty{color:var(--muted); font-size:14px; padding:16px 0;}
+
+  table{width:100%; border-collapse:collapse; margin-top:4px;}
+  th, td{text-align:left; padding:9px 10px; font-size:13px; border-bottom:1px solid var(--line);}
+  th{font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px;}
+  :root[dir="rtl"] th, :root[dir="rtl"] td{text-align:right;}
+  tr:last-child td{border-bottom:none;}
+
+  .back-link{display:inline-flex; align-items:center; gap:6px; color:var(--muted); text-decoration:none; font-size:13px; margin-bottom:16px; cursor:pointer; background:none; border:none; font-family:inherit;}
+  .back-link:hover{color:var(--text);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">TEACHER DASHBOARD</small></div>
+    </a>
+    <nav>
+      <button class="hamburger-btn" data-action="open-drawer" aria-label="Menu">&#9776;</button>
+      <button class="theme-toggle" data-action="toggle-theme" aria-label="Toggle dark mode"></button>
+      <button class="lang-toggle" data-action="toggle-lang" aria-label="Toggle language"></button>
+    </nav>
+  </div>
+</header>
+
+<div class="drawer-backdrop" data-action="close-drawer"></div>
+<div class="drawer">
+  <div class="drawer-head">
+    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
+    <div class="drawer-title" data-i18n="menu">Menu</div>
+  </div>
+  <div class="drawer-links">
+    <a href="index.html" data-i18n="nav_home">Home</a>
+    <button class="link" data-action="go-view" data-view="overview" data-i18n="nav_overview">Overview</button>
+    <button class="link" data-action="go-view" data-view="courses" data-i18n="nav_my_courses_teacher">My courses</button>
+    <button class="link" data-action="go-view" data-view="profile" data-i18n="nav_profile">Profile</button>
+    <button class="btn btn-accent" id="logoutBtnDrawer" data-i18n="log_out">Log out</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab-btn" data-action="go-view" data-view="overview" data-i18n="nav_overview">Overview</button>
+    <button class="tab-btn" data-action="go-view" data-view="courses" data-i18n="nav_my_courses_teacher">My courses</button>
+    <button class="tab-btn" data-action="go-view" data-view="profile" data-i18n="nav_profile">Profile</button>
+  </div>
+
+  <!-- ================= OVERVIEW ================= -->
+  <div class="view" data-view="overview">
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-num" id="statStudents">—</div><div class="stat-label" data-i18n="stat_students">Total students</div></div>
+      <div class="stat-card"><div class="stat-num" id="statCourses">—</div><div class="stat-label" data-i18n="stat_courses">Courses</div></div>
+      <div class="stat-card"><div class="stat-num" id="statEarnings">—</div><div class="stat-label" data-i18n="stat_earnings">Earnings (est.)</div></div>
+    </div>
+  </div>
+
+  <!-- ================= MY COURSES (list) ================= -->
+  <div class="view" data-view="courses">
+    <div class="section-row">
+      <h2 data-i18n="my_courses_teacher">My courses</h2>
+      <button class="btn btn-accent" data-action="new-course" data-i18n="new_course">+ New course</button>
+    </div>
+    <div class="course-list" id="courseList"></div>
+  </div>
+
+  <!-- ================= COURSE EDITOR ================= -->
+  <div class="view" data-view="course-edit">
+    <button class="back-link" data-action="go-view" data-view="courses">&larr; <span data-i18n="back_to_courses">Back to my courses</span></button>
+    <h2 id="courseEditTitle" data-i18n="edit_course">Edit course</h2>
+    <div class="form-box">
+      <label data-i18n="label_course_title">Title</label>
+      <input type="text" id="cTitle" placeholder="e.g. Reinforced Concrete Design">
+      <label data-i18n="label_course_desc">Description</label>
+      <textarea id="cDescription" placeholder="What this course covers, who it's for..."></textarea>
+      <label data-i18n="label_thumbnail">Thumbnail image</label>
+      <input type="file" id="cThumbFile" accept="image/png,image/jpeg,image/webp">
+      <div class="field-hint" id="cThumbCurrent"></div>
+      <label data-i18n="label_price">Price (IQD, 0 = free)</label>
+      <input type="number" id="cPrice" min="0" step="1" value="0">
+      <div class="toggle-row">
+        <input type="checkbox" id="cPayToTeacher">
+        <label for="cPayToTeacher" style="margin:0; text-transform:none; font-family:'Work Sans'; font-size:13px; color:var(--text);" data-i18n="label_pay_to_teacher">Pay this course's revenue to my own account instead of the platform default</label>
+      </div>
+      <div id="cFormError" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" data-action="save-course" data-i18n="btn_save">Save</button>
+        <button class="btn" data-action="go-view" data-view="courses" data-i18n="btn_cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CURRICULUM ================= -->
+  <div class="view" data-view="curriculum">
+    <button class="back-link" data-action="go-view" data-view="courses">&larr; <span data-i18n="back_to_courses">Back to my courses</span></button>
+    <h2 id="curriculumTitle" data-i18n="curriculum">Curriculum</h2>
+    <div class="table-wrap" style="margin-bottom:20px;">
+      <table>
+        <thead><tr>
+          <th data-i18n="th_lecture_title">Title</th><th data-i18n="th_status">Status</th><th data-i18n="th_free">Free</th><th></th>
+        </tr></thead>
+        <tbody id="lectureBody"></tbody>
+      </table>
+    </div>
+    <div class="form-box">
+      <h3 data-i18n="add_lecture">Add lecture</h3>
+      <label data-i18n="label_lecture_title">Lecture title</label>
+      <input type="text" id="lTitle" placeholder="e.g. Introduction to load paths">
+      <label data-i18n="label_video_file">Video file</label>
+      <input type="file" id="lVideoFile" accept="video/mp4,video/quicktime,video/webm,video/x-matroska">
+      <div class="field-hint" data-i18n="video_pending_hint">Uploaded videos are reviewed and published by the admin — they won't play immediately.</div>
+      <div class="toggle-row">
+        <input type="checkbox" id="lIsFree">
+        <label for="lIsFree" style="margin:0; text-transform:none; font-family:'Work Sans'; font-size:13px; color:var(--text);" data-i18n="label_free_preview">Free preview lecture</label>
+      </div>
+      <div id="lFormError" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" data-action="add-lecture" data-i18n="btn_add">Add lecture</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DISCOUNT CODES ================= -->
+  <div class="view" data-view="codes">
+    <button class="back-link" data-action="go-view" data-view="courses">&larr; <span data-i18n="back_to_courses">Back to my courses</span></button>
+    <h2 id="codesTitle" data-i18n="discount_codes">Discount codes</h2>
+    <div class="table-wrap" style="margin-bottom:20px;">
+      <table>
+        <thead><tr>
+          <th data-i18n="th_code">Code</th><th data-i18n="th_discount">Discount</th><th data-i18n="th_uses">Uses</th><th data-i18n="th_expires">Expires</th><th data-i18n="th_status">Status</th><th></th>
+        </tr></thead>
+        <tbody id="codeBody"></tbody>
+      </table>
+    </div>
+    <div class="form-box">
+      <h3 data-i18n="new_code">New code</h3>
+      <label data-i18n="label_code">Code</label>
+      <input type="text" id="dCode" placeholder="SAVE20" style="text-transform:uppercase;">
+      <label data-i18n="label_discount_type">Discount type</label>
+      <select id="dType">
+        <option value="percent" data-i18n="opt_percent">Percentage off</option>
+        <option value="fixed" data-i18n="opt_fixed">Fixed amount off</option>
+      </select>
+      <label data-i18n="label_discount_value">Value</label>
+      <input type="number" id="dValue" min="1" step="1" placeholder="20">
+      <label data-i18n="label_max_uses">Max uses</label>
+      <input type="number" id="dMaxUses" min="1" step="1" value="10">
+      <label data-i18n="label_expires">Expires</label>
+      <input type="datetime-local" id="dExpires">
+      <div id="dFormError" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" data-action="add-code" data-i18n="btn_create">Create code</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PROFILE ================= -->
+  <div class="view" data-view="profile">
+    <h2 data-i18n="teacher_profile">Teacher profile</h2>
+    <div class="form-box">
+      <h3 data-i18n="public_info">Public info</h3>
+      <label data-i18n="label_fullname">Full name</label>
+      <input type="text" id="pName">
+      <label data-i18n="label_specialty">Specialty</label>
+      <input type="text" id="pSpecialty" placeholder="e.g. Structural Engineering">
+      <label data-i18n="label_bio">Short bio</label>
+      <textarea id="pBio"></textarea>
+      <label data-i18n="label_photo">Photo</label>
+      <input type="file" id="pPhotoFile" accept="image/png,image/jpeg,image/webp">
+      <div class="field-hint" id="pPhotoCurrent"></div>
+    </div>
+    <div class="form-box">
+      <h3 data-i18n="private_payment">Private payment details</h3>
+      <div class="field-hint" data-i18n="payment_hint" style="margin-bottom:10px;">Never shown to students — used only when one of your courses is set to pay you directly.</div>
+      <label data-i18n="label_payment_method">Method</label>
+      <select id="pPayMethod">
+        <option value="zain" data-i18n="zain_cash">Zain Cash</option>
+        <option value="qi" data-i18n="qi_card">Qi Card</option>
+      </select>
+      <label data-i18n="label_payment_detail">Number</label>
+      <input type="text" id="pPayDetail">
+      <div id="pFormError" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" data-action="save-profile" data-i18n="btn_save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const I18N = {
+    en: {
+      tagline: 'TEACHER DASHBOARD', nav_home: 'Home', log_out: 'Log out', menu: 'Menu',
+      nav_overview: 'Overview', nav_my_courses_teacher: 'My courses', nav_profile: 'Profile',
+      stat_students: 'Total students', stat_courses: 'Courses', stat_earnings: 'Earnings (est.)',
+      my_courses_teacher: 'My courses', new_course: '+ New course',
+      no_courses_teacher: "You haven't created any courses yet.",
+      status_draft: 'Draft', status_pending_review: 'Pending review', status_published: 'Published',
+      btn_edit: 'Edit', btn_curriculum: 'Curriculum', btn_codes: 'Codes', btn_submit_review: 'Submit for review', btn_delete: 'Delete',
+      confirm_delete_course: 'Delete "{title}"? This cannot be undone.',
+      confirm_submit_review: 'Submit "{title}" for review? You won\'t be able to edit it until it\'s approved or sent back.',
+      edit_course: 'Edit course', new_course_title: 'New course',
+      label_course_title: 'Title', label_course_desc: 'Description', label_thumbnail: 'Thumbnail image',
+      label_price: 'Price (IQD, 0 = free)', label_pay_to_teacher: "Pay this course's revenue to my own account instead of the platform default",
+      btn_save: 'Save', btn_cancel: 'Cancel', back_to_courses: 'Back to my courses',
+      err_title_required: 'Enter a title.', err_save_failed: 'Failed to save: ',
+      curriculum: 'Curriculum', th_lecture_title: 'Title', th_status: 'Status', th_free: 'Free', th_remove: '',
+      no_lectures_teacher: 'No lectures yet.',
+      add_lecture: 'Add lecture', label_lecture_title: 'Lecture title', label_video_file: 'Video file',
+      video_pending_hint: "Uploaded videos are reviewed and published by the admin — they won't play immediately.",
+      label_free_preview: 'Free preview lecture', btn_add: 'Add lecture',
+      err_lecture_title_required: 'Enter a lecture title.', err_video_required: 'Choose a video file.',
+      status_live: 'Live', status_pending_upload: 'Pending review',
+      discount_codes: 'Discount codes', th_code: 'Code', th_discount: 'Discount', th_uses: 'Uses', th_expires: 'Expires',
+      no_codes: 'No discount codes yet.', new_code: 'New code', label_code: 'Code', label_discount_type: 'Discount type',
+      opt_percent: 'Percentage off', opt_fixed: 'Fixed amount off', label_discount_value: 'Value',
+      label_max_uses: 'Max uses', label_expires: 'Expires', btn_create: 'Create code',
+      err_code_required: 'Enter a code.', err_value_required: 'Enter a value.', err_expires_required: 'Set an expiry date.',
+      status_active: 'Active', status_inactive: 'Stopped', btn_stop: 'Stop early',
+      teacher_profile: 'Teacher profile', public_info: 'Public info', label_fullname: 'Full name',
+      label_specialty: 'Specialty', label_bio: 'Short bio', label_photo: 'Photo',
+      private_payment: 'Private payment details', payment_hint: 'Never shown to students — used only when one of your courses is set to pay you directly.',
+      label_payment_method: 'Method', zain_cash: 'Zain Cash', qi_card: 'Qi Card', label_payment_detail: 'Number',
+      alert_generic_failed: 'Something went wrong: ', current_file: 'Current: '
+    },
+    ar: {
+      tagline: 'لوحة المدرس', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج', menu: 'القائمة',
+      nav_overview: 'نظرة عامة', nav_my_courses_teacher: 'دوراتي', nav_profile: 'الملف الشخصي',
+      stat_students: 'إجمالي الطلاب', stat_courses: 'الدورات', stat_earnings: 'الأرباح (تقديري)',
+      my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
+      no_courses_teacher: 'لم تنشئ أي دورة بعد.',
+      status_draft: 'مسودة', status_pending_review: 'قيد المراجعة', status_published: 'منشورة',
+      btn_edit: 'تعديل', btn_curriculum: 'المنهج', btn_codes: 'أكواد الخصم', btn_submit_review: 'إرسال للمراجعة', btn_delete: 'حذف',
+      confirm_delete_course: 'حذف "{title}"؟ لا يمكن التراجع عن هذا.',
+      confirm_submit_review: 'إرسال "{title}" للمراجعة؟ لن تتمكن من تعديلها حتى تتم الموافقة عليها أو إعادتها.',
+      edit_course: 'تعديل الدورة', new_course_title: 'دورة جديدة',
+      label_course_title: 'العنوان', label_course_desc: 'الوصف', label_thumbnail: 'صورة الدورة',
+      label_price: 'السعر (د.ع، 0 = مجاني)', label_pay_to_teacher: 'إرسال أرباح هذه الدورة إلى حسابي الخاص بدلاً من حساب المنصة',
+      btn_save: 'حفظ', btn_cancel: 'إلغاء', back_to_courses: 'العودة إلى دوراتي',
+      err_title_required: 'أدخل عنوانًا.', err_save_failed: 'فشل الحفظ: ',
+      curriculum: 'المنهج الدراسي', th_lecture_title: 'العنوان', th_status: 'الحالة', th_free: 'مجاني', th_remove: '',
+      no_lectures_teacher: 'لا توجد محاضرات بعد.',
+      add_lecture: 'إضافة محاضرة', label_lecture_title: 'عنوان المحاضرة', label_video_file: 'ملف الفيديو',
+      video_pending_hint: 'يتم مراجعة ونشر الفيديوهات المرفوعة من قبل الإدارة — لن تعمل فورًا.',
+      label_free_preview: 'محاضرة مجانية للمعاينة', btn_add: 'إضافة المحاضرة',
+      err_lecture_title_required: 'أدخل عنوان المحاضرة.', err_video_required: 'اختر ملف فيديو.',
+      status_live: 'مباشر', status_pending_upload: 'قيد المراجعة',
+      discount_codes: 'أكواد الخصم', th_code: 'الكود', th_discount: 'الخصم', th_uses: 'الاستخدامات', th_expires: 'ينتهي في',
+      no_codes: 'لا توجد أكواد خصم بعد.', new_code: 'كود جديد', label_code: 'الكود', label_discount_type: 'نوع الخصم',
+      opt_percent: 'نسبة مئوية', opt_fixed: 'مبلغ ثابت', label_discount_value: 'القيمة',
+      label_max_uses: 'الحد الأقصى للاستخدام', label_expires: 'تاريخ الانتهاء', btn_create: 'إنشاء الكود',
+      err_code_required: 'أدخل كودًا.', err_value_required: 'أدخل قيمة.', err_expires_required: 'حدد تاريخ انتهاء.',
+      status_active: 'فعال', status_inactive: 'متوقف', btn_stop: 'إيقاف مبكر',
+      teacher_profile: 'الملف الشخصي للمدرس', public_info: 'معلومات عامة', label_fullname: 'الاسم الكامل',
+      label_specialty: 'التخصص', label_bio: 'نبذة قصيرة', label_photo: 'الصورة',
+      private_payment: 'بيانات الدفع الخاصة', payment_hint: 'لا تظهر للطلاب أبدًا — تُستخدم فقط عند ضبط إحدى دوراتك للدفع لك مباشرة.',
+      label_payment_method: 'الطريقة', zain_cash: 'زين كاش', qi_card: 'كي كارد', label_payment_detail: 'الرقم',
+      alert_generic_failed: 'حدث خطأ: ', current_file: 'الحالي: '
+    }
+  };
+  let currentLang = document.documentElement.getAttribute('lang') || 'en';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+
+  function applyLang(lang){
+    currentLang = lang;
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    try{ localStorage.setItem('ss_lang', lang); }catch(e){}
+    const btn = document.querySelector('.lang-toggle');
+    if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    renderCourses(); renderLectures(); renderCodes();
+  }
+  function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
+
+  function applyTheme(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    try{ localStorage.setItem('ss_theme', theme); }catch(e){}
+    const btn = document.querySelector('.theme-toggle');
+    if(btn) btn.textContent = theme === 'dark' ? '☀' : '☾';
+  }
+  function toggleTheme(){
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  }
+  applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
+  function openDrawer(){ document.querySelector('.drawer').classList.add('open'); document.querySelector('.drawer-backdrop').classList.add('open'); }
+  function closeDrawer(){ document.querySelector('.drawer').classList.remove('open'); document.querySelector('.drawer-backdrop').classList.remove('open'); }
+
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let currentUser = null;
+  let myCourses = [];      // full rows, own courses
+  let activeCourse = null; // course object currently open in edit/curriculum/codes view
+  let activeLectures = [];
+  let activeCodes = [];
+
+  function goView(view){
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    closeDrawer();
+  }
+
+  // ---- Overview ----
+  async function loadOverview(){
+    const slugs = myCourses.map(c => c.slug);
+    document.getElementById('statCourses').textContent = myCourses.length;
+    if(slugs.length === 0){
+      document.getElementById('statStudents').textContent = '0';
+      document.getElementById('statEarnings').textContent = '0';
+      return;
+    }
+    const { data: enrollments } = await sb.from('enrollments')
+      .select('user_id, course_slug, status')
+      .in('course_slug', slugs)
+      .eq('status', 'active');
+    const uniqueStudents = new Set((enrollments || []).map(e => e.user_id));
+    document.getElementById('statStudents').textContent = uniqueStudents.size;
+    const priceBySlug = {};
+    myCourses.forEach(c => { priceBySlug[c.slug] = Number(c.price) || 0; });
+    const earnings = (enrollments || []).reduce((sum, e) => sum + (priceBySlug[e.course_slug] || 0), 0);
+    document.getElementById('statEarnings').textContent = earnings.toLocaleString();
+  }
+
+  // ---- My courses ----
+  function courseStatusLabel(status){ return t('status_' + status) || status; }
+
+  function renderCourses(){
+    const list = document.getElementById('courseList');
+    if(!list) return;
+    if(myCourses.length === 0){
+      list.innerHTML = `<div class="empty">${t('no_courses_teacher')}</div>`;
+      return;
+    }
+    list.innerHTML = myCourses.map(c => {
+      const canEdit = c.status === 'draft';
+      const canSubmit = c.status === 'draft';
+      return `
+        <div class="course-card">
+          ${c.thumbnail_url ? `<img class="course-thumb" src="${escapeHtml(c.thumbnail_url)}" alt="">` : `<div class="course-thumb"></div>`}
+          <div class="course-info">
+            <h3>${escapeHtml(c.title)}</h3>
+            <div class="course-meta">
+              <span class="badge ${escapeHtml(c.status)}">${courseStatusLabel(c.status)}</span>
+              &nbsp; ${c.is_free ? t('card_free') || 'Free' : escapeHtml(String(c.price))}
+            </div>
+            <div class="course-actions">
+              ${canEdit ? `<button class="btn btn-small" data-action="open-course-edit" data-id="${escapeHtml(c.id)}">${t('btn_edit')}</button>` : ''}
+              <button class="btn btn-small" data-action="open-curriculum" data-id="${escapeHtml(c.id)}">${t('btn_curriculum')}</button>
+              <button class="btn btn-small" data-action="open-codes" data-id="${escapeHtml(c.id)}">${t('btn_codes')}</button>
+              ${canSubmit ? `<button class="btn btn-small btn-accent" data-action="submit-review" data-id="${escapeHtml(c.id)}" data-title="${escapeHtml(c.title)}">${t('btn_submit_review')}</button>` : ''}
+              <button class="btn btn-small" data-action="delete-course" data-id="${escapeHtml(c.id)}" data-title="${escapeHtml(c.title)}">${t('btn_delete')}</button>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  async function loadCourses(){
+    const { data, error } = await sb.from('courses').select('*').eq('teacher_id', currentUser.id).order('created_at', { ascending: false });
+    if(error){ console.error(error); return; }
+    myCourses = data || [];
+    renderCourses();
+    loadOverview();
+  }
+
+  function newCourse(){
+    activeCourse = null;
+    document.getElementById('courseEditTitle').textContent = t('new_course_title');
+    document.getElementById('cTitle').value = '';
+    document.getElementById('cDescription').value = '';
+    document.getElementById('cPrice').value = 0;
+    document.getElementById('cPayToTeacher').checked = false;
+    document.getElementById('cThumbCurrent').textContent = '';
+    document.getElementById('cThumbFile').value = '';
+    document.getElementById('cFormError').textContent = '';
+    goView('course-edit');
+  }
+
+  function openCourseEdit(id){
+    const c = myCourses.find(x => x.id === id);
+    if(!c) return;
+    activeCourse = c;
+    document.getElementById('courseEditTitle').textContent = t('edit_course');
+    document.getElementById('cTitle').value = c.title || '';
+    document.getElementById('cDescription').value = c.description || '';
+    document.getElementById('cPrice').value = c.price || 0;
+    document.getElementById('cPayToTeacher').checked = !!c.pay_to_teacher;
+    document.getElementById('cThumbCurrent').textContent = c.thumbnail_url ? (t('current_file') + c.thumbnail_url) : '';
+    document.getElementById('cThumbFile').value = '';
+    document.getElementById('cFormError').textContent = '';
+    goView('course-edit');
+  }
+
+  function slugify(title){
+    return (title || '').toLowerCase().trim()
+      .replace(/[^a-z0-9؀-ۿ]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'course';
+  }
+
+  async function saveCourse(){
+    const errEl = document.getElementById('cFormError');
+    errEl.textContent = '';
+    const title = document.getElementById('cTitle').value.trim();
+    if(!title){ errEl.textContent = t('err_title_required'); return; }
+    const description = document.getElementById('cDescription').value.trim();
+    const price = Number(document.getElementById('cPrice').value) || 0;
+    const payToTeacher = document.getElementById('cPayToTeacher').checked;
+    const file = document.getElementById('cThumbFile').files[0];
+
+    try{
+      let thumbnailUrl = activeCourse ? activeCourse.thumbnail_url : null;
+      if(file){
+        const path = `${currentUser.id}/${Date.now()}-${file.name}`;
+        const { error: upErr } = await sb.storage.from('course-thumbnails').upload(path, file);
+        if(upErr) throw upErr;
+        thumbnailUrl = sb.storage.from('course-thumbnails').getPublicUrl(path).data.publicUrl;
+      }
+
+      if(activeCourse){
+        const { error } = await sb.from('courses').update({
+          title, description, price, is_free: price === 0, pay_to_teacher: payToTeacher, thumbnail_url: thumbnailUrl
+        }).eq('id', activeCourse.id);
+        if(error) throw error;
+      } else {
+        const slug = slugify(title) + '-' + Math.random().toString(36).slice(2, 7);
+        const { error } = await sb.from('courses').insert({
+          slug, title, description, price, is_free: price === 0, pay_to_teacher: payToTeacher,
+          thumbnail_url: thumbnailUrl, teacher_id: currentUser.id, status: 'draft'
+        });
+        if(error) throw error;
+      }
+      await loadCourses();
+      goView('courses');
+    } catch(e){
+      errEl.textContent = t('err_save_failed') + e.message;
+    }
+  }
+
+  async function submitForReview(id, title){
+    if(!confirm(t('confirm_submit_review').replace('{title}', title))) return;
+    const { error } = await sb.from('courses').update({ status: 'pending_review' }).eq('id', id);
+    if(error){ alert(t('alert_generic_failed') + error.message); return; }
+    loadCourses();
+  }
+
+  async function deleteCourse(id, title){
+    if(!confirm(t('confirm_delete_course').replace('{title}', title))) return;
+    const { error } = await sb.from('courses').delete().eq('id', id);
+    if(error){ alert(t('alert_generic_failed') + error.message); return; }
+    loadCourses();
+  }
+
+  // ---- Curriculum ----
+  function lectureStatus(l){ return (l.bunny_video_id || l.r2_path) ? 'live' : 'pending_upload'; }
+
+  function renderLectures(){
+    const body = document.getElementById('lectureBody');
+    if(!body) return;
+    if(!activeLectures.length){
+      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_lectures_teacher')}</td></tr>`;
+      return;
+    }
+    body.innerHTML = activeLectures.map(l => `
+      <tr>
+        <td>${escapeHtml(l.title)}</td>
+        <td><span class="badge ${lectureStatus(l)}">${t('status_' + lectureStatus(l))}</span></td>
+        <td>${l.is_free ? '✓' : ''}</td>
+        <td><button class="btn btn-small" data-action="delete-lecture" data-id="${escapeHtml(l.id)}">${t('btn_delete')}</button></td>
+      </tr>`).join('');
+  }
+
+  function openCurriculum(id){
+    const c = myCourses.find(x => x.id === id);
+    if(!c) return;
+    activeCourse = c;
+    document.getElementById('curriculumTitle').textContent = t('curriculum') + ' — ' + c.title;
+    document.getElementById('lTitle').value = '';
+    document.getElementById('lVideoFile').value = '';
+    document.getElementById('lIsFree').checked = false;
+    document.getElementById('lFormError').textContent = '';
+    goView('curriculum');
+    loadLectures();
+  }
+
+  async function loadLectures(){
+    const { data, error } = await sb.from('lectures').select('*').eq('course_id', activeCourse.id).order('order_index');
+    if(error){ console.error(error); return; }
+    activeLectures = data || [];
+    renderLectures();
+  }
+
+  async function addLecture(){
+    const errEl = document.getElementById('lFormError');
+    errEl.textContent = '';
+    const title = document.getElementById('lTitle').value.trim();
+    if(!title){ errEl.textContent = t('err_lecture_title_required'); return; }
+    const file = document.getElementById('lVideoFile').files[0];
+    if(!file){ errEl.textContent = t('err_video_required'); return; }
+    const isFree = document.getElementById('lIsFree').checked;
+
+    try{
+      const path = `${currentUser.id}/${activeCourse.id}/${Date.now()}-${file.name}`;
+      const { error: upErr } = await sb.storage.from('lecture-uploads').upload(path, file);
+      if(upErr) throw upErr;
+      const orderIndex = activeLectures.length ? Math.max(...activeLectures.map(l => l.order_index || 0)) + 1 : 0;
+      const { error } = await sb.from('lectures').insert({
+        course_id: activeCourse.id, title, is_free: isFree, order_index: orderIndex, pending_upload_path: path
+      });
+      if(error) throw error;
+      document.getElementById('lTitle').value = '';
+      document.getElementById('lVideoFile').value = '';
+      document.getElementById('lIsFree').checked = false;
+      loadLectures();
+    } catch(e){
+      errEl.textContent = t('err_save_failed') + e.message;
+    }
+  }
+
+  async function deleteLecture(id){
+    const { error } = await sb.from('lectures').delete().eq('id', id);
+    if(error){ alert(t('alert_generic_failed') + error.message); return; }
+    loadLectures();
+  }
+
+  // ---- Discount codes ----
+  function codeStatus(c){ return c.is_active ? 'active' : 'inactive'; }
+
+  function renderCodes(){
+    const body = document.getElementById('codeBody');
+    if(!body) return;
+    if(!activeCodes.length){
+      body.innerHTML = `<tr><td colspan="6" class="empty">${t('no_codes')}</td></tr>`;
+      return;
+    }
+    body.innerHTML = activeCodes.map(c => {
+      const discount = c.discount_type === 'percent' ? `${c.discount_value}%` : `${c.discount_value} IQD`;
+      const expires = new Date(c.expires_at).toLocaleDateString();
+      return `
+        <tr>
+          <td>${escapeHtml(c.code)}</td>
+          <td>${discount}</td>
+          <td>${c.used_count} / ${c.max_uses}</td>
+          <td>${expires}</td>
+          <td><span class="badge ${codeStatus(c)}">${t('status_' + codeStatus(c))}</span></td>
+          <td>${c.is_active ? `<button class="btn btn-small" data-action="stop-code" data-id="${escapeHtml(c.id)}">${t('btn_stop')}</button>` : ''}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  function openCodes(id){
+    const c = myCourses.find(x => x.id === id);
+    if(!c) return;
+    activeCourse = c;
+    document.getElementById('codesTitle').textContent = t('discount_codes') + ' — ' + c.title;
+    document.getElementById('dCode').value = '';
+    document.getElementById('dValue').value = '';
+    document.getElementById('dMaxUses').value = 10;
+    document.getElementById('dExpires').value = '';
+    document.getElementById('dFormError').textContent = '';
+    goView('codes');
+    loadCodes();
+  }
+
+  async function loadCodes(){
+    const { data, error } = await sb.from('discount_codes').select('*').eq('course_id', activeCourse.id).order('created_at', { ascending: false });
+    if(error){ console.error(error); return; }
+    activeCodes = data || [];
+    renderCodes();
+  }
+
+  async function addCode(){
+    const errEl = document.getElementById('dFormError');
+    errEl.textContent = '';
+    const code = document.getElementById('dCode').value.trim().toUpperCase();
+    if(!code){ errEl.textContent = t('err_code_required'); return; }
+    const discountType = document.getElementById('dType').value;
+    const discountValue = Number(document.getElementById('dValue').value);
+    if(!discountValue || discountValue <= 0){ errEl.textContent = t('err_value_required'); return; }
+    const maxUses = Number(document.getElementById('dMaxUses').value) || 1;
+    const expiresLocal = document.getElementById('dExpires').value;
+    if(!expiresLocal){ errEl.textContent = t('err_expires_required'); return; }
+
+    try{
+      const { error } = await sb.from('discount_codes').insert({
+        course_id: activeCourse.id, code, discount_type: discountType, discount_value: discountValue,
+        max_uses: maxUses, expires_at: new Date(expiresLocal).toISOString(), created_by: currentUser.id
+      });
+      if(error) throw error;
+      document.getElementById('dCode').value = '';
+      document.getElementById('dValue').value = '';
+      loadCodes();
+    } catch(e){
+      errEl.textContent = t('err_save_failed') + e.message;
+    }
+  }
+
+  async function stopCode(id){
+    const { error } = await sb.from('discount_codes').update({ is_active: false }).eq('id', id);
+    if(error){ alert(t('alert_generic_failed') + error.message); return; }
+    loadCodes();
+  }
+
+  // ---- Profile ----
+  async function loadProfile(){
+    const { data: prof } = await sb.from('profiles')
+      .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_payment_method, teacher_payment_detail')
+      .eq('id', currentUser.id).maybeSingle();
+    if(!prof) return;
+    document.getElementById('pName').value = prof.full_name || '';
+    document.getElementById('pSpecialty').value = prof.teacher_specialty || '';
+    document.getElementById('pBio').value = prof.teacher_bio || '';
+    document.getElementById('pPhotoCurrent').textContent = prof.teacher_photo_url ? (t('current_file') + prof.teacher_photo_url) : '';
+    document.getElementById('pPayMethod').value = prof.teacher_payment_method || 'zain';
+    document.getElementById('pPayDetail').value = prof.teacher_payment_detail || '';
+  }
+
+  async function saveProfile(){
+    const errEl = document.getElementById('pFormError');
+    errEl.textContent = '';
+    const fullName = document.getElementById('pName').value.trim();
+    const specialty = document.getElementById('pSpecialty').value.trim();
+    const bio = document.getElementById('pBio').value.trim();
+    const payMethod = document.getElementById('pPayMethod').value;
+    const payDetail = document.getElementById('pPayDetail').value.trim();
+    const file = document.getElementById('pPhotoFile').files[0];
+
+    try{
+      let photoUrl;
+      if(file){
+        const path = `${currentUser.id}/avatar-${Date.now()}-${file.name}`;
+        const { error: upErr } = await sb.storage.from('course-thumbnails').upload(path, file);
+        if(upErr) throw upErr;
+        photoUrl = sb.storage.from('course-thumbnails').getPublicUrl(path).data.publicUrl;
+      }
+      const update = {
+        full_name: fullName, teacher_specialty: specialty, teacher_bio: bio,
+        teacher_payment_method: payMethod, teacher_payment_detail: payDetail
+      };
+      if(photoUrl) update.teacher_photo_url = photoUrl;
+      const { error } = await sb.from('profiles').update(update).eq('id', currentUser.id);
+      if(error) throw error;
+      document.getElementById('pPhotoFile').value = '';
+      loadProfile();
+    } catch(e){
+      errEl.textContent = t('err_save_failed') + e.message;
+    }
+  }
+
+  // ---- Boot ----
+  document.getElementById('logoutBtnDrawer').onclick = async () => {
+    await sb.auth.signOut();
+    window.location.href = 'index.html';
+  };
+
+  (async () => {
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ window.location.href = 'index.html'; return; }
+    const { data: prof } = await sb.from('profiles').select('is_teacher').eq('id', session.user.id).maybeSingle();
+    if(!prof || !prof.is_teacher){ window.location.href = 'index.html'; return; }
+    currentUser = session.user;
+
+    applyLang(currentLang);
+    goView('overview');
+    await loadCourses();
+    await loadProfile();
+  })();
+
+  // ---- Click dispatch (no inline onclick — CSP has no 'unsafe-inline' in script-src) ----
+  const CLICK_ACTIONS = {
+    'open-drawer': () => openDrawer(),
+    'close-drawer': () => closeDrawer(),
+    'toggle-theme': () => toggleTheme(),
+    'toggle-lang': () => toggleLang(),
+    'go-view': (el) => goView(el.dataset.view),
+    'new-course': () => newCourse(),
+    'open-course-edit': (el) => openCourseEdit(el.dataset.id),
+    'save-course': () => saveCourse(),
+    'submit-review': (el) => submitForReview(el.dataset.id, el.dataset.title),
+    'delete-course': (el) => deleteCourse(el.dataset.id, el.dataset.title),
+    'open-curriculum': (el) => openCurriculum(el.dataset.id),
+    'add-lecture': () => addLecture(),
+    'delete-lecture': (el) => deleteLecture(el.dataset.id),
+    'open-codes': (el) => openCodes(el.dataset.id),
+    'add-code': () => addCode(),
+    'stop-code': (el) => stopCode(el.dataset.id),
+    'save-profile': () => saveProfile()
+  };
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if(!el) return;
+    const handler = CLICK_ACTIONS[el.dataset.action];
+    if(!handler) return;
+    if(el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
+    handler(el, ev);
+  });
+</script>
+
+</body>
+</html>
