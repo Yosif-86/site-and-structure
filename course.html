@@ -135,6 +135,8 @@
   .pay-opt small{display:block; font-family:'IBM Plex Mono'; font-size:9.5px; color:var(--muted2); margin-top:4px; font-weight:400;}
   .err{color:var(--red); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
   .err.show{display:block;}
+  .msg-ok{color:var(--green); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
+  .msg-ok.show{display:block;}
   .success-box{text-align:center; padding:10px 0;}
   .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
   .modal-full-btn{width:100%; margin-top:4px;}
@@ -260,6 +262,9 @@
       enroll_free: 'Enroll for free', enroll: 'Enroll', by: 'By.',
       free_course_sub: 'Free course — access unlocked instantly after enrolling.',
       choose_payment_sub: ' — choose a payment method.',
+      discount_code_label: 'Discount code (optional)', discount_code_ph: 'e.g. SAVE20', apply: 'Apply',
+      err_enter_discount_code: 'Enter a code first.', err_invalid_discount: 'Invalid, expired, or already-used code.',
+      discount_applied: 'Code applied — new price: {price}',
       zain_cash: 'Zain Cash', zain_sub: 'Mobile wallet', qi_card: 'Qi Card', qi_sub: 'Card transfer',
       pay_label: 'Phone / card number', pay_ph_default: 'Select a payment method first',
       zain_label: 'Zain Cash number', zain_ph: '07XX XXX XXXX', qi_label: 'Qi Card number', qi_ph: 'XXXX XXXX XXXX XXXX',
@@ -292,6 +297,9 @@
       enroll_free: 'التسجيل مجانًا', enroll: 'التسجيل', by: 'بواسطة.',
       free_course_sub: 'دورة مجانية — يتم فتح الوصول فور التسجيل.',
       choose_payment_sub: ' — اختر طريقة الدفع.',
+      discount_code_label: 'كود الخصم (اختياري)', discount_code_ph: 'مثال: SAVE20', apply: 'تطبيق',
+      err_enter_discount_code: 'أدخل الكود أولاً.', err_invalid_discount: 'الكود غير صالح أو منتهي أو استُخدم من قبل.',
+      discount_applied: 'تم تطبيق الكود — السعر الجديد: {price}',
       zain_cash: 'زين كاش', zain_sub: 'محفظة إلكترونية', qi_card: 'كي كارد', qi_sub: 'تحويل بطاقة',
       pay_label: 'رقم الهاتف / البطاقة', pay_ph_default: 'اختر طريقة دفع أولًا',
       zain_label: 'رقم زين كاش', zain_ph: '07XX XXX XXXX', qi_label: 'رقم كي كارد', qi_ph: 'XXXX XXXX XXXX XXXX',
@@ -345,6 +353,8 @@
   let enrollment = null;
   let hasSession = false;
   let selectedPay = null;
+  let appliedDiscount = null;
+  let discountedPrice = null;
   let watermarkInterval = null;
 
   document.addEventListener('mousemove', (e) => {
@@ -536,6 +546,8 @@
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ renderAuth('login'); openModal('loginOverlay'); return; }
     selectedPay = null;
+    appliedDiscount = null;
+    discountedPrice = null;
     const body = document.getElementById('enrollBody');
     if(course.is_free){
       body.innerHTML = `
@@ -547,7 +559,16 @@
     } else {
       body.innerHTML = `
         <h3>${courseTitle()}</h3>
-        <p class="sub">${course.price}${t('choose_payment_sub')}</p>
+        <p class="sub" id="enrollPriceSub">${course.price}${t('choose_payment_sub')}</p>
+        <div class="field">
+          <label>${t('discount_code_label')}</label>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="discountCode" placeholder="${t('discount_code_ph')}" style="flex:1; text-transform:uppercase;">
+            <button class="btn" data-action="apply-discount">${t('apply')}</button>
+          </div>
+        </div>
+        <p class="err" id="discountErr"></p>
+        <p class="msg-ok" id="discountOk"></p>
         <div class="pay-options">
           <div class="pay-opt" id="opt-zain" data-action="choose-pay" data-method="zain">${t('zain_cash')}<small>${t('zain_sub')}</small></div>
           <div class="pay-opt" id="opt-qi" data-action="choose-pay" data-method="qi">${t('qi_card')}<small>${t('qi_sub')}</small></div>
@@ -559,6 +580,30 @@
       `;
     }
     openModal('enrollOverlay');
+  }
+
+  async function applyDiscountCode(){
+    const codeInput = document.getElementById('discountCode');
+    const err = document.getElementById('discountErr');
+    const ok = document.getElementById('discountOk');
+    err.classList.remove('show'); ok.classList.remove('show');
+    const code = codeInput.value.trim().toUpperCase();
+    if(!code){ err.textContent = t('err_enter_discount_code'); err.classList.add('show'); return; }
+    const { data, error } = await sb.rpc('redeem_discount_code', { p_code: code, p_course_id: course.id });
+    if(error || !data || data.length === 0){
+      err.textContent = t('err_invalid_discount'); err.classList.add('show');
+      return;
+    }
+    const { discount_type, discount_value } = data[0];
+    appliedDiscount = { code, discount_type, discount_value };
+    discountedPrice = discount_type === 'percent'
+      ? Math.max(0, Math.round(course.price * (1 - discount_value / 100)))
+      : Math.max(0, course.price - discount_value);
+    document.getElementById('enrollPriceSub').textContent = discountedPrice + t('choose_payment_sub');
+    ok.textContent = t('discount_applied').replace('{price}', discountedPrice);
+    ok.classList.add('show');
+    codeInput.disabled = true;
+    document.querySelector('[data-action="apply-discount"]').disabled = true;
   }
 
   function choosePay(method){
@@ -590,7 +635,8 @@
     if(uploadErr){ err.textContent = t('err_upload_failed') + uploadErr.message; err.classList.add('show'); return; }
     const { error } = await sb.from('enrollments').insert({ user_id: session.user.id, course_slug: course.slug, status: 'pending', payment_method: selectedPay, payment_detail: detail, payment_proof_path: filePath });
     if(error){ err.textContent = error.message; err.classList.add('show'); return; }
-    showEnrollSuccess(course.price + ' — ' + (selectedPay==='zain' ? t('zain_cash') : t('qi_card')));
+    const finalPrice = discountedPrice != null ? discountedPrice : course.price;
+    showEnrollSuccess(finalPrice + ' — ' + (selectedPay==='zain' ? t('zain_cash') : t('qi_card')));
   }
 
   function showEnrollSuccess(paymentInfo){
@@ -782,6 +828,7 @@
     'submit-forgot': () => submitForgotPassword(),
     'open-enroll': () => openEnroll(),
     'choose-pay': (el) => choosePay(el.dataset.method),
+    'apply-discount': () => applyDiscountCode(),
     'submit-free': () => submitFree(),
     'submit-pay': () => submitPay(),
     'watch-lecture': (el) => watchLecture(el.dataset.lectureId)
