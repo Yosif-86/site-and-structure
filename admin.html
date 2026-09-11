@@ -117,6 +117,11 @@
   .btn:hover{background:var(--panel2);}
   .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
   .btn-accent:hover{transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(201,78,31,0.5); background:var(--red);}
+  .copy-icon-btn{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--muted);
+    cursor:pointer; font-size:14px; padding:0; line-height:1; display:inline-flex; align-items:center; justify-content:center;
+  }
+  .copy-icon-btn:hover{background:var(--panel2); color:var(--text);}
 
   .section{padding:48px 0;}
   .section-head{margin-bottom:24px;}
@@ -238,7 +243,7 @@
     <div class="table-wrap">
       <table id="inviteTable">
         <thead>
-          <tr><th data-i18n="th_created">Created</th><th data-i18n="th_expires">Expires</th><th data-i18n="th_status">Status</th><th data-i18n="th_used_by">Used by</th><th></th></tr>
+          <tr><th data-i18n="th_created">Created</th><th data-i18n="th_expires">Expires</th><th data-i18n="th_status">Status</th><th data-i18n="th_used_by">Used by</th><th data-i18n="th_link">Link</th><th></th></tr>
         </thead>
         <tbody id="inviteBody"></tbody>
       </table>
@@ -307,7 +312,7 @@
       confirm_reject_course: 'Send "{title}" back to draft? The teacher can edit and resubmit it.',
       alert_review_failed: 'Failed: ', free_label: 'Free',
       teacher_access_tag: 'Teacher access', teacher_invites: 'Teacher invites', create_invite: '+ Create invite link',
-      th_created: 'Created', th_used_by: 'Used by', no_invites: 'No invites created yet.',
+      th_created: 'Created', th_expires: 'Expires', th_used_by: 'Used by', th_link: 'Link', no_invites: 'No invites created yet.',
       status_unused: 'Unused', status_used: 'Used', status_expired: 'Expired',
       invite_created: 'Invite link created — copy it and send it to the new teacher:', copy: 'Copy', copied: 'Copied',
       revoke: 'Revoke', confirm_revoke_invite: 'Revoke this invite? The link will stop working.',
@@ -335,7 +340,7 @@
       confirm_reject_course: 'إرجاع "{title}" إلى المسودة؟ يمكن للمدرس تعديلها وإعادة إرسالها.',
       alert_review_failed: 'فشل: ', free_label: 'مجاني',
       teacher_access_tag: 'وصول المدرسين', teacher_invites: 'دعوات المدرسين', create_invite: '+ إنشاء رابط دعوة',
-      th_created: 'تاريخ الإنشاء', th_used_by: 'استُخدم من', no_invites: 'لا توجد دعوات بعد.',
+      th_created: 'تاريخ الإنشاء', th_expires: 'ينتهي في', th_used_by: 'استُخدم من', th_link: 'الرابط', no_invites: 'لا توجد دعوات بعد.',
       status_unused: 'غير مستخدم', status_used: 'مستخدم', status_expired: 'منتهي',
       invite_created: 'تم إنشاء رابط الدعوة — انسخه وأرسله للمدرس الجديد:', copy: 'نسخ', copied: 'تم النسخ',
       revoke: 'إلغاء', confirm_revoke_invite: 'إلغاء هذه الدعوة؟ سيتوقف الرابط عن العمل.',
@@ -544,6 +549,11 @@
     return 'unused';
   }
 
+  function inviteLink(token){
+    const base = location.href.replace(/admin\.html.*$/, '');
+    return `${base}index.html?invite=${token}`;
+  }
+
   async function createInvite(){
     const box = document.getElementById('newInviteBox');
     try {
@@ -552,8 +562,7 @@
       const { data: { user } } = await sb.auth.getUser();
       const { error } = await sb.from('teacher_invites').insert({ token, created_by: user.id, expires_at: expiresAt });
       if(error) throw error;
-      const base = location.href.replace(/admin\.html.*$/, '');
-      const link = `${base}index.html?invite=${token}`;
+      const link = inviteLink(token);
       box.style.display = 'block';
       box.innerHTML = `
         <div style="padding:16px; border:1px solid var(--line); border-radius:12px; background:var(--panel2);">
@@ -571,9 +580,13 @@
 
   function copyInviteLink(el){
     navigator.clipboard.writeText(el.dataset.link).then(() => {
-      const original = el.textContent;
-      el.textContent = t('copied');
-      setTimeout(() => { el.textContent = original; }, 1500);
+      // Icon-only button: swap glyph + tooltip briefly rather than
+      // replacing it with text, so the row's copy icon stays put.
+      const original = el.innerHTML;
+      const originalTitle = el.title;
+      el.innerHTML = '&#10003;';
+      el.title = t('copied');
+      setTimeout(() => { el.innerHTML = original; el.title = originalTitle; }, 1500);
     });
   }
 
@@ -586,11 +599,11 @@
 
   async function loadInvites(){
     const { data: invites, error } = await sb.from('teacher_invites')
-      .select('id, created_at, expires_at, used_at, used_by')
+      .select('id, token, created_at, expires_at, used_at, used_by')
       .order('created_at', { ascending: false });
     const body = document.getElementById('inviteBody');
     if(error || !invites || invites.length === 0){
-      body.innerHTML = `<tr><td colspan="5" class="empty">${t('no_invites')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="6" class="empty">${t('no_invites')}</td></tr>`;
       return;
     }
     const usedByIds = [...new Set(invites.map(i => i.used_by).filter(Boolean))];
@@ -603,12 +616,14 @@
     body.innerHTML = invites.map(inv => {
       const status = inviteStatus(inv);
       const usedByName = inv.used_by ? (nameById[inv.used_by] || '—') : '—';
+      const link = inviteLink(inv.token);
       return `
         <tr>
           <td>${new Date(inv.created_at).toLocaleDateString()}</td>
           <td>${new Date(inv.expires_at).toLocaleDateString()}</td>
           <td><span class="status ${status}">${t('status_' + status)}</span></td>
           <td>${escapeHtml(usedByName)}</td>
+          <td>${status === 'unused' ? `<button class="copy-icon-btn" data-action="copy-invite-link" data-link="${escapeHtml(link)}" aria-label="${t('copy')}" title="${t('copy')}">&#128203;</button>` : '—'}</td>
           <td>${status === 'unused' ? `<button class="btn" data-action="revoke-invite" data-id="${escapeHtml(inv.id)}">${t('revoke')}</button>` : ''}</td>
         </tr>`;
     }).join('');
