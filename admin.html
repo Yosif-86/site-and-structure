@@ -254,6 +254,23 @@
 <section class="section">
   <div class="wrap">
     <div class="section-head">
+      <div class="section-tag" data-i18n="lecture_uploads_tag">Lecture processing</div>
+      <h2 data-i18n="pending_uploads">Pending lecture uploads</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="uploadTable">
+        <thead>
+          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_lecture">Lecture</th><th></th><th data-i18n="th_publish_video">Publish video</th></tr>
+        </thead>
+        <tbody id="uploadBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
       <div class="section-tag" data-i18n="account_sharing_watch">Account sharing watch</div>
       <h2 data-i18n="flagged_logins">Flagged logins</h2>
     </div>
@@ -316,7 +333,12 @@
       status_unused: 'Unused', status_used: 'Used', status_expired: 'Expired',
       invite_created: 'Invite link created — copy it and send it to the new teacher:', copy: 'Copy', copied: 'Copied',
       revoke: 'Revoke', confirm_revoke_invite: 'Revoke this invite? The link will stop working.',
-      alert_invite_failed: 'Failed to create invite: '
+      alert_invite_failed: 'Failed to create invite: ',
+      lecture_uploads_tag: 'Lecture processing', pending_uploads: 'Pending lecture uploads',
+      th_lecture: 'Lecture', th_publish_video: 'Publish video', no_pending_uploads: 'No pending lecture uploads.',
+      download: 'Download', alert_download_failed: 'Failed to load download link: ',
+      bunny_placeholder: 'Bunny video ID', r2_placeholder: 'R2 path', save_and_publish: 'Save & go live',
+      alert_publish_video_failed: 'Failed: ', alert_publish_video_empty: 'Enter a Bunny video ID or an R2 path first.'
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج',
@@ -344,7 +366,12 @@
       status_unused: 'غير مستخدم', status_used: 'مستخدم', status_expired: 'منتهي',
       invite_created: 'تم إنشاء رابط الدعوة — انسخه وأرسله للمدرس الجديد:', copy: 'نسخ', copied: 'تم النسخ',
       revoke: 'إلغاء', confirm_revoke_invite: 'إلغاء هذه الدعوة؟ سيتوقف الرابط عن العمل.',
-      alert_invite_failed: 'فشل إنشاء الدعوة: '
+      alert_invite_failed: 'فشل إنشاء الدعوة: ',
+      lecture_uploads_tag: 'معالجة المحاضرات', pending_uploads: 'رفوعات المحاضرات المعلّقة',
+      th_lecture: 'المحاضرة', th_publish_video: 'نشر الفيديو', no_pending_uploads: 'لا توجد رفوعات معلّقة.',
+      download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ',
+      bunny_placeholder: 'معرّف فيديو Bunny', r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
+      alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل معرّف فيديو Bunny أو مسار R2 أولاً.'
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -361,6 +388,7 @@
     if(typeof loadEnrollments === 'function') loadEnrollments();
     if(typeof loadReview === 'function') loadReview();
     if(typeof loadInvites === 'function') loadInvites();
+    if(typeof loadUploads === 'function') loadUploads();
     if(typeof loadFlagged === 'function') loadFlagged();
     if(typeof loadDevices === 'function') loadDevices();
   }
@@ -629,6 +657,61 @@
     }).join('');
   }
 
+  async function downloadUpload(path){
+    const { data, error } = await sb.storage.from('lecture-uploads').createSignedUrl(path, 300);
+    if(error){ alert(t('alert_download_failed') + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function publishVideo(id, bunnyInputEl, r2InputEl, uploadPath){
+    const bunnyVal = bunnyInputEl.value.trim();
+    const r2Val = r2InputEl.value.trim();
+    if(!bunnyVal && !r2Val){ alert(t('alert_publish_video_empty')); return; }
+    const update = { pending_upload_path: null };
+    if(bunnyVal) update.bunny_video_id = bunnyVal;
+    if(r2Val) update.r2_path = r2Val;
+    const { error } = await sb.from('lectures').update(update).eq('id', id);
+    if(error){ alert(t('alert_publish_video_failed') + error.message); return; }
+    // Raw source video has been processed into R2/Bunny — the copy sitting
+    // in lecture-uploads is now redundant, so remove it (storage RLS grants
+    // admins delete on this bucket specifically for this cleanup step).
+    if(uploadPath){ await sb.storage.from('lecture-uploads').remove([uploadPath]); }
+    loadUploads();
+  }
+
+  async function loadUploads(){
+    const { data: pending, error } = await sb.from('lectures')
+      .select('id, title, course_id, pending_upload_path')
+      .not('pending_upload_path', 'is', null)
+      .order('order_index');
+    const body = document.getElementById('uploadBody');
+    if(error || !pending || pending.length === 0){
+      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_pending_uploads')}</td></tr>`;
+      return;
+    }
+    const courseIds = [...new Set(pending.map(l => l.course_id).filter(Boolean))];
+    const { data: courses } = courseIds.length
+      ? await sb.from('courses').select('id, title').in('id', courseIds)
+      : { data: [] };
+    const titleById = {};
+    (courses || []).forEach(c => { titleById[c.id] = c.title; });
+
+    body.innerHTML = pending.map(l => {
+      const courseTitle = titleById[l.course_id] || '—';
+      return `
+        <tr>
+          <td>${escapeHtml(courseTitle)}</td>
+          <td>${escapeHtml(l.title)}</td>
+          <td><button class="btn" data-action="download-upload" data-path="${escapeHtml(l.pending_upload_path)}">${t('download')}</button></td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <input type="text" class="bunny-input" placeholder="${t('bunny_placeholder')}" style="width:130px; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px;">
+            <input type="text" class="r2-input" placeholder="${t('r2_placeholder')}" style="width:130px; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px;">
+            <button class="btn btn-accent" data-action="publish-video" data-id="${escapeHtml(l.id)}" data-path="${escapeHtml(l.pending_upload_path)}">${t('save_and_publish')}</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
   async function loadFlagged(){
     const { data: flagged } = await sb.from('login_events')
       .select('email, city, country, distance_km, created_at')
@@ -718,6 +801,7 @@
     loadEnrollments();
     loadReview();
     loadInvites();
+    loadUploads();
     loadFlagged();
     loadDevices();
   })();
@@ -746,7 +830,12 @@
     'reject-course': (el) => rejectCourse(el.dataset.id, el.dataset.title),
     'create-invite': () => createInvite(),
     'copy-invite-link': (el) => copyInviteLink(el),
-    'revoke-invite': (el) => revokeInvite(el.dataset.id)
+    'revoke-invite': (el) => revokeInvite(el.dataset.id),
+    'download-upload': (el) => downloadUpload(el.dataset.path),
+    'publish-video': (el) => {
+      const row = el.closest('tr');
+      publishVideo(el.dataset.id, row.querySelector('.bunny-input'), row.querySelector('.r2-input'), el.dataset.path);
+    }
   };
   document.addEventListener('click', (ev) => {
     const el = ev.target.closest('[data-action]');
