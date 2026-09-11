@@ -334,6 +334,8 @@
     const btn = document.getElementById('langToggle');
     if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    const loginOverlay = document.getElementById('loginOverlay');
+    if(loginOverlay && loginOverlay.classList.contains('active')) renderAuth(lastAuthMode);
     if(!slug){
       const el = document.getElementById('content');
       if(el) el.innerHTML = `<p class="empty" style="padding:60px 0;">${t('no_course_specified')}</p>`;
@@ -353,6 +355,7 @@
   let enrollment = null;
   let hasSession = false;
   let selectedPay = null;
+  let lastAuthMode = 'login';
   let appliedDiscount = null;
   let discountedPrice = null;
   let watermarkInterval = null;
@@ -387,6 +390,7 @@
   document.getElementById('loginBtn').onclick = () => { closeDrawer(); renderAuth('login'); openModal('loginOverlay'); };
 
   function renderAuth(mode){
+    lastAuthMode = mode;
     const body = document.getElementById('authBody');
     if(mode === 'login'){
       body.innerHTML = `
