@@ -327,7 +327,7 @@
       label_specialty: 'Specialty', label_bio: 'Short bio', label_photo: 'Photo',
       private_payment: 'Private payment details', payment_hint: 'Never shown to students — used only when one of your courses is set to pay you directly.',
       label_payment_method: 'Method', zain_cash: 'Zain Cash', qi_card: 'Qi Card', label_payment_detail: 'Number',
-      alert_generic_failed: 'Something went wrong: ', current_file: 'Current: '
+      alert_generic_failed: 'Something went wrong: ', current_file: 'Current: ', free_label: 'Free'
     },
     ar: {
       tagline: 'لوحة المدرس', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج', menu: 'القائمة',
@@ -361,7 +361,7 @@
       label_specialty: 'التخصص', label_bio: 'نبذة قصيرة', label_photo: 'الصورة',
       private_payment: 'بيانات الدفع الخاصة', payment_hint: 'لا تظهر للطلاب أبدًا — تُستخدم فقط عند ضبط إحدى دوراتك للدفع لك مباشرة.',
       label_payment_method: 'الطريقة', zain_cash: 'زين كاش', qi_card: 'كي كارد', label_payment_detail: 'الرقم',
-      alert_generic_failed: 'حدث خطأ: ', current_file: 'الحالي: '
+      alert_generic_failed: 'حدث خطأ: ', current_file: 'الحالي: ', free_label: 'مجاني'
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -457,7 +457,7 @@
             <h3>${escapeHtml(c.title)}</h3>
             <div class="course-meta">
               <span class="badge ${escapeHtml(c.status)}">${courseStatusLabel(c.status)}</span>
-              &nbsp; ${c.is_free ? t('card_free') || 'Free' : escapeHtml(String(c.price))}
+              &nbsp; ${c.is_free ? t('free_label') : escapeHtml(String(c.price))}
             </div>
             <div class="course-actions">
               ${canEdit ? `<button class="btn btn-small" data-action="open-course-edit" data-id="${escapeHtml(c.id)}">${t('btn_edit')}</button>` : ''}

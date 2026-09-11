@@ -283,7 +283,7 @@
       th_teacher: 'Teacher', th_price: 'Price', no_pending_courses: 'No courses waiting for review.',
       publish: 'Publish', reject: 'Send back',
       confirm_reject_course: 'Send "{title}" back to draft? The teacher can edit and resubmit it.',
-      alert_review_failed: 'Failed: '
+      alert_review_failed: 'Failed: ', free_label: 'Free'
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج',
@@ -305,7 +305,7 @@
       th_teacher: 'المدرس', th_price: 'السعر', no_pending_courses: 'لا توجد دورات بانتظار المراجعة.',
       publish: 'نشر', reject: 'إرجاع',
       confirm_reject_course: 'إرجاع "{title}" إلى المسودة؟ يمكن للمدرس تعديلها وإعادة إرسالها.',
-      alert_review_failed: 'فشل: '
+      alert_review_failed: 'فشل: ', free_label: 'مجاني'
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -494,7 +494,7 @@
         <tr>
           <td>${escapeHtml(c.title)}</td>
           <td>${escapeHtml(teacherName)}</td>
-          <td>${c.is_free ? t('card_free') || 'Free' : escapeHtml(String(c.price))}</td>
+          <td>${c.is_free ? t('free_label') : escapeHtml(String(c.price))}</td>
           <td style="display:flex; gap:8px;">
             <button class="btn btn-accent" data-action="publish-course" data-id="${jsArg(c.id)}">${t('publish')}</button>
             <button class="btn" data-action="reject-course" data-id="${jsArg(c.id)}" data-title="${jsArg(c.title)}">${t('reject')}</button>
