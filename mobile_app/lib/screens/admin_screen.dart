@@ -1,5 +1,5 @@
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
@@ -159,10 +159,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   Future<void> _viewProof(String path) async {
     final t = AppStrings.instance.t;
     try {
+      // Short-lived signed URL, opened only inside the app's own WebView —
+      // never handed to an external browser/app, so it's never sitting in a
+      // browser address bar, history, or share sheet.
       final signedUrl = await SupabaseService.instance.client.storage.from('payment-proofs').createSignedUrl(path, 60);
-      final uri = Uri.parse(signedUrl);
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched) _showError('${t('alert_proof_failed')}could not open browser');
+      if (!mounted) return;
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ProofViewerScreen(url: signedUrl)));
     } catch (e) {
       _showError('${t('alert_proof_failed')}$e');
     }
@@ -427,6 +429,50 @@ class _StatusChip extends StatelessWidget {
       child: Text(
         (isActive ? activeLabel : pendingLabel).toUpperCase(),
         style: AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
+      ),
+    );
+  }
+}
+
+/// Shows a payment-proof screenshot in-app via WebView instead of handing
+/// the signed URL to an external browser — the URL never sits in a browser
+/// address bar, history, or share sheet, and it expires in 60s regardless.
+/// Renders images directly (the common case); a PDF proof falls back to
+/// whatever the system WebView does with a bare PDF URL, which varies by
+/// device — acceptable since screenshots are the overwhelming majority.
+class _ProofViewerScreen extends StatefulWidget {
+  final String url;
+  const _ProofViewerScreen({required this.url});
+
+  @override
+  State<_ProofViewerScreen> createState() => _ProofViewerScreenState();
+}
+
+class _ProofViewerScreenState extends State<_ProofViewerScreen> {
+  late final WebViewController _controller;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(NavigationDelegate(
+        onPageFinished: (_) { if (mounted) setState(() => _loading = false); },
+      ))
+      ..loadRequest(Uri.parse(widget.url));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_loading) const Center(child: CircularProgressIndicator()),
+        ],
       ),
     );
   }
