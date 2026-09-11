@@ -104,6 +104,7 @@
   .form-error{color:var(--red); font-size:13px; margin-top:10px;}
   .empty{color:var(--muted); font-size:14px; padding:16px 0;}
 
+  .table-wrap{overflow-x:auto;}
   table{width:100%; border-collapse:collapse; margin-top:4px;}
   th, td{text-align:left; padding:9px 10px; font-size:13px; border-bottom:1px solid var(--line);}
   th{font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px;}
@@ -300,6 +301,7 @@
       status_draft: 'Draft', status_pending_review: 'Pending review', status_published: 'Published',
       btn_edit: 'Edit', btn_curriculum: 'Curriculum', btn_codes: 'Codes', btn_submit_review: 'Submit for review', btn_delete: 'Delete',
       confirm_delete_course: 'Delete "{title}"? This cannot be undone.',
+      confirm_revoke_code: 'Revoke code "{code}"? It will stop working immediately.',
       confirm_submit_review: 'Submit "{title}" for review? You won\'t be able to edit it until it\'s approved or sent back.',
       edit_course: 'Edit course', new_course_title: 'New course',
       label_course_title: 'Title', label_course_desc: 'Description', label_thumbnail: 'Thumbnail image',
@@ -318,7 +320,7 @@
       opt_percent: 'Percentage off', opt_fixed: 'Fixed amount off', label_discount_value: 'Value',
       label_max_uses: 'Max uses', label_expires: 'Expires', btn_create: 'Create code',
       err_code_required: 'Enter a code.', err_value_required: 'Enter a value.', err_expires_required: 'Set an expiry date.',
-      status_active: 'Active', status_inactive: 'Stopped', btn_stop: 'Stop early',
+      status_active: 'Active', status_inactive: 'Revoked', btn_stop: 'Revoke',
       teacher_profile: 'Teacher profile', public_info: 'Public info', label_fullname: 'Full name',
       label_specialty: 'Specialty', label_bio: 'Short bio', label_photo: 'Photo',
       private_payment: 'Private payment details', payment_hint: 'Never shown to students — used only when one of your courses is set to pay you directly.',
@@ -334,6 +336,7 @@
       status_draft: 'مسودة', status_pending_review: 'قيد المراجعة', status_published: 'منشورة',
       btn_edit: 'تعديل', btn_curriculum: 'المنهج', btn_codes: 'أكواد الخصم', btn_submit_review: 'إرسال للمراجعة', btn_delete: 'حذف',
       confirm_delete_course: 'حذف "{title}"؟ لا يمكن التراجع عن هذا.',
+      confirm_revoke_code: 'إلغاء الكود "{code}"؟ سيتوقف عن العمل فورًا.',
       confirm_submit_review: 'إرسال "{title}" للمراجعة؟ لن تتمكن من تعديلها حتى تتم الموافقة عليها أو إعادتها.',
       edit_course: 'تعديل الدورة', new_course_title: 'دورة جديدة',
       label_course_title: 'العنوان', label_course_desc: 'الوصف', label_thumbnail: 'صورة الدورة',
@@ -352,7 +355,7 @@
       opt_percent: 'نسبة مئوية', opt_fixed: 'مبلغ ثابت', label_discount_value: 'القيمة',
       label_max_uses: 'الحد الأقصى للاستخدام', label_expires: 'تاريخ الانتهاء', btn_create: 'إنشاء الكود',
       err_code_required: 'أدخل كودًا.', err_value_required: 'أدخل قيمة.', err_expires_required: 'حدد تاريخ انتهاء.',
-      status_active: 'فعال', status_inactive: 'متوقف', btn_stop: 'إيقاف مبكر',
+      status_active: 'فعال', status_inactive: 'ملغى', btn_stop: 'إلغاء',
       teacher_profile: 'الملف الشخصي للمدرس', public_info: 'معلومات عامة', label_fullname: 'الاسم الكامل',
       label_specialty: 'التخصص', label_bio: 'نبذة قصيرة', label_photo: 'الصورة',
       private_payment: 'بيانات الدفع الخاصة', payment_hint: 'لا تظهر للطلاب أبدًا — تُستخدم فقط عند ضبط إحدى دوراتك للدفع لك مباشرة.',
@@ -652,7 +655,7 @@
           <td>${c.used_count} / ${c.max_uses}</td>
           <td>${expires}</td>
           <td><span class="badge ${codeStatus(c)}">${t('status_' + codeStatus(c))}</span></td>
-          <td>${c.is_active ? `<button class="btn btn-small" data-action="stop-code" data-id="${escapeHtml(c.id)}">${t('btn_stop')}</button>` : ''}</td>
+          <td>${c.is_active ? `<button class="btn btn-small" data-action="stop-code" data-id="${escapeHtml(c.id)}" data-code="${escapeHtml(c.code)}">${t('btn_stop')}</button>` : ''}</td>
         </tr>`;
     }).join('');
   }
@@ -704,7 +707,8 @@
     }
   }
 
-  async function stopCode(id){
+  async function stopCode(id, code){
+    if(!confirm(t('confirm_revoke_code').replace('{code}', code))) return;
     const { error } = await sb.from('discount_codes').update({ is_active: false }).eq('id', id);
     if(error){ alert(t('alert_generic_failed') + error.message); return; }
     loadCodes();
@@ -792,7 +796,7 @@
     'delete-lecture': (el) => deleteLecture(el.dataset.id),
     'open-codes': (el) => openCodes(el.dataset.id),
     'add-code': () => addCode(),
-    'stop-code': (el) => stopCode(el.dataset.id),
+    'stop-code': (el) => stopCode(el.dataset.id, el.dataset.code),
     'save-profile': () => saveProfile()
   };
   document.addEventListener('click', (ev) => {
