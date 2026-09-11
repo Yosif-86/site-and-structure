@@ -71,7 +71,7 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
       final profiles = await sb.from('profiles').select('id, full_name, phone');
       final enrollments = await sb
           .from('enrollments')
-          .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at')
+          .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at, approved_by, approved_at')
           .order('created_at', ascending: false);
       final flagged = await sb
           .from('login_events')
@@ -131,7 +131,12 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
   Future<void> _approve(String enrollmentId) async {
     final t = AppStrings.instance.t;
     try {
-      await SupabaseService.instance.client.from('enrollments').update({'status': 'active'}).eq('id', enrollmentId);
+      final adminId = SupabaseService.instance.currentUser?.id;
+      await SupabaseService.instance.client.from('enrollments').update({
+        'status': 'active',
+        'approved_by': adminId,
+        'approved_at': DateTime.now().toIso8601String(),
+      }).eq('id', enrollmentId);
       await _loadAll();
     } catch (e) {
       _showError('${t('alert_approve_failed')}$e');
@@ -279,6 +284,8 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
             ? '${e['payment_method']}${e['payment_detail'] != null ? ' — ${e['payment_detail']}' : ''}'
             : '—';
         final createdAt = DateTime.tryParse(e['created_at'] as String? ?? '');
+        final approvedBy = e['approved_by'] as String?;
+        final approvedAt = DateTime.tryParse(e['approved_at'] as String? ?? '');
         return _AdminCard(
           children: [
             Row(
@@ -298,6 +305,14 @@ class _AdminScreenState extends State<AdminScreen> with SingleTickerProviderStat
               padding: const EdgeInsets.only(top: 2),
               child: Text('$payment${createdAt != null ? ' · ${createdAt.toLocal().toString().split(' ').first}' : ''}', style: AppFonts.mono(size: 10.5)),
             ),
+            if (approvedBy != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  '${t('approved_by')}: ${_emailByUser[approvedBy] ?? approvedBy}${approvedAt != null ? ' · ${approvedAt.toLocal()}' : ''}',
+                  style: AppFonts.mono(size: 10.5, color: AppColors.teal),
+                ),
+              ),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,

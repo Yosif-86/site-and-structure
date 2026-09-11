@@ -198,7 +198,7 @@
           <tr>
             <th data-i18n="th_email">Email</th><th data-i18n="th_name">Name</th><th data-i18n="th_phone">Phone</th>
             <th data-i18n="th_course">Course</th><th data-i18n="th_status">Status</th><th data-i18n="th_payment">Payment</th>
-            <th data-i18n="th_enrolled">Enrolled</th><th></th>
+            <th data-i18n="th_enrolled">Enrolled</th><th data-i18n="th_approved_by">Approved by</th><th></th>
           </tr>
         </thead>
         <tbody id="enrollBody"></tbody>
@@ -250,7 +250,7 @@
       tagline: 'ADMIN DASHBOARD', nav_home: 'Home', log_out: 'Log out',
       menu: 'Menu', enrollments: 'Enrollments', students_courses: 'Students & courses',
       th_email: 'Email', th_name: 'Name', th_phone: 'Phone', th_course: 'Course', th_status: 'Status',
-      th_payment: 'Payment', th_enrolled: 'Enrolled', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
+      th_payment: 'Payment', th_enrolled: 'Enrolled', th_approved_by: 'Approved by', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
       account_sharing_watch: 'Account sharing watch', flagged_logins: 'Flagged logins',
       status_active: 'Active', status_pending: 'Pending',
       view_proof: 'View proof', approve: 'Approve', remove: 'Remove',
@@ -267,7 +267,7 @@
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', log_out: 'تسجيل الخروج',
       menu: 'القائمة', enrollments: 'التسجيلات', students_courses: 'الطلاب والدورات',
       th_email: 'البريد الإلكتروني', th_name: 'الاسم', th_phone: 'الهاتف', th_course: 'الدورة', th_status: 'الحالة',
-      th_payment: 'الدفع', th_enrolled: 'تاريخ التسجيل', th_city: 'المدينة', th_country: 'الدولة', th_distance: 'المسافة', th_when: 'الوقت',
+      th_payment: 'الدفع', th_enrolled: 'تاريخ التسجيل', th_approved_by: 'وافق عليه', th_city: 'المدينة', th_country: 'الدولة', th_distance: 'المسافة', th_when: 'الوقت',
       account_sharing_watch: 'مراقبة مشاركة الحساب', flagged_logins: 'تسجيلات دخول مشبوهة',
       status_active: 'مفعّل', status_pending: 'قيد الانتظار',
       view_proof: 'عرض الإثبات', approve: 'موافقة', remove: 'إزالة',
@@ -352,7 +352,10 @@
   };
 
   async function approve(enrollmentId){
-    const { error } = await sb.from('enrollments').update({ status: 'active' }).eq('id', enrollmentId);
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('enrollments')
+      .update({ status: 'active', approved_by: user?.id ?? null, approved_at: new Date().toISOString() })
+      .eq('id', enrollmentId);
     if(error){ alert(t('alert_approve_failed') + error.message); return; }
     loadEnrollments();
   }
@@ -376,7 +379,7 @@
   async function loadEnrollments(){
     const { data: profiles } = await sb.from('profiles').select('id, full_name, phone');
     const { data: enrollments } = await sb.from('enrollments')
-      .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at')
+      .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at, approved_by, approved_at')
       .order('created_at', { ascending: false });
     const { data: logins } = await sb.from('login_events')
       .select('user_id, email, created_at')
@@ -389,7 +392,7 @@
 
     const body = document.getElementById('enrollBody');
     if(!enrollments || enrollments.length === 0){
-      body.innerHTML = `<tr><td colspan="8" class="empty">${t('no_enrollments')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="9" class="empty">${t('no_enrollments')}</td></tr>`;
       return;
     }
 
@@ -402,6 +405,10 @@
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       const payment = e.payment_method ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : '')) : '—';
+      const approvedByEmail = e.approved_by ? (emailByUser[e.approved_by] || e.approved_by) : null;
+      const approvedCell = approvedByEmail
+        ? `${escapeHtml(approvedByEmail)}<br><span style="color:var(--muted2); font-size:11px;">${new Date(e.approved_at).toLocaleString()}</span>`
+        : '—';
       // onclick args are attribute-quoted with double quotes below and
       // escaped as HTML, since escapeHtml alone doesn't neutralize a lone
       // single quote breaking out of a '...' JS string inside onclick.
@@ -415,6 +422,7 @@
           <td><span class="status ${isActive ? 'active' : 'pending'}">${isActive ? t('status_active') : t('status_pending')}</span></td>
           <td>${escapeHtml(payment)}</td>
           <td>${date}</td>
+          <td>${approvedCell}</td>
           <td style="display:flex; gap:8px;">
             ${e.payment_proof_path ? `<button class="btn" onclick="viewProof(&quot;${jsArg(e.payment_proof_path)}&quot;)">${t('view_proof')}</button>` : ''}
             ${isActive ? '' : `<button class="btn btn-accent" onclick="approve(&quot;${jsArg(e.id)}&quot;)">${t('approve')}</button>`}
