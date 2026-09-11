@@ -265,11 +265,14 @@
       btn_close: 'Close',
       auth_login_title: 'Log in', auth_login_sub: 'Access your enrolled courses.',
       label_email: 'Email', ph_email: 'you@email.com', label_password: 'Password', ph_password: '••••••••',
-      no_account: 'No account?', sign_up: 'Sign up',
+      no_account: 'No account?', sign_up: 'Sign up', forgot_password: 'Forgot password?',
       auth_signup_title: 'Sign up', auth_signup_sub: 'Create your account.',
       label_fullname: 'Full name', ph_fullname: 'Your name', label_phone: 'Phone number', ph_phone: '07XX XXX XXXX',
       ph_password_signup: 'At least 6 characters', already_account: 'Already have an account?',
-      err_enter_email_pass: 'Enter your email and password.',
+      auth_forgot_title: 'Reset password', auth_forgot_sub: "We'll email you a link to set a new password.",
+      btn_send_reset: 'Send reset link', back_to_login: 'Back to log in',
+      success_email_title: 'Check your email', success_email_sub: 'If an account exists for that email, a reset link is on its way.',
+      err_enter_email: 'Enter your email.', err_enter_email_pass: 'Enter your email and password.',
       err_device_limit: 'This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.',
       err_fill_fields: 'Fill in all fields.', err_pass_length: 'Password must be at least 6 characters.',
       err_choose_payment: 'Choose a payment method and enter your details.', err_upload_proof: 'Upload a screenshot of your payment.',
@@ -294,11 +297,14 @@
       btn_close: 'إغلاق',
       auth_login_title: 'تسجيل الدخول', auth_login_sub: 'الوصول إلى الدورات المسجَّل بها.',
       label_email: 'البريد الإلكتروني', ph_email: 'you@email.com', label_password: 'كلمة المرور', ph_password: '••••••••',
-      no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب',
+      no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب', forgot_password: 'نسيت كلمة المرور؟',
       auth_signup_title: 'إنشاء حساب', auth_signup_sub: 'أنشئ حسابك.',
       label_fullname: 'الاسم الكامل', ph_fullname: 'اسمك', label_phone: 'رقم الهاتف', ph_phone: '07XX XXX XXXX',
       ph_password_signup: '٦ أحرف على الأقل', already_account: 'لديك حساب بالفعل؟',
-      err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
+      auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
+      btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
+      success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
+      err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
       err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهازين (الحد الأقصى المسموح). تواصل مع الدعم لتحرير أحد الأجهزة.',
       err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
       err_choose_payment: 'اختر طريقة دفع وأدخل بياناتك.', err_upload_proof: 'ارفع لقطة شاشة لعملية الدفع.',
@@ -376,9 +382,12 @@
         <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password')}"></div>
         <p class="err" id="authErr"></p>
         <button class="btn btn-accent modal-full-btn" data-action="submit-login">${t('auth_login_title')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">${t('no_account')} <a href="#" data-action="auth-mode" data-mode="signup" style="color:var(--yellow);">${t('sign_up')}</a></p>
+        <p class="sub" style="margin-top:14px; text-align:center;">
+          <a href="#" data-action="auth-mode" data-mode="forgot" style="color:var(--muted);">${t('forgot_password')}</a>
+        </p>
+        <p class="sub" style="margin-top:6px; text-align:center;">${t('no_account')} <a href="#" data-action="auth-mode" data-mode="signup" style="color:var(--yellow);">${t('sign_up')}</a></p>
       `;
-    } else {
+    } else if(mode === 'signup'){
       body.innerHTML = `
         <h3>${t('auth_signup_title')}</h3>
         <p class="sub">${t('auth_signup_sub')}</p>
@@ -390,7 +399,32 @@
         <button class="btn btn-accent modal-full-btn" data-action="submit-signup">${t('auth_signup_title')}</button>
         <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
       `;
+    } else if(mode === 'forgot'){
+      body.innerHTML = `
+        <h3>${t('auth_forgot_title')}</h3>
+        <p class="sub">${t('auth_forgot_sub')}</p>
+        <div class="field"><label>${t('label_email')}</label><input type="email" id="forgotEmail" placeholder="${t('ph_email')}"></div>
+        <p class="err" id="authErr"></p>
+        <button class="btn btn-accent modal-full-btn" data-action="submit-forgot">${t('btn_send_reset')}</button>
+        <p class="sub" style="margin-top:14px; text-align:center;"><a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('back_to_login')}</a></p>
+      `;
     }
+  }
+
+  async function submitForgotPassword(){
+    const email = document.getElementById('forgotEmail').value.trim();
+    if(!email){ showAuthErr(t('err_enter_email')); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/reset-password.html'
+    });
+    if(error){ showAuthErr(error.message); return; }
+    document.getElementById('authBody').innerHTML = `
+      <div class="success-box">
+        <div class="check">&#10003;</div>
+        <h3>${t('success_email_title')}</h3>
+        <p class="sub">${t('success_email_sub')}</p>
+        <button class="btn btn-close modal-full-btn" data-action="close-modal" data-modal="loginOverlay">${t('btn_close')}</button>
+      </div>`;
   }
 
   function showAuthErr(msg){
@@ -734,6 +768,7 @@
     'auth-mode': (el) => renderAuth(el.dataset.mode),
     'submit-login': () => submitLogin(),
     'submit-signup': () => submitSignup(),
+    'submit-forgot': () => submitForgotPassword(),
     'open-enroll': () => openEnroll(),
     'choose-pay': (el) => choosePay(el.dataset.method),
     'submit-free': () => submitFree(),
