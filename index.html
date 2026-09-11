@@ -336,6 +336,8 @@
       success_email_title: 'Check your email', success_email_sub: 'If an account exists for that email, a reset link is on its way.',
       success_account_title: 'Account created', success_account_sub: "You're signed up and logged in.",
       btn_close: 'Close',
+      invite_invalid_title: 'Invite link no longer valid',
+      invite_invalid_sub: 'This teacher invite has already been used, revoked, or expired. Ask for a new one.',
       alert_kicked: 'You were logged out because your account was used to log in on another device.',
       err_enter_email: 'Enter your email.', err_enter_email_pass: 'Enter your email and password.',
       err_device_limit: 'This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.',
@@ -368,6 +370,8 @@
       success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
       success_account_title: 'تم إنشاء الحساب', success_account_sub: 'تم تسجيلك وتسجيل دخولك بنجاح.',
       btn_close: 'إغلاق',
+      invite_invalid_title: 'رابط الدعوة غير صالح',
+      invite_invalid_sub: 'تم استخدام هذه الدعوة مسبقًا أو إلغاؤها أو انتهت صلاحيتها. اطلب رابطًا جديدًا.',
       alert_kicked: 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
       err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
       err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهازين (الحد الأقصى المسموح). تواصل مع الدعم لتحرير أحد الأجهزة.',
@@ -536,7 +540,34 @@
   document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
 
   let lastAuthMode = 'login';
-  if(inviteToken){ renderAuth('signup'); openModal('loginOverlay'); }
+  // Validate the token server-side before ever showing the signup form —
+  // found live: without this, a revoked/expired/used link still opened the
+  // exact same signup modal as a valid one, since the only real check
+  // previously happened after signup completed (redeem_teacher_invite()
+  // silently failing to grant teacher status). That's still the correct
+  // failsafe — a dead token must never block account creation — but seeing
+  // the same form either way looked like revoking had no effect.
+  if(inviteToken){
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if(session) return; // already have an account — nothing to invite them into
+      return sb.rpc('is_teacher_invite_valid', { p_token: inviteToken });
+    }).then((result) => {
+      if(!result) return;
+      const valid = result.data;
+      openModal('loginOverlay');
+      if(valid){
+        renderAuth('signup');
+      } else {
+        document.getElementById('authBody').innerHTML = `
+          <div class="success-box">
+            <div class="check" style="border-color:var(--red); color:var(--red);">&#9888;</div>
+            <h3>${t('invite_invalid_title')}</h3>
+            <p class="sub">${t('invite_invalid_sub')}</p>
+            <button class="btn btn-close modal-full-btn" data-action="close-modal" data-modal="loginOverlay">${t('btn_close')}</button>
+          </div>`;
+      }
+    });
+  }
   function renderAuth(mode){
     lastAuthMode = mode;
     const body = document.getElementById('authBody');
