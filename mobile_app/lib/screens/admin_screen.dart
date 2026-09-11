@@ -456,11 +456,30 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
   void initState() {
     super.initState();
     _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(NavigationDelegate(
         onPageFinished: (_) { if (mounted) setState(() => _loading = false); },
       ))
-      ..loadRequest(Uri.parse(widget.url));
+      // Loading the bare image URL directly renders it at native pixel
+      // size with no viewport, which is why a real phone-camera screenshot
+      // opened zoomed in far past the screen. Wrapping it in a tiny HTML
+      // page with a viewport + fit-to-width CSS makes it open already
+      // fitted, while pinch-to-zoom-in still works via the viewport's
+      // maximum-scale.
+      ..loadHtmlString('''
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<style>
+  html, body { margin:0; padding:0; background:#000; height:100%; display:flex; align-items:center; justify-content:center; }
+  img { max-width:100%; max-height:100vh; width:auto; height:auto; object-fit:contain; }
+</style>
+</head>
+<body><img src="${widget.url}"></body>
+</html>
+''');
   }
 
   @override
