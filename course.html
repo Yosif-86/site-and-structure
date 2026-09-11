@@ -333,6 +333,7 @@
   let course = null;
   let lectures = [];
   let enrollment = null;
+  let hasSession = false;
   let selectedPay = null;
   let watermarkInterval = null;
 
@@ -493,7 +494,9 @@
 
   function courseTitle(){ return (currentLang === 'ar' && course.title_ar) || course.title; }
 
-  function openEnroll(){
+  async function openEnroll(){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session){ renderAuth('login'); openModal('loginOverlay'); return; }
     selectedPay = null;
     const body = document.getElementById('enrollBody');
     if(course.is_free){
@@ -648,7 +651,7 @@
     const lectureRows = lectures.length === 0
       ? `<p class="empty">${t('no_lectures')}</p>`
       : lectures.map(l => {
-          const unlocked = l.is_free || isActive;
+          const unlocked = l.is_free || isActive || !hasSession;
           const lTitle = (isAr && l.title_ar) || l.title;
           return `
             <div class="lecture">
@@ -704,6 +707,7 @@
       lectures = lectureData || [];
 
       const { data:{ session } } = await sb.auth.getSession();
+      hasSession = !!session;
       if(session){
         const { data: enr } = await sb.from('enrollments').select('status').eq('user_id', session.user.id).eq('course_slug', course.slug).maybeSingle();
         enrollment = enr;
