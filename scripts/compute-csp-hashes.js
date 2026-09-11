@@ -61,16 +61,12 @@ const BUNNY_EMBED_ORIGIN = 'https://iframe.mediadelivery.net';
 const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com';
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com';
 
-// >>> ACTION FOR YOSIF: narrow this one. <<<
-// The Cloudflare Worker that serves the newer R2/HLS lectures. Its real
-// hostname only exists in the Vercel env var R2_WORKER_BASE_URL (see
-// worker/README.md step 6-7), so it is not in this repo and this script
-// cannot read it. The wildcard below keeps video working, but it also lets
-// the pages talk to *any* workers.dev subdomain. Once you have the exact URL
-// from `npx wrangler deploy`, replace it with the specific origin, e.g.
-//   const R2_WORKER_ORIGIN = 'https://site-structure-videos.yosif.workers.dev';
-// then re-run this script with --write.
-const R2_WORKER_ORIGIN = 'https://*.workers.dev';
+// The Cloudflare Worker that serves the newer R2/HLS lectures. Confirmed
+// live via `npx wrangler whoami` (account) + the Cloudflare API's
+// /accounts/:id/workers/subdomain endpoint (subdomain) + wrangler.toml
+// (worker name "site-structure-videos") + a direct curl (403 "Missing
+// token", i.e. the worker itself responded) — not guessed.
+const R2_WORKER_ORIGIN = 'https://site-structure-videos.siteandstructure.workers.dev';
 
 /**
  * Extract every inline <script>...</script> body (i.e. those with no src=)
