@@ -181,22 +181,22 @@
       <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
     </a>
     <nav>
-      <button class="hamburger-btn" id="hamburgerBtn" onclick="openDrawer()" aria-label="Menu" title="Menu">&#9776;</button>
+      <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
       <div class="nav-links-desktop">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
         <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
       </div>
-      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
+      <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
     </nav>
   </div>
 </header>
 
-<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer-backdrop" id="drawerBackdrop" data-action="close-drawer"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
     <div class="drawer-title" data-i18n="menu">Menu</div>
   </div>
   <div class="drawer-links">
@@ -330,6 +330,27 @@
 
     renderList(enrollments);
   })();
+
+  // ---- Click dispatch (replaces inline onclick="" attributes) ----
+  // The Content-Security-Policy set in vercel.json deliberately has NO
+  // 'unsafe-inline' in script-src, so the browser refuses to run any
+  // onclick="" attribute. Clickable elements declare data-action and this one
+  // delegated listener maps that to a function. It listens on `document` so
+  // markup rendered later via innerHTML works too.
+  const CLICK_ACTIONS = {
+    'open-drawer': () => openDrawer(),
+    'close-drawer': () => closeDrawer(),
+    'toggle-theme': () => toggleTheme(),
+    'toggle-lang': () => toggleLang()
+  };
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if(!el) return;
+    const handler = CLICK_ACTIONS[el.dataset.action];
+    if(!handler) return;
+    if(el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
+    handler(el, ev);
+  });
 </script>
 
 </body>

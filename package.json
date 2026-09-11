@@ -2,6 +2,10 @@
   "name": "site-and-structure",
   "version": "1.0.0",
   "private": true,
+  "scripts": {
+    "csp": "node scripts/compute-csp-hashes.js --write",
+    "csp:check": "node scripts/compute-csp-hashes.js --check"
+  },
   "dependencies": {
     "@supabase/supabase-js": "latest"
   }

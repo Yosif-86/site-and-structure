@@ -163,21 +163,21 @@
       <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ADMIN DASHBOARD</small></div>
     </a>
     <nav>
-      <button class="hamburger-btn" id="hamburgerBtn" onclick="openDrawer()" aria-label="Menu" title="Menu">&#9776;</button>
+      <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
       <div class="nav-links-desktop">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
       </div>
-      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
+      <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
     </nav>
   </div>
 </header>
 
-<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer-backdrop" id="drawerBackdrop" data-action="close-drawer"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
     <div class="drawer-title" data-i18n="menu">Menu</div>
   </div>
   <div class="drawer-links">
@@ -359,7 +359,6 @@
     if(error){ alert(t('alert_approve_failed') + error.message); return; }
     loadEnrollments();
   }
-  window.approve = approve;
 
   async function removeEnrollment(enrollmentId, title, email){
     if(!confirm(t('confirm_remove').replace('{email}', email).replace('{title}', title))) return;
@@ -367,14 +366,12 @@
     if(error){ alert(t('alert_remove_failed') + error.message); return; }
     loadEnrollments();
   }
-  window.removeEnrollment = removeEnrollment;
 
   async function viewProof(path){
     const { data, error } = await sb.storage.from('payment-proofs').createSignedUrl(path, 60);
     if(error){ alert(t('alert_proof_failed') + error.message); return; }
     window.open(data.signedUrl, '_blank');
   }
-  window.viewProof = viewProof;
 
   async function loadEnrollments(){
     const { data: profiles } = await sb.from('profiles').select('id, full_name, phone');
@@ -409,10 +406,11 @@
       const approvedCell = approvedByEmail
         ? `${escapeHtml(approvedByEmail)}<br><span style="color:var(--muted2); font-size:11px;">${new Date(e.approved_at).toLocaleString()}</span>`
         : '—';
-      // onclick args are attribute-quoted with double quotes below and
-      // escaped as HTML, since escapeHtml alone doesn't neutralize a lone
-      // single quote breaking out of a '...' JS string inside onclick.
-      const jsArg = (v) => escapeHtml(v).replace(/"/g, '&quot;');
+      // Row buttons carry their arguments in plain data-* attributes, read back
+      // by the delegated click listener at the bottom of this script. Nothing
+      // user-influenced is ever placed in a JS execution context any more, so
+      // HTML-attribute escaping (escapeHtml, which escapes both quote
+      // characters) is sufficient — the old jsArg/onclick="" pair is gone.
       return `
         <tr>
           <td>${escapeHtml(email)}</td>
@@ -424,9 +422,9 @@
           <td>${date}</td>
           <td>${approvedCell}</td>
           <td style="display:flex; gap:8px;">
-            ${e.payment_proof_path ? `<button class="btn" onclick="viewProof(&quot;${jsArg(e.payment_proof_path)}&quot;)">${t('view_proof')}</button>` : ''}
-            ${isActive ? '' : `<button class="btn btn-accent" onclick="approve(&quot;${jsArg(e.id)}&quot;)">${t('approve')}</button>`}
-            <button class="btn" onclick="removeEnrollment(&quot;${jsArg(e.id)}&quot;, &quot;${jsArg(title)}&quot;, &quot;${jsArg(email)}&quot;)">${t('remove')}</button>
+            ${e.payment_proof_path ? `<button class="btn" data-action="view-proof" data-path="${escapeHtml(e.payment_proof_path)}">${t('view_proof')}</button>` : ''}
+            ${isActive ? '' : `<button class="btn btn-accent" data-action="approve" data-id="${escapeHtml(e.id)}">${t('approve')}</button>`}
+            <button class="btn" data-action="remove-enrollment" data-id="${escapeHtml(e.id)}" data-title="${escapeHtml(title)}" data-email="${escapeHtml(email)}">${t('remove')}</button>
           </td>
         </tr>`;
     }).join('');
@@ -464,7 +462,6 @@
     }
     loadDevices();
   }
-  window.removeDevice = removeDevice;
 
   const MAX_DEVICES = 2; // must match api/check-device.js
 
@@ -501,7 +498,7 @@
           <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(label)}</td>
           <td>${first}</td>
           <td>${last}</td>
-          <td><button class="btn" onclick="removeDevice(&quot;${escapeHtml(d.id)}&quot;, &quot;${escapeHtml(email)}&quot;)">${t('remove')}</button></td>
+          <td><button class="btn" data-action="remove-device" data-id="${escapeHtml(d.id)}" data-email="${escapeHtml(email)}">${t('remove')}</button></td>
         </tr>`;
     }).join('');
   }
@@ -519,6 +516,36 @@
     loadFlagged();
     loadDevices();
   })();
+
+  // ---- Click dispatch (replaces inline onclick="" attributes) ----
+  // The Content-Security-Policy set in vercel.json deliberately has NO
+  // 'unsafe-inline' in script-src, so the browser refuses to run any
+  // onclick="" attribute. Clickable elements declare data-action (plus any
+  // data-* arguments) and this one delegated listener maps that to a function.
+  // It listens on `document`, which is what makes it work for the table rows
+  // rendered later by loadEnrollments/loadDevices via innerHTML.
+  //
+  // This is also the real fix for the stored-XSS class of bug: a row's
+  // enrollment id / course title / student email are now inert HTML attribute
+  // text read back with el.dataset, never source code spliced into an onclick.
+  const CLICK_ACTIONS = {
+    'open-drawer': () => openDrawer(),
+    'close-drawer': () => closeDrawer(),
+    'toggle-theme': () => toggleTheme(),
+    'toggle-lang': () => toggleLang(),
+    'view-proof': (el) => viewProof(el.dataset.path),
+    'approve': (el) => approve(el.dataset.id),
+    'remove-enrollment': (el) => removeEnrollment(el.dataset.id, el.dataset.title, el.dataset.email),
+    'remove-device': (el) => removeDevice(el.dataset.id, el.dataset.email)
+  };
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if(!el) return;
+    const handler = CLICK_ACTIONS[el.dataset.action];
+    if(!handler) return;
+    if(el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
+    handler(el, ev);
+  });
 </script>
 
 </body>

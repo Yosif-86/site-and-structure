@@ -1,0 +1,8 @@
+# The Content-Security-Policy in vercel.json pins SHA-256 hashes of the inline
+# <script> blocks in the .html files. A hash covers the exact bytes the browser
+# receives, so a CRLF/LF change to any of these files silently invalidates it
+# and the pages stop working. Pin them to LF — which is what Vercel's Linux
+# build already checks out — so that can never drift.
+# See scripts/compute-csp-hashes.js.
+*.html text eol=lf
+*.json text eol=lf

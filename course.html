@@ -180,23 +180,23 @@
       <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
     </a>
     <nav>
-      <button class="hamburger-btn" id="hamburgerBtn" onclick="openDrawer()" aria-label="Menu" title="Menu">&#9776;</button>
+      <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
       <div class="nav-links-desktop">
         <a href="index.html" data-i18n="nav_home">Home</a>
         <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
         <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
         <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
       </div>
-      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" aria-label="Toggle language" title="Toggle language"></button>
+      <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
     </nav>
   </div>
 </header>
 
-<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer-backdrop" id="drawerBackdrop" data-action="close-drawer"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">&times;</button>
+    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
     <div class="drawer-title" data-i18n="menu">Menu</div>
   </div>
   <div class="drawer-links">
@@ -214,7 +214,7 @@
 <!-- LOGIN MODAL -->
 <div class="overlay" id="loginOverlay">
   <div class="modal crop">
-    <button class="modal-close" onclick="closeModal('loginOverlay')">&times;</button>
+    <button class="modal-close" data-action="close-modal" data-modal="loginOverlay">&times;</button>
     <div id="authBody"></div>
   </div>
 </div>
@@ -222,7 +222,7 @@
 <!-- ENROLL MODAL -->
 <div class="overlay" id="enrollOverlay">
   <div class="modal crop">
-    <button class="modal-close" onclick="closeModal('enrollOverlay')">&times;</button>
+    <button class="modal-close" data-action="close-modal" data-modal="enrollOverlay">&times;</button>
     <div id="enrollBody"></div>
   </div>
 </div>
@@ -230,10 +230,10 @@
 <!-- VIDEO MODAL -->
 <div class="video-overlay" id="videoOverlay">
   <div class="video-modal" id="videoModal">
-    <button class="btn btn-close" onclick="closeVideo()" style="position:absolute; top:-44px; right:0;">Close</button>
+    <button class="btn btn-close" data-action="close-video" style="position:absolute; top:-44px; right:0;">Close</button>
     <iframe id="videoFrame" src="" frameborder="0" allow="autoplay"></iframe>
     <div class="watermark" id="watermark"><span id="watermarkText"></span></div>
-    <button class="fullscreen-icon-btn" onclick="toggleFullscreen()" aria-label="Fullscreen" title="Fullscreen">
+    <button class="fullscreen-icon-btn" data-action="toggle-fullscreen" aria-label="Fullscreen" title="Fullscreen">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
         <path d="M16 3h3a2 2 0 0 1 2 2v3"></path>
@@ -374,8 +374,8 @@
         <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
         <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password')}"></div>
         <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitLogin()">${t('auth_login_title')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">${t('no_account')} <a href="#" onclick="renderAuth('signup'); return false;" style="color:var(--yellow);">${t('sign_up')}</a></p>
+        <button class="btn btn-accent modal-full-btn" data-action="submit-login">${t('auth_login_title')}</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">${t('no_account')} <a href="#" data-action="auth-mode" data-mode="signup" style="color:var(--yellow);">${t('sign_up')}</a></p>
       `;
     } else {
       body.innerHTML = `
@@ -386,8 +386,8 @@
         <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
         <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password_signup')}"></div>
         <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitSignup()">${t('auth_signup_title')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" onclick="renderAuth('login'); return false;" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
+        <button class="btn btn-accent modal-full-btn" data-action="submit-signup">${t('auth_signup_title')}</button>
+        <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
       `;
     }
   }
@@ -395,6 +395,15 @@
   function showAuthErr(msg){
     const err = document.getElementById('authErr');
     err.textContent = msg; err.classList.add('show');
+  }
+
+  // Used for values interpolated into an HTML *attribute* in a template string
+  // (e.g. data-lecture-id). Escaping the quote characters is what stops a value
+  // from breaking out of the attribute and injecting markup.
+  function escapeAttr(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
   }
 
   function makeToken(){
@@ -492,20 +501,20 @@
         <h3>${courseTitle()}</h3>
         <p class="sub">${t('free_course_sub')}</p>
         <p class="err" id="enrollErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitFree()">${t('enroll_free')}</button>
+        <button class="btn btn-accent modal-full-btn" data-action="submit-free">${t('enroll_free')}</button>
       `;
     } else {
       body.innerHTML = `
         <h3>${courseTitle()}</h3>
         <p class="sub">${course.price}${t('choose_payment_sub')}</p>
         <div class="pay-options">
-          <div class="pay-opt" id="opt-zain" onclick="choosePay('zain')">${t('zain_cash')}<small>${t('zain_sub')}</small></div>
-          <div class="pay-opt" id="opt-qi" onclick="choosePay('qi')">${t('qi_card')}<small>${t('qi_sub')}</small></div>
+          <div class="pay-opt" id="opt-zain" data-action="choose-pay" data-method="zain">${t('zain_cash')}<small>${t('zain_sub')}</small></div>
+          <div class="pay-opt" id="opt-qi" data-action="choose-pay" data-method="qi">${t('qi_card')}<small>${t('qi_sub')}</small></div>
         </div>
         <div class="field"><label id="payLabel">${t('pay_label')}</label><input type="text" id="payDetail" placeholder="${t('pay_ph_default')}"></div>
         <div class="field"><label>${t('payment_screenshot')}</label><input type="file" id="payProof" accept="image/*"></div>
         <p class="err" id="payErr"></p>
-        <button class="btn btn-accent modal-full-btn" onclick="submitPay()">${t('confirm_payment')}</button>
+        <button class="btn btn-accent modal-full-btn" data-action="submit-pay">${t('confirm_payment')}</button>
       `;
     }
     openModal('enrollOverlay');
@@ -550,7 +559,7 @@
         <h3>${paymentInfo ? t('submitted') : t('enrolled')}</h3>
         <p class="sub">${courseTitle()}${paymentInfo ? ' — ' + paymentInfo : t('access_unlocked')}</p>
         ${paymentInfo ? `<p class="sub">${t('pending_note')}</p>` : ''}
-        <button class="btn btn-close modal-full-btn" onclick="closeModal('enrollOverlay'); location.reload();">${t('btn_close')}</button>
+        <button class="btn btn-close modal-full-btn" data-action="close-enroll-reload">${t('btn_close')}</button>
       </div>`;
   }
 
@@ -631,9 +640,9 @@
     } else if(isPending){
       priceHtml = `<span class="status-badge pending">${t('status_pending')}</span>`;
     } else if(course.is_free){
-      priceHtml = `<span class="price free">${t('card_free')}</span><button class="btn btn-accent" onclick="openEnroll()">${t('enroll_free')}</button>`;
+      priceHtml = `<span class="price free">${t('card_free')}</span><button class="btn btn-accent" data-action="open-enroll">${t('enroll_free')}</button>`;
     } else {
-      priceHtml = `<span class="price">${course.price}</span><button class="btn btn-accent" onclick="openEnroll()">${t('enroll')}</button>`;
+      priceHtml = `<span class="price">${course.price}</span><button class="btn btn-accent" data-action="open-enroll">${t('enroll')}</button>`;
     }
 
     const lectureRows = lectures.length === 0
@@ -645,7 +654,7 @@
             <div class="lecture">
               <div class="lecture-title">${lTitle}${l.is_free ? `<span class="lecture-free">${t('free_tag')}</span>` : ''}</div>
               ${unlocked
-                ? `<button class="btn" onclick="watchLecture('${l.id}')">${t('watch')}</button>`
+                ? `<button class="btn" data-action="watch-lecture" data-lecture-id="${escapeAttr(l.id)}">${t('watch')}</button>`
                 : `<span class="lecture-lock">${t('locked')}</span>`}
             </div>`;
         }).join('');
@@ -702,6 +711,41 @@
     }
     renderPage();
   })();
+
+  // ---- Click dispatch (replaces inline onclick="" attributes) ----
+  // The Content-Security-Policy set in vercel.json deliberately has NO
+  // 'unsafe-inline' in script-src, so the browser refuses to run any
+  // onclick="" attribute. Clickable elements declare data-action (plus any
+  // data-* arguments) and this one delegated listener maps that to a function.
+  // It listens on `document` so markup rendered later via innerHTML works too.
+  const CLICK_ACTIONS = {
+    'open-drawer': () => openDrawer(),
+    'close-drawer': () => closeDrawer(),
+    'toggle-theme': () => toggleTheme(),
+    'toggle-lang': () => toggleLang(),
+    'close-modal': (el) => closeModal(el.dataset.modal),
+    'close-enroll-reload': () => { closeModal('enrollOverlay'); location.reload(); },
+    'close-video': () => closeVideo(),
+    'toggle-fullscreen': () => toggleFullscreen(),
+    'auth-mode': (el) => renderAuth(el.dataset.mode),
+    'submit-login': () => submitLogin(),
+    'submit-signup': () => submitSignup(),
+    'open-enroll': () => openEnroll(),
+    'choose-pay': (el) => choosePay(el.dataset.method),
+    'submit-free': () => submitFree(),
+    'submit-pay': () => submitPay(),
+    'watch-lecture': (el) => watchLecture(el.dataset.lectureId)
+  };
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if(!el) return;
+    const handler = CLICK_ACTIONS[el.dataset.action];
+    if(!handler) return;
+    // These used to be <a href="#" onclick="...; return false;"> — keep
+    // suppressing the jump-to-top. Real hrefs (page links) still work.
+    if(el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
+    handler(el, ev);
+  });
 </script>
 
 </body>
