@@ -52,6 +52,16 @@ module.exports = async (req, res) => {
   }
   const userId = userData.user.id;
 
+  // Second, stricter gate now that we know who's calling — scoped per-user
+  // so one account's traffic can never throttle another account sharing the
+  // same IP (e.g. two students behind the same school/office network). The
+  // IP-based check above stays as the cheap first gate that protects the
+  // auth.getUser() call itself from an unauthenticated flood.
+  if (!allow('check-device:user:' + userId, 20, 60 * 1000)) {
+    res.status(429).json({ error: 'Too many requests, try again shortly.' });
+    return;
+  }
+
   // Fresh privileged client, never given the caller's token, used only for the DB writes below.
   const admin = createClient(SUPABASE_URL, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }
