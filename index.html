@@ -520,6 +520,13 @@
   applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
   applyLang(currentLang);
 
+  // Teacher invite link: admin.html generates a link shaped
+  // index.html?invite=<token>. Stashed here so submitSignup() can redeem it
+  // right after the account is created — see there for why redemption
+  // happens post-signup rather than before.
+  const inviteToken = new URLSearchParams(location.search).get('invite');
+  if(inviteToken){ renderAuth('signup'); openModal('loginOverlay'); }
+
   function openModal(id){ document.getElementById(id).classList.add('active'); }
   function closeModal(id){ document.getElementById(id).classList.remove('active'); }
 
@@ -628,6 +635,15 @@
         return;
       }
       logLoginEvent(data.user.id, data.user.email);
+      // Redeem after the account + session exist, not before — the RPC
+      // checks auth.uid() server-side, so it needs a real signed-in user to
+      // attribute the redemption to. A failed/expired/already-used token
+      // just means this account stays a normal student; it must never block
+      // the signup itself from succeeding.
+      if(inviteToken){
+        try{ await sb.rpc('redeem_teacher_invite', { p_token: inviteToken }); }
+        catch(e){ /* best-effort — account creation already succeeded */ }
+      }
     }
     document.getElementById('authBody').innerHTML = `
       <div class="success-box">
