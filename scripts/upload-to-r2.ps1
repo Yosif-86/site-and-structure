@@ -11,10 +11,18 @@
 # Requires: AWS CLI (https://aws.amazon.com/cli/) on PATH.
 # Never hardcode your R2 keys in this file — set them as env vars in your own
 # shell session first, as shown above.
-
+#
+# Optional -LectureId: skips the manual "open admin.html and paste r2_path"
+# step — set it and the script sets lectures.r2_path + clears
+# pending_upload_path itself via the Supabase REST API, then deletes the raw
+# upload from the lecture-uploads bucket, same as admin.html's own
+# "Save & go live" button does. Needs SUPABASE_SERVICE_ROLE_KEY in your env
+# (same key Vercel uses — find it in the Supabase dashboard's API settings,
+# never in this file).
 param(
     [Parameter(Mandatory=$true)][string]$LocalDir,
-    [Parameter(Mandatory=$true)][string]$RemotePrefix
+    [Parameter(Mandatory=$true)][string]$RemotePrefix,
+    [string]$LectureId
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,4 +65,49 @@ aws s3 cp "$LocalDir" "s3://$($env:R2_BUCKET)/$RemotePrefix" `
 
 Write-Host ""
 Write-Host "Done. Objects live under: $RemotePrefix/master.m3u8, $RemotePrefix/480p/..., etc."
-Write-Host "Then in Supabase SQL editor: update lectures set r2_path = '$RemotePrefix' where id = '<lectureId>';"
+
+if (-not $LectureId) {
+    Write-Host "Then in Supabase SQL editor: update lectures set r2_path = '$RemotePrefix' where id = '<lectureId>';"
+    exit 0
+}
+
+if (-not (Test-Path "env:SUPABASE_SERVICE_ROLE_KEY")) {
+    Write-Error "LectureId given but SUPABASE_SERVICE_ROLE_KEY is not set — can't auto-publish. Set it, or omit -LectureId and run: update lectures set r2_path = '$RemotePrefix' where id = '$LectureId';"
+    exit 1
+}
+
+$SupabaseUrl = "https://qdarzhzttjpkgfihupgp.supabase.co"
+$Headers = @{
+    "apikey"        = $env:SUPABASE_SERVICE_ROLE_KEY
+    "Authorization" = "Bearer $($env:SUPABASE_SERVICE_ROLE_KEY)"
+    "Content-Type"  = "application/json"
+}
+
+Write-Host "Looking up lecture $LectureId ..."
+$lecture = Invoke-RestMethod -Method Get `
+    -Uri "$SupabaseUrl/rest/v1/lectures?id=eq.$LectureId&select=pending_upload_path" `
+    -Headers $Headers
+if (-not $lecture -or $lecture.Count -eq 0) {
+    Write-Error "No lecture found with id $LectureId — r2 upload succeeded but the DB was not updated. Publish it manually."
+    exit 1
+}
+$pendingPath = $lecture[0].pending_upload_path
+
+Write-Host "Setting lectures.r2_path and clearing pending_upload_path ..."
+Invoke-RestMethod -Method Patch `
+    -Uri "$SupabaseUrl/rest/v1/lectures?id=eq.$LectureId" `
+    -Headers $Headers `
+    -Body (@{ r2_path = $RemotePrefix; pending_upload_path = $null } | ConvertTo-Json) | Out-Null
+
+if ($pendingPath) {
+    Write-Host "Deleting raw upload from lecture-uploads bucket ..."
+    try {
+        Invoke-RestMethod -Method Delete `
+            -Uri "$SupabaseUrl/storage/v1/object/lecture-uploads/$pendingPath" `
+            -Headers $Headers | Out-Null
+    } catch {
+        Write-Warning "Could not delete raw upload (lecture is still published fine): $_"
+    }
+}
+
+Write-Host "Lecture $LectureId is live."

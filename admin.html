@@ -342,7 +342,7 @@
       alert_invite_failed: 'Failed to create invite: ',
       lecture_uploads_tag: 'Lecture processing', pending_uploads: 'Pending lecture uploads',
       th_lecture: 'Lecture', th_publish_video: 'Publish video', no_pending_uploads: 'No pending lecture uploads.',
-      download: 'Download', alert_download_failed: 'Failed to load download link: ',
+      download: 'Download', alert_download_failed: 'Failed to load download link: ', copy_lecture_id: 'Copy lecture ID',
       bunny_placeholder: 'Bunny video ID', r2_placeholder: 'R2 path', save_and_publish: 'Save & go live',
       alert_publish_video_failed: 'Failed: ', alert_publish_video_empty: 'Enter a Bunny video ID or an R2 path first.'
     },
@@ -375,7 +375,7 @@
       alert_invite_failed: 'فشل إنشاء الدعوة: ',
       lecture_uploads_tag: 'معالجة المحاضرات', pending_uploads: 'رفوعات المحاضرات المعلّقة',
       th_lecture: 'المحاضرة', th_publish_video: 'نشر الفيديو', no_pending_uploads: 'لا توجد رفوعات معلّقة.',
-      download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ',
+      download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ', copy_lecture_id: 'نسخ معرّف المحاضرة',
       bunny_placeholder: 'معرّف فيديو Bunny', r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
       alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل معرّف فيديو Bunny أو مسار R2 أولاً.'
     }
@@ -630,6 +630,16 @@
     });
   }
 
+  function copyLectureId(el){
+    navigator.clipboard.writeText(el.dataset.id).then(() => {
+      const original = el.innerHTML;
+      const originalTitle = el.title;
+      el.innerHTML = '&#10003;';
+      el.title = t('copied');
+      setTimeout(() => { el.innerHTML = original; el.title = originalTitle; }, 1500);
+    });
+  }
+
   async function revokeInvite(id){
     if(!confirm(t('confirm_revoke_invite'))) return;
     const { error } = await sb.from('teacher_invites').delete().eq('id', id);
@@ -713,7 +723,10 @@
       return `
         <tr>
           <td>${escapeHtml(courseTitle)}</td>
-          <td>${escapeHtml(l.title)}</td>
+          <td>
+            ${escapeHtml(l.title)}
+            <button class="copy-icon-btn" data-action="copy-lecture-id" data-id="${escapeHtml(l.id)}" aria-label="${t('copy_lecture_id')}" title="${t('copy_lecture_id')}">&#128203;</button>
+          </td>
           <td><button class="btn" data-action="download-upload" data-path="${escapeHtml(l.pending_upload_path)}">${t('download')}</button></td>
           <td style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             <input type="text" class="bunny-input" placeholder="${t('bunny_placeholder')}" style="width:130px; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px;">
@@ -846,6 +859,7 @@
     'toggle-pay-to-teacher': (el) => togglePayToTeacher(el.dataset.id, el.checked),
     'create-invite': () => createInvite(),
     'copy-invite-link': (el) => copyInviteLink(el),
+    'copy-lecture-id': (el) => copyLectureId(el),
     'revoke-invite': (el) => revokeInvite(el.dataset.id),
     'download-upload': (el) => downloadUpload(el.dataset.path),
     'publish-video': (el) => {
