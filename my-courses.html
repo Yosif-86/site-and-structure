@@ -240,6 +240,16 @@
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
   function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
 
+  // Course titles are teacher-authored, not admin-only content — without
+  // escaping, a title like `<img src=x onerror=...>` would run script in
+  // the enrolled student's browser. Same class of stored-XSS fix already
+  // applied in admin.html/teacher.html.
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
   let renderedEnrollments = null, titleBySlug = {};
   function applyLang(lang){
     currentLang = lang;
@@ -297,7 +307,7 @@
     }
     list.innerHTML = enrollments.map(e => {
       const c = titleBySlug[e.course_slug];
-      const title = (c && c.title) || e.course_slug;
+      const title = escapeHtml((c && c.title) || e.course_slug);
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
       return `
@@ -307,7 +317,7 @@
             <div class="meta">${t('enrolled_on')} ${date}</div>
           </div>
           <div style="display:flex; align-items:center; gap:12px;">
-            <a class="btn" href="course.html?slug=${e.course_slug}" style="text-decoration:none;">${isActive ? t('watch') : t('view')}</a>
+            <a class="btn" href="course.html?slug=${encodeURIComponent(e.course_slug)}" style="text-decoration:none;">${isActive ? t('watch') : t('view')}</a>
             <div class="status ${isActive ? 'active' : 'pending'}">${isActive ? t('status_active') : t('status_pending')}</div>
           </div>
         </div>`;

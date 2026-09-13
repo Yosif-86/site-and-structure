@@ -381,6 +381,18 @@
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
   function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
 
+  // Course title/description/meta/etc. are teacher-authored (any redeemed
+  // teacher invite can set them), not admin-only content, and this renders
+  // on the PUBLIC catalogue via innerHTML — without escaping, a course title
+  // like `<img src=x onerror=...>` would run script in every visitor's
+  // browser the moment the course is published. Same class of stored-XSS
+  // fix already applied in admin.html/teacher.html.
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
   function applyLang(lang){
     currentLang = lang;
     document.documentElement.setAttribute('lang', lang);
@@ -733,27 +745,27 @@
     }
     const isAr = currentLang === 'ar';
     grid.innerHTML = courses.map(c => {
-      const title = (isAr && c.title_ar) || c.title;
-      const description = (isAr && c.description_ar) || c.description;
-      const teacherName = (isAr && c.teacher_name_ar) || c.teacher_name;
-      const tagLabel = (isAr && c.tag_label_ar) || c.tag_label;
-      const badgeText = (isAr && c.badge_text_ar) || c.badge_text;
+      const title = escapeHtml((isAr && c.title_ar) || c.title);
+      const description = escapeHtml((isAr && c.description_ar) || c.description);
+      const teacherName = escapeHtml((isAr && c.teacher_name_ar) || c.teacher_name);
+      const tagLabel = escapeHtml((isAr && c.tag_label_ar) || c.tag_label);
+      const badgeText = escapeHtml((isAr && c.badge_text_ar) || c.badge_text);
       const meta = (isAr && c.meta_ar) || c.meta;
-      const metaHtml = Object.entries(meta || {}).map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+      const metaHtml = Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
       const priceHtml = c.is_free
         ? `<span class="price free">${t('card_free')}</span>${badgeText ? `<span class="badge">${badgeText}</span>` : ''}`
-        : `<span class="price red-price">${c.price}</span>`;
+        : `<span class="price red-price">${escapeHtml(c.price)}</span>`;
       return `
         <div class="card crop">
           <div>
-            <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${tagLabel || ''}</div>
+            <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${tagLabel}</div>
             <h3>${title}</h3>
             ${teacherName ? `<p class="card-byline">${t('card_by')} ${teacherName}</p>` : ''}
-            <p>${description || ''}</p>
+            <p>${description}</p>
           </div>
           <div class="titleblock">${metaHtml}</div>
           <div class="price-row">${priceHtml}</div>
-          <a class="btn modal-full-btn" href="course.html?slug=${c.slug}" style="text-align:center; text-decoration:none; display:block;">${t('card_view_course')}</a>
+          <a class="btn modal-full-btn" href="course.html?slug=${encodeURIComponent(c.slug)}" style="text-align:center; text-decoration:none; display:block;">${t('card_view_course')}</a>
         </div>`;
     }).join('');
   }
