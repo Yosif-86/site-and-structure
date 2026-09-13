@@ -128,6 +128,35 @@
   h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:24px; text-transform:uppercase;}
   .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
 
+  .view{display:none;}
+  .view.active{display:block;}
+  .back-link{display:inline-flex; align-items:center; gap:6px; color:var(--muted); text-decoration:none; font-size:13px; margin-bottom:16px; cursor:pointer; background:none; border:none; font-family:inherit; padding:0;}
+  .back-link:hover{color:var(--text);}
+
+  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px;}
+  .stat-card{
+    display:flex; align-items:center; gap:14px; padding:18px 20px; border-radius:16px;
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    box-shadow:0 16px 40px -24px rgba(30,25,18,0.25);
+    backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
+    transition:transform .25s cubic-bezier(0.16,1,0.3,1), box-shadow .25s cubic-bezier(0.16,1,0.3,1);
+    text-align:left; font-family:inherit; color:inherit;
+  }
+  :root[dir="rtl"] .stat-card{text-align:right;}
+  button.stat-card{border:1px solid var(--glass-border); cursor:pointer; width:100%;}
+  button.stat-card:hover{transform:translateY(-3px); box-shadow:0 24px 48px -20px rgba(30,25,18,0.3), 0 0 32px -10px color-mix(in srgb, var(--red) 40%, transparent);}
+  .stat-icon{
+    width:44px; height:44px; border-radius:12px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+    background:color-mix(in srgb, var(--red) 16%, transparent); color:var(--red);
+  }
+  .stat-icon.c-green{background:color-mix(in srgb, var(--green) 18%, transparent); color:var(--green);}
+  .stat-icon.c-yellow{background:color-mix(in srgb, var(--yellow) 18%, transparent); color:var(--yellow);}
+  .stat-icon.c-muted{background:color-mix(in srgb, var(--muted2) 20%, transparent); color:var(--text);}
+  .stat-num{font-family:'Big Shoulders Display'; font-weight:800; font-size:26px; line-height:1.1;}
+  .stat-label{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
+  :root[dir="rtl"] .stat-label{font-family:'Cairo', sans-serif; text-transform:none; letter-spacing:0;}
+
   table{width:100%; border-collapse:collapse;}
   th, td{text-align:left; padding:10px 12px; font-size:13px; border-bottom:1px solid var(--line);}
   th{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px;}
@@ -200,8 +229,67 @@
   </div>
 </div>
 
+<div class="view active" data-view="dashboard">
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="section-tag" data-i18n="overview_tag">Overview</div>
+        <h2 data-i18n="dashboard_title">Dashboard</h2>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-icon c-green">&#127891;</div>
+          <div><div class="stat-num" id="statTotalCourses">—</div><div class="stat-label" data-i18n="stat_total_courses">Published courses</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon c-yellow">&#128104;&#8205;&#127979;</div>
+          <div><div class="stat-num" id="statTotalTeachers">—</div><div class="stat-label" data-i18n="stat_total_teachers">Teachers</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon c-muted">&#128101;</div>
+          <div><div class="stat-num" id="statTotalStudents">—</div><div class="stat-label" data-i18n="stat_total_students">Active students</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">&#128176;</div>
+          <div><div class="stat-num" id="statRevenue">—</div><div class="stat-label" data-i18n="stat_revenue">Est. revenue (IQD)</div></div>
+        </div>
+      </div>
+
+      <div class="section-tag" style="margin-top:36px; margin-bottom:16px;" data-i18n="manage_tag">Manage</div>
+      <div class="stat-grid">
+        <button class="stat-card" data-action="go-view" data-view="enrollments">
+          <div class="stat-icon">&#128218;</div>
+          <div><div class="stat-num" id="statEnrollments">—</div><div class="stat-label" data-i18n="students_courses">Students &amp; courses</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="review">
+          <div class="stat-icon c-green">&#9989;</div>
+          <div><div class="stat-num" id="statReview">—</div><div class="stat-label" data-i18n="course_review">Course review</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="invites">
+          <div class="stat-icon c-yellow">&#9993;</div>
+          <div><div class="stat-num" id="statInvites">—</div><div class="stat-label" data-i18n="teacher_invites">Teacher invites</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="uploads">
+          <div class="stat-icon c-muted">&#127909;</div>
+          <div><div class="stat-num" id="statUploads">—</div><div class="stat-label" data-i18n="pending_uploads">Pending lecture uploads</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="flagged">
+          <div class="stat-icon">&#128681;</div>
+          <div><div class="stat-num" id="statFlagged">—</div><div class="stat-label" data-i18n="flagged_logins">Flagged logins</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="devices">
+          <div class="stat-icon c-green">&#128241;</div>
+          <div><div class="stat-num" id="statDevices">—</div><div class="stat-label" data-i18n="trusted_devices">Capped accounts</div></div>
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="view" data-view="enrollments">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="enrollments">Enrollments</div>
       <h2 data-i18n="students_courses">Students &amp; courses</h2>
@@ -220,9 +308,12 @@
     </div>
   </div>
 </section>
+</div>
 
+<div class="view" data-view="review">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="teacher_courses_tag">Teacher submissions</div>
       <h2 data-i18n="course_review">Course review</h2>
@@ -237,9 +328,12 @@
     </div>
   </div>
 </section>
+</div>
 
+<div class="view" data-view="invites">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="teacher_access_tag">Teacher access</div>
       <h2 data-i18n="teacher_invites">Teacher invites</h2>
@@ -256,9 +350,12 @@
     </div>
   </div>
 </section>
+</div>
 
+<div class="view" data-view="uploads">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="lecture_uploads_tag">Lecture processing</div>
       <h2 data-i18n="pending_uploads">Pending lecture uploads</h2>
@@ -273,9 +370,12 @@
     </div>
   </div>
 </section>
+</div>
 
+<div class="view" data-view="flagged">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="account_sharing_watch">Account sharing watch</div>
       <h2 data-i18n="flagged_logins">Flagged logins</h2>
@@ -290,9 +390,12 @@
     </div>
   </div>
 </section>
+</div>
 
+<div class="view" data-view="devices">
 <section class="section">
   <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
     <div class="section-head">
       <div class="section-tag" data-i18n="device_management">Device management</div>
       <h2 data-i18n="trusted_devices">Trusted devices</h2>
@@ -310,11 +413,14 @@
     </div>
   </div>
 </section>
+</div>
 
 <script>
   const I18N = {
     en: {
       tagline: 'ADMIN DASHBOARD', nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', log_out: 'Log out',
+      overview_tag: 'Overview', dashboard_title: 'Dashboard', manage_tag: 'Manage', back_to_dashboard: 'Back to dashboard',
+      stat_total_courses: 'Published courses', stat_total_teachers: 'Teachers', stat_total_students: 'Active students', stat_revenue: 'Est. revenue (IQD)',
       menu: 'Menu', enrollments: 'Enrollments', students_courses: 'Students & courses',
       th_email: 'Email', th_name: 'Name', th_phone: 'Phone', th_course: 'Course', th_status: 'Status',
       th_payment: 'Payment', th_enrolled: 'Enrolled', th_approved_by: 'Approved by', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
@@ -348,6 +454,8 @@
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', log_out: 'تسجيل الخروج',
+      overview_tag: 'نظرة عامة', dashboard_title: 'لوحة القيادة', manage_tag: 'الإدارة', back_to_dashboard: 'العودة للوحة القيادة',
+      stat_total_courses: 'الدورات المنشورة', stat_total_teachers: 'المدرسون', stat_total_students: 'الطلاب النشطون', stat_revenue: 'الإيرادات التقديرية (د.ع)',
       menu: 'القائمة', enrollments: 'التسجيلات', students_courses: 'الطلاب والدورات',
       th_email: 'البريد الإلكتروني', th_name: 'الاسم', th_phone: 'الهاتف', th_course: 'الدورة', th_status: 'الحالة',
       th_payment: 'الدفع', th_enrolled: 'تاريخ التسجيل', th_approved_by: 'وافق عليه', th_city: 'المدينة', th_country: 'الدولة', th_distance: 'المسافة', th_when: 'الوقت',
@@ -397,6 +505,7 @@
     if(typeof loadUploads === 'function') loadUploads();
     if(typeof loadFlagged === 'function') loadFlagged();
     if(typeof loadDevices === 'function') loadDevices();
+    if(typeof loadDashboardStats === 'function') loadDashboardStats();
   }
   function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
 
@@ -442,6 +551,11 @@
 
   function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); }
   function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
+
+  function goView(view){
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
 
   document.getElementById('logoutBtnDrawer').onclick = async () => {
     await sb.auth.signOut();
@@ -810,6 +924,56 @@
     }).join('');
   }
 
+  async function loadDashboardStats(){
+    const [
+      { count: courseCount },
+      { count: teacherCount },
+      { data: activeEnrollments },
+      { count: enrollCount },
+      { count: reviewCount },
+      { count: uploadCount },
+      { count: flaggedCount },
+      { data: invites },
+      { data: devices }
+    ] = await Promise.all([
+      sb.from('courses').select('*', { count: 'exact', head: true }).eq('status', 'published'),
+      sb.from('profiles').select('*', { count: 'exact', head: true }).eq('is_teacher', true),
+      sb.from('enrollments').select('user_id, course_slug').eq('status', 'active'),
+      sb.from('enrollments').select('*', { count: 'exact', head: true }),
+      sb.from('courses').select('*', { count: 'exact', head: true }).eq('status', 'pending_review'),
+      sb.from('lectures').select('*', { count: 'exact', head: true }).not('pending_upload_path', 'is', null),
+      sb.from('login_events').select('*', { count: 'exact', head: true }).eq('flagged', true),
+      sb.from('teacher_invites').select('used_at, expires_at'),
+      sb.from('trusted_devices').select('user_id')
+    ]);
+
+    document.getElementById('statTotalCourses').textContent = courseCount ?? 0;
+    document.getElementById('statTotalTeachers').textContent = teacherCount ?? 0;
+
+    const uniqueStudents = new Set((activeEnrollments || []).map(e => e.user_id));
+    document.getElementById('statTotalStudents').textContent = uniqueStudents.size;
+
+    let revenue = 0;
+    (activeEnrollments || []).forEach(e => {
+      const c = courseTitles[e.course_slug];
+      if(c && !c.is_free && c.price) revenue += Number(c.price);
+    });
+    document.getElementById('statRevenue').textContent = revenue.toLocaleString();
+
+    document.getElementById('statEnrollments').textContent = enrollCount ?? 0;
+    document.getElementById('statReview').textContent = reviewCount ?? 0;
+    document.getElementById('statUploads').textContent = uploadCount ?? 0;
+    document.getElementById('statFlagged').textContent = flaggedCount ?? 0;
+
+    const activeInvites = (invites || []).filter(i => !i.used_at && new Date(i.expires_at) > new Date()).length;
+    document.getElementById('statInvites').textContent = activeInvites;
+
+    const countByUser = {};
+    (devices || []).forEach(d => { countByUser[d.user_id] = (countByUser[d.user_id] || 0) + 1; });
+    const cappedAccounts = Object.values(countByUser).filter(c => c >= MAX_DEVICES).length;
+    document.getElementById('statDevices').textContent = cappedAccounts;
+  }
+
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ window.location.href = 'index.html'; return; }
@@ -823,7 +987,7 @@
     // migration was never run against the live DB) — naming it explicitly
     // here 400s the whole query, unlike select('*') elsewhere which just
     // silently omits it.
-    const { data: allCourses } = await sb.from('courses').select('slug, title');
+    const { data: allCourses } = await sb.from('courses').select('slug, title, price, is_free');
     (allCourses || []).forEach(c => { courseTitles[c.slug] = c; });
 
     loadEnrollments();
@@ -832,6 +996,7 @@
     loadUploads();
     loadFlagged();
     loadDevices();
+    loadDashboardStats();
   })();
 
   // ---- Click dispatch (replaces inline onclick="" attributes) ----
@@ -850,6 +1015,7 @@
     'close-drawer': () => closeDrawer(),
     'toggle-theme': () => toggleTheme(),
     'toggle-lang': () => toggleLang(),
+    'go-view': (el) => goView(el.dataset.view),
     'view-proof': (el) => viewProof(el.dataset.path),
     'approve': (el) => approve(el.dataset.id),
     'remove-enrollment': (el) => removeEnrollment(el.dataset.id, el.dataset.title, el.dataset.email),
