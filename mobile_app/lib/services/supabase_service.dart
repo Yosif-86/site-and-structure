@@ -95,7 +95,7 @@ class SupabaseService extends ChangeNotifier {
   /// Set by the UI layer to show the "kicked by another device" message.
   void Function()? onForcedLogout;
 
-  static const _flagDistanceKm = 300;
+  static const _flagDistanceKm = 10;
 
   double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371.0;
@@ -107,7 +107,7 @@ class SupabaseService extends ChangeNotifier {
   }
 
   /// Port of logLoginEvent() in index.html — same IP-geolocation lookup and
-  /// >300km-from-last-login flagging, so mobile logins show up in the admin
+  /// >10km-from-last-login flagging, so mobile logins show up in the admin
   /// dashboard's flagged-logins view exactly like web ones do.
   Future<void> _logLoginEvent(String userId, String email) async {
     Map<String, dynamic> geo = {};

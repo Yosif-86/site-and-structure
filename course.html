@@ -497,7 +497,7 @@
         const R=6371, dLat=(geo.latitude-prev.lat)*Math.PI/180, dLon=(geo.longitude-prev.lon)*Math.PI/180;
         const a=Math.sin(dLat/2)**2+Math.cos(prev.lat*Math.PI/180)*Math.cos(geo.latitude*Math.PI/180)*Math.sin(dLon/2)**2;
         distance_km = Math.round(R*2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-        flagged = distance_km > 300;
+        flagged = distance_km > 10;
       }
     }
     await sb.from('login_events').insert({ user_id:userId, email, user_agent:navigator.userAgent, ip:geo.ip||null, city:geo.city||null, country:geo.country_name||null, lat:geo.latitude??null, lon:geo.longitude??null, flagged, distance_km });
