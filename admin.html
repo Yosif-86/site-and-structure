@@ -281,6 +281,10 @@
           <div class="stat-icon c-green">&#128241;</div>
           <div><div class="stat-num" id="statDevices">—</div><div class="stat-label" data-i18n="trusted_devices">Capped accounts</div></div>
         </button>
+        <button class="stat-card" data-action="go-view" data-view="discountCodes">
+          <div class="stat-icon c-yellow">&#127991;</div>
+          <div><div class="stat-num" id="statDiscountCodes">—</div><div class="stat-label" data-i18n="discount_codes">Discount codes</div></div>
+        </button>
       </div>
     </div>
   </section>
@@ -428,12 +432,35 @@
         <thead>
           <tr>
             <th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th><th data-i18n="th_students_enrolled">Students</th>
-            <th data-i18n="th_price">Price</th><th data-i18n="th_total_revenue">Total revenue</th>
+            <th data-i18n="th_price">Price</th><th data-i18n="th_discounted_students">Discounted</th><th data-i18n="th_total_revenue">Total revenue</th>
             <th data-i18n="th_teacher_payout">Teacher payout</th><th data-i18n="th_your_profit">Your profit</th>
           </tr>
         </thead>
         <tbody id="revenueBody"></tbody>
         <tfoot><tr id="revenueTotals"></tr></tfoot>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
+<div class="view" data-view="discountCodes">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="overview_tag">Overview</div>
+      <h2 data-i18n="discount_codes">Discount codes</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="discountCodesTable">
+        <thead>
+          <tr>
+            <th data-i18n="th_code">Code</th><th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th>
+            <th data-i18n="th_discount">Discount</th><th data-i18n="th_uses">Uses</th><th data-i18n="th_expires">Expires</th><th data-i18n="th_status">Status</th>
+          </tr>
+        </thead>
+        <tbody id="discountCodesBody"></tbody>
       </table>
     </div>
   </div>
@@ -538,7 +565,10 @@
       bunny_placeholder: 'Bunny video ID', r2_placeholder: 'R2 path', save_and_publish: 'Save & go live',
       alert_publish_video_failed: 'Failed: ', alert_publish_video_empty: 'Enter a Bunny video ID or an R2 path first.',
       th_students_enrolled: 'Students', th_total_revenue: 'Total revenue', th_teacher_payout: 'Teacher payout', th_your_profit: 'Your profit',
-      no_revenue: 'No revenue yet.', total_row_label: 'Total'
+      no_revenue: 'No revenue yet.', total_row_label: 'Total',
+      discount_codes: 'Discount codes', th_discount: 'Discount', th_uses: 'Uses', th_expires: 'Expires',
+      no_discount_codes: 'No discount codes yet.', status_inactive: 'Stopped',
+      th_discounted_students: 'Discounted'
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', log_out: 'تسجيل الخروج',
@@ -576,7 +606,10 @@
       bunny_placeholder: 'معرّف فيديو Bunny', r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
       alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل معرّف فيديو Bunny أو مسار R2 أولاً.',
       th_students_enrolled: 'الطلاب', th_total_revenue: 'إجمالي الإيرادات', th_teacher_payout: 'حصة المدرس', th_your_profit: 'ربحك',
-      no_revenue: 'لا توجد إيرادات بعد.', total_row_label: 'الإجمالي'
+      no_revenue: 'لا توجد إيرادات بعد.', total_row_label: 'الإجمالي',
+      discount_codes: 'أكواد الخصم', th_discount: 'الخصم', th_uses: 'الاستخدامات', th_expires: 'ينتهي في',
+      no_discount_codes: 'لا توجد أكواد خصم بعد.', status_inactive: 'متوقف',
+      th_discounted_students: 'استخدموا كود خصم'
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -598,6 +631,7 @@
     if(typeof loadDevices === 'function') loadDevices();
     if(typeof loadDashboardStats === 'function') loadDashboardStats();
     if(typeof loadRevenue === 'function') loadRevenue();
+    if(typeof loadDiscountCodes === 'function') loadDiscountCodes();
     if(typeof loadCoursesList === 'function') loadCoursesList();
     if(typeof loadTeachersList === 'function') loadTeachersList();
     if(typeof loadStudentsList === 'function') loadStudentsList();
@@ -1103,19 +1137,40 @@
 
   async function loadRevenue(){
     const [{ data: courses }, { data: activeEnrollments }] = await Promise.all([
-      sb.from('courses').select('slug, title, price, is_free, teacher_id, pay_to_teacher').eq('status', 'published'),
-      sb.from('enrollments').select('course_slug').eq('status', 'active')
+      sb.from('courses').select('id, slug, title, price, is_free, teacher_id, pay_to_teacher').eq('status', 'published'),
+      sb.from('enrollments').select('user_id, course_slug').eq('status', 'active')
     ]);
     const body = document.getElementById('revenueBody');
     const totalsRow = document.getElementById('revenueTotals');
     if(!courses || courses.length === 0){
-      body.innerHTML = `<tr><td colspan="7" class="empty">${t('no_revenue')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="empty">${t('no_revenue')}</td></tr>`;
       totalsRow.innerHTML = '';
       return;
     }
 
-    const countBySlug = {};
-    (activeEnrollments || []).forEach(e => { countBySlug[e.course_slug] = (countBySlug[e.course_slug] || 0) + 1; });
+    const paidCourseIds = courses.filter(c => !c.is_free).map(c => c.id);
+    const { data: codes } = paidCourseIds.length
+      ? await sb.from('discount_codes').select('id, course_id, discount_type, discount_value').in('course_id', paidCourseIds)
+      : { data: [] };
+    const codeIds = (codes || []).map(dc => dc.id);
+    const { data: redemptions } = codeIds.length
+      ? await sb.from('discount_code_redemptions').select('discount_code_id, user_id').in('discount_code_id', codeIds)
+      : { data: [] };
+    const codeById = {};
+    (codes || []).forEach(dc => { codeById[dc.id] = dc; });
+    // A student's applied discount for a course, keyed by "course_id|user_id" —
+    // if they somehow redeemed more than one code on the same course, this
+    // just keeps whichever came back last (an edge case, not worth resolving).
+    const discountByCourseUser = {};
+    (redemptions || []).forEach(r => {
+      const dc = codeById[r.discount_code_id];
+      if(dc) discountByCourseUser[`${dc.course_id}|${r.user_id}`] = dc;
+    });
+
+    const enrollmentsBySlug = {};
+    (activeEnrollments || []).forEach(e => {
+      (enrollmentsBySlug[e.course_slug] = enrollmentsBySlug[e.course_slug] || []).push(e);
+    });
 
     const teacherIds = [...new Set(courses.map(c => c.teacher_id).filter(Boolean))];
     const { data: teachers } = teacherIds.length
@@ -1130,28 +1185,40 @@
       const digits = String(price || '').replace(/[^\d]/g, '');
       return digits ? parseInt(digits, 10) : 0;
     };
+    const applyDiscount = (priceNum, dc) => {
+      if(!dc) return priceNum;
+      const discounted = dc.discount_type === 'percent'
+        ? priceNum * (1 - dc.discount_value / 100)
+        : priceNum - dc.discount_value;
+      return Math.max(0, Math.round(discounted));
+    };
 
     let totalRevenue = 0, totalTeacher = 0, totalMine = 0;
     const rows = courses
       .filter(c => !c.is_free && parsePrice(c.price) > 0)
       .map(c => {
-        const students = countBySlug[c.slug] || 0;
         const priceNum = parsePrice(c.price);
-        const revenue = students * priceNum;
+        const enrolled = enrollmentsBySlug[c.slug] || [];
+        let revenue = 0, discountedCount = 0;
+        enrolled.forEach(e => {
+          const dc = discountByCourseUser[`${c.id}|${e.user_id}`];
+          if(dc) discountedCount++;
+          revenue += applyDiscount(priceNum, dc);
+        });
         const teacherAmt = c.pay_to_teacher ? revenue : 0;
         const mineAmt = c.pay_to_teacher ? 0 : revenue;
         totalRevenue += revenue; totalTeacher += teacherAmt; totalMine += mineAmt;
-        return { c, students, priceNum, revenue, teacherAmt, mineAmt };
+        return { c, students: enrolled.length, discountedCount, revenue, teacherAmt, mineAmt };
       })
       .sort((a, b) => b.revenue - a.revenue);
 
     if(rows.length === 0){
-      body.innerHTML = `<tr><td colspan="7" class="empty">${t('no_revenue')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="empty">${t('no_revenue')}</td></tr>`;
       totalsRow.innerHTML = '';
       return;
     }
 
-    body.innerHTML = rows.map(({ c, students, priceNum, revenue, teacherAmt, mineAmt }) => {
+    body.innerHTML = rows.map(({ c, students, discountedCount, revenue, teacherAmt, mineAmt }) => {
       const teacherName = c.teacher_id ? (nameById[c.teacher_id] || '—') : '—';
       return `
         <tr>
@@ -1159,6 +1226,7 @@
           <td>${escapeHtml(teacherName)}</td>
           <td>${students}</td>
           <td>${escapeHtml(c.price)}</td>
+          <td>${discountedCount || '—'}</td>
           <td>${revenue.toLocaleString()}</td>
           <td>${teacherAmt.toLocaleString()}</td>
           <td>${mineAmt.toLocaleString()}</td>
@@ -1166,10 +1234,54 @@
     }).join('');
 
     totalsRow.innerHTML = `
-      <td colspan="4" style="font-weight:700;">${t('total_row_label')}</td>
+      <td colspan="5" style="font-weight:700;">${t('total_row_label')}</td>
       <td style="font-weight:700;">${totalRevenue.toLocaleString()}</td>
       <td style="font-weight:700;">${totalTeacher.toLocaleString()}</td>
       <td style="font-weight:700;">${totalMine.toLocaleString()}</td>`;
+  }
+
+  async function loadDiscountCodes(){
+    const body = document.getElementById('discountCodesBody');
+    const { data: courses } = await sb.from('courses').select('id, slug, title, teacher_id');
+    const courseIds = (courses || []).map(c => c.id);
+    const { data: codes, error } = courseIds.length
+      ? await sb.from('discount_codes').select('id, course_id, code, discount_type, discount_value, max_uses, used_count, expires_at, is_active').in('course_id', courseIds).order('created_at', { ascending: false })
+      : { data: [] };
+    if(error || !codes || codes.length === 0){
+      body.innerHTML = `<tr><td colspan="7" class="empty">${t('no_discount_codes')}</td></tr>`;
+      return;
+    }
+
+    const courseById = {};
+    (courses || []).forEach(c => { courseById[c.id] = c; });
+    const teacherIds = [...new Set((courses || []).map(c => c.teacher_id).filter(Boolean))];
+    const { data: teachers } = teacherIds.length
+      ? await sb.from('profiles').select('id, full_name').in('id', teacherIds)
+      : { data: [] };
+    const nameById = {};
+    (teachers || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    const now = Date.now();
+    body.innerHTML = codes.map(c => {
+      const course = courseById[c.course_id];
+      const courseTitle = course ? course.title : '—';
+      const teacherName = (course && course.teacher_id) ? (nameById[course.teacher_id] || '—') : '—';
+      const discount = c.discount_type === 'percent' ? `${c.discount_value}%` : `${c.discount_value} IQD`;
+      const expired = new Date(c.expires_at).getTime() < now;
+      const status = !c.is_active ? 'inactive' : (expired ? 'expired' : 'active');
+      return `
+        <tr>
+          <td>${escapeHtml(c.code)}</td>
+          <td>${escapeHtml(courseTitle)}</td>
+          <td>${escapeHtml(teacherName)}</td>
+          <td>${discount}</td>
+          <td>${c.used_count} / ${c.max_uses}</td>
+          <td>${new Date(c.expires_at).toLocaleDateString()}</td>
+          <td><span class="status ${status === 'active' ? 'active' : 'pending'}">${t('status_' + status)}</span></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('statDiscountCodes').textContent = codes.filter(c => c.is_active && new Date(c.expires_at).getTime() >= now).length;
   }
 
   async function loadTeachersList(){
@@ -1249,6 +1361,7 @@
     loadDevices();
     loadDashboardStats();
     loadRevenue();
+    loadDiscountCodes();
     loadCoursesList();
     loadTeachersList();
     loadStudentsList();

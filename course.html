@@ -586,6 +586,13 @@
     openModal('enrollOverlay');
   }
 
+  // course.price is a free-text field (e.g. "15,000 IQD"), not a number —
+  // pull the numeric amount out of it rather than coercing the string.
+  function parsePrice(price){
+    const digits = String(price || '').replace(/[^\d]/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+  }
+
   async function applyDiscountCode(){
     const codeInput = document.getElementById('discountCode');
     const err = document.getElementById('discountErr');
@@ -600,9 +607,10 @@
     }
     const { discount_type, discount_value } = data[0];
     appliedDiscount = { code, discount_type, discount_value };
+    const priceNum = parsePrice(course.price);
     discountedPrice = discount_type === 'percent'
-      ? Math.max(0, Math.round(course.price * (1 - discount_value / 100)))
-      : Math.max(0, course.price - discount_value);
+      ? Math.max(0, Math.round(priceNum * (1 - discount_value / 100)))
+      : Math.max(0, priceNum - discount_value);
     document.getElementById('enrollPriceSub').textContent = discountedPrice + t('choose_payment_sub');
     ok.textContent = t('discount_applied').replace('{price}', discountedPrice);
     ok.classList.add('show');
