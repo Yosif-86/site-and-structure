@@ -711,7 +711,9 @@
       const title = (c && c.title) || e.course_slug;
       const isActive = e.status === 'active';
       const date = new Date(e.created_at).toLocaleDateString();
-      const payment = e.payment_method ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : '')) : '—';
+      const payment = e.payment_method
+        ? (e.payment_method + (e.payment_detail ? ' — ' + e.payment_detail : ''))
+        : ((c && c.is_free) ? t('free_label') : '—');
       const approvedByEmail = e.approved_by ? (emailByUser[e.approved_by] || e.approved_by) : null;
       const approvedCell = approvedByEmail
         ? `${escapeHtml(approvedByEmail)}<br><span style="color:var(--muted2); font-size:11px;">${new Date(e.approved_at).toLocaleString()}</span>`
