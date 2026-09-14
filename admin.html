@@ -285,6 +285,10 @@
           <div class="stat-icon c-yellow">&#127991;</div>
           <div><div class="stat-num" id="statDiscountCodes">—</div><div class="stat-label" data-i18n="discount_codes">Discount codes</div></div>
         </button>
+        <button class="stat-card" data-action="go-view" data-view="errorLog">
+          <div class="stat-icon">&#9888;</div>
+          <div><div class="stat-num" id="statErrorLog">—</div><div class="stat-label" data-i18n="error_log">Error log</div></div>
+        </button>
       </div>
     </div>
   </section>
@@ -467,6 +471,32 @@
 </section>
 </div>
 
+<div class="view" data-view="errorLog">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div class="section-tag" data-i18n="overview_tag">Overview</div>
+        <h2 data-i18n="error_log">Error log</h2>
+      </div>
+      <button class="btn" data-action="clear-error-log" data-i18n="clear_all">Clear all</button>
+    </div>
+    <div class="table-wrap">
+      <table id="errorLogTable">
+        <thead>
+          <tr>
+            <th data-i18n="th_when">When</th><th data-i18n="th_message">Message</th><th data-i18n="th_page">Page</th>
+            <th data-i18n="th_user">User</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="errorLogBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
 <div class="view" data-view="coursesList">
 <section class="section">
   <div class="wrap">
@@ -568,7 +598,10 @@
       no_revenue: 'No revenue yet.', total_row_label: 'Total',
       discount_codes: 'Discount codes', th_code: 'Code', th_discount: 'Discount', th_uses: 'Uses', th_expires: 'Expires',
       no_discount_codes: 'No discount codes yet.', status_inactive: 'Stopped',
-      th_discounted_students: 'Discounted'
+      th_discounted_students: 'Discounted',
+      error_log: 'Error log', th_message: 'Message', th_page: 'Page', th_user: 'User', no_errors: 'No errors reported. Good sign.',
+      clear_all: 'Clear all', confirm_clear_errors: 'Delete all error log entries? This cannot be undone.',
+      dismiss: 'Dismiss', alert_clear_errors_failed: 'Failed to clear: '
     },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', log_out: 'تسجيل الخروج',
@@ -609,7 +642,10 @@
       no_revenue: 'لا توجد إيرادات بعد.', total_row_label: 'الإجمالي',
       discount_codes: 'أكواد الخصم', th_code: 'الكود', th_discount: 'الخصم', th_uses: 'الاستخدامات', th_expires: 'ينتهي في',
       no_discount_codes: 'لا توجد أكواد خصم بعد.', status_inactive: 'متوقف',
-      th_discounted_students: 'استخدموا كود خصم'
+      th_discounted_students: 'استخدموا كود خصم',
+      error_log: 'سجل الأخطاء', th_message: 'الرسالة', th_page: 'الصفحة', th_user: 'المستخدم', no_errors: 'لا توجد أخطاء مسجلة. علامة جيدة.',
+      clear_all: 'مسح الكل', confirm_clear_errors: 'حذف كل سجلات الأخطاء؟ لا يمكن التراجع عن هذا.',
+      dismiss: 'تجاهل', alert_clear_errors_failed: 'فشل المسح: '
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
@@ -632,6 +668,7 @@
     if(typeof loadDashboardStats === 'function') loadDashboardStats();
     if(typeof loadRevenue === 'function') loadRevenue();
     if(typeof loadDiscountCodes === 'function') loadDiscountCodes();
+    if(typeof loadErrorLog === 'function') loadErrorLog();
     if(typeof loadCoursesList === 'function') loadCoursesList();
     if(typeof loadTeachersList === 'function') loadTeachersList();
     if(typeof loadStudentsList === 'function') loadStudentsList();
@@ -641,6 +678,33 @@
   const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // Lightweight client-side error reporting — every uncaught error and
+  // unhandled promise rejection gets logged to error_logs so admin can see
+  // what's breaking for real users without needing their browser console.
+  // Capped per page load so a repeating error can't flood the table.
+  (function(){
+    let errorLogCount = 0;
+    async function reportError(message, stack){
+      if(errorLogCount >= 20) return;
+      errorLogCount++;
+      try{
+        const { data: { session } } = await sb.auth.getSession();
+        await sb.from('error_logs').insert({
+          message: String(message || '').slice(0, 2000),
+          stack: stack ? String(stack).slice(0, 4000) : null,
+          page: location.pathname,
+          user_id: session ? session.user.id : null,
+          user_agent: navigator.userAgent.slice(0, 300)
+        });
+      }catch(e){}
+    }
+    window.addEventListener('error', (ev) => reportError(ev.message, ev.error && ev.error.stack));
+    window.addEventListener('unhandledrejection', (ev) => {
+      const reason = ev.reason;
+      reportError('Unhandled rejection: ' + (reason && reason.message ? reason.message : reason), reason && reason.stack);
+    });
+  })();
 
   // Every value below (email, name, phone, payment details, device labels,
   // login-event city/country) originates from a user account, not from us —
@@ -1284,6 +1348,48 @@
     document.getElementById('statDiscountCodes').textContent = codes.filter(c => c.is_active && new Date(c.expires_at).getTime() >= now).length;
   }
 
+  async function loadErrorLog(){
+    const body = document.getElementById('errorLogBody');
+    const { data: errors, error } = await sb.from('error_logs')
+      .select('id, message, page, user_id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    document.getElementById('statErrorLog').textContent = (errors || []).length;
+    if(error || !errors || errors.length === 0){
+      body.innerHTML = `<tr><td colspan="5" class="empty">${t('no_errors')}</td></tr>`;
+      return;
+    }
+
+    const userIds = [...new Set(errors.map(e => e.user_id).filter(Boolean))];
+    const { data: logins } = userIds.length
+      ? await sb.from('login_events').select('user_id, email, created_at').in('user_id', userIds).order('created_at', { ascending: false })
+      : { data: [] };
+    const emailByUser = {};
+    (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
+
+    body.innerHTML = errors.map(e => `
+      <tr>
+        <td>${new Date(e.created_at).toLocaleString()}</td>
+        <td style="max-width:360px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(e.message)}</td>
+        <td>${escapeHtml(e.page) || '—'}</td>
+        <td>${e.user_id ? escapeHtml(emailByUser[e.user_id] || e.user_id) : '—'}</td>
+        <td><button class="btn" data-action="dismiss-error" data-id="${escapeHtml(e.id)}">${t('dismiss')}</button></td>
+      </tr>`).join('');
+  }
+
+  async function dismissError(id){
+    const { error } = await sb.from('error_logs').delete().eq('id', id);
+    if(error){ alert(t('alert_clear_errors_failed') + error.message); return; }
+    loadErrorLog();
+  }
+
+  async function clearErrorLog(){
+    if(!confirm(t('confirm_clear_errors'))) return;
+    const { error } = await sb.from('error_logs').delete().not('id', 'is', null);
+    if(error){ alert(t('alert_clear_errors_failed') + error.message); return; }
+    loadErrorLog();
+  }
+
   async function loadTeachersList(){
     const { data: teachers, error } = await sb.from('profiles')
       .select('id, full_name, phone')
@@ -1362,6 +1468,7 @@
     loadDashboardStats();
     loadRevenue();
     loadDiscountCodes();
+    loadErrorLog();
     loadCoursesList();
     loadTeachersList();
     loadStudentsList();
@@ -1395,6 +1502,8 @@
     'copy-invite-link': (el) => copyInviteLink(el),
     'copy-lecture-id': (el) => copyLectureId(el),
     'revoke-invite': (el) => revokeInvite(el.dataset.id),
+    'dismiss-error': (el) => dismissError(el.dataset.id),
+    'clear-error-log': () => clearErrorLog(),
     'download-upload': (el) => downloadUpload(el.dataset.path),
     'publish-video': (el) => {
       const row = el.closest('tr');

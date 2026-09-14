@@ -348,6 +348,33 @@
   const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
   const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+  // Lightweight client-side error reporting — every uncaught error and
+  // unhandled promise rejection gets logged to error_logs so admin can see
+  // what's breaking for real users without needing their browser console.
+  // Capped per page load so a repeating error can't flood the table.
+  (function(){
+    let errorLogCount = 0;
+    async function reportError(message, stack){
+      if(errorLogCount >= 20) return;
+      errorLogCount++;
+      try{
+        const { data: { session } } = await sb.auth.getSession();
+        await sb.from('error_logs').insert({
+          message: String(message || '').slice(0, 2000),
+          stack: stack ? String(stack).slice(0, 4000) : null,
+          page: location.pathname,
+          user_id: session ? session.user.id : null,
+          user_agent: navigator.userAgent.slice(0, 300)
+        });
+      }catch(e){}
+    }
+    window.addEventListener('error', (ev) => reportError(ev.message, ev.error && ev.error.stack));
+    window.addEventListener('unhandledrejection', (ev) => {
+      const reason = ev.reason;
+      reportError('Unhandled rejection: ' + (reason && reason.message ? reason.message : reason), reason && reason.stack);
+    });
+  })();
+
   const params = new URLSearchParams(window.location.search);
   const slug = params.get('slug');
   let course = null;
