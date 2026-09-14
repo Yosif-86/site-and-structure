@@ -237,18 +237,18 @@
         <h2 data-i18n="dashboard_title">Dashboard</h2>
       </div>
       <div class="stat-grid">
-        <div class="stat-card">
+        <button class="stat-card" data-action="go-view" data-view="coursesList">
           <div class="stat-icon c-green">&#127891;</div>
           <div><div class="stat-num" id="statTotalCourses">—</div><div class="stat-label" data-i18n="stat_total_courses">Published courses</div></div>
-        </div>
-        <div class="stat-card">
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="teachersList">
           <div class="stat-icon c-yellow">&#128104;&#8205;&#127979;</div>
           <div><div class="stat-num" id="statTotalTeachers">—</div><div class="stat-label" data-i18n="stat_total_teachers">Teachers</div></div>
-        </div>
-        <div class="stat-card">
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="studentsList">
           <div class="stat-icon c-muted">&#128101;</div>
           <div><div class="stat-num" id="statTotalStudents">—</div><div class="stat-label" data-i18n="stat_total_students">Active students</div></div>
-        </div>
+        </button>
         <div class="stat-card">
           <div class="stat-icon">&#128176;</div>
           <div><div class="stat-num" id="statRevenue">—</div><div class="stat-label" data-i18n="stat_revenue">Est. revenue (IQD)</div></div>
@@ -415,6 +415,66 @@
 </section>
 </div>
 
+<div class="view" data-view="coursesList">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="overview_tag">Overview</div>
+      <h2 data-i18n="stat_total_courses">Published courses</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="coursesListTable">
+        <thead>
+          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th><th data-i18n="th_price">Price</th><th></th></tr>
+        </thead>
+        <tbody id="coursesListBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
+<div class="view" data-view="teachersList">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="overview_tag">Overview</div>
+      <h2 data-i18n="stat_total_teachers">Teachers</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="teachersListTable">
+        <thead>
+          <tr><th data-i18n="th_name">Name</th><th data-i18n="th_email">Email</th><th data-i18n="th_phone">Phone</th><th></th></tr>
+        </thead>
+        <tbody id="teachersListBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
+<div class="view" data-view="studentsList">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="overview_tag">Overview</div>
+      <h2 data-i18n="stat_total_students">Active students</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="studentsListTable">
+        <thead>
+          <tr><th data-i18n="th_name">Name</th><th data-i18n="th_email">Email</th><th data-i18n="th_phone">Phone</th></tr>
+        </thead>
+        <tbody id="studentsListBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
 <script>
   const I18N = {
     en: {
@@ -426,7 +486,8 @@
       th_payment: 'Payment', th_enrolled: 'Enrolled', th_approved_by: 'Approved by', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
       account_sharing_watch: 'Account sharing watch', flagged_logins: 'Flagged logins',
       status_active: 'Active', status_pending: 'Pending',
-      view_proof: 'View proof', approve: 'Approve', remove: 'Remove',
+      view_proof: 'View proof', approve: 'Approve', remove: 'Remove', view_profile: 'View profile', view_course: 'View course',
+      no_courses_list: 'No published courses yet.', no_teachers: 'No teachers yet.', no_students_active: 'No active students yet.',
       no_enrollments: 'No enrollments yet.', no_flagged: 'No flagged logins.',
       confirm_remove: 'Remove {email} from "{title}"? This revokes their access.',
       alert_approve_failed: 'Failed to approve: ', alert_remove_failed: 'Failed to remove: ', alert_proof_failed: 'Failed to load proof: ',
@@ -461,7 +522,8 @@
       th_payment: 'الدفع', th_enrolled: 'تاريخ التسجيل', th_approved_by: 'وافق عليه', th_city: 'المدينة', th_country: 'الدولة', th_distance: 'المسافة', th_when: 'الوقت',
       account_sharing_watch: 'مراقبة مشاركة الحساب', flagged_logins: 'تسجيلات دخول مشبوهة',
       status_active: 'مفعّل', status_pending: 'قيد الانتظار',
-      view_proof: 'عرض الإثبات', approve: 'موافقة', remove: 'إزالة',
+      view_proof: 'عرض الإثبات', approve: 'موافقة', remove: 'إزالة', view_profile: 'عرض الملف الشخصي', view_course: 'عرض الدورة',
+      no_courses_list: 'لا توجد دورات منشورة بعد.', no_teachers: 'لا يوجد مدرسون بعد.', no_students_active: 'لا يوجد طلاب نشطون بعد.',
       no_enrollments: 'لا توجد تسجيلات بعد.', no_flagged: 'لا توجد تسجيلات دخول مشبوهة.',
       confirm_remove: 'إزالة {email} من "{title}"؟ سيؤدي هذا لإلغاء وصوله.',
       alert_approve_failed: 'فشلت الموافقة: ', alert_remove_failed: 'فشلت الإزالة: ', alert_proof_failed: 'فشل تحميل الإثبات: ',
@@ -506,6 +568,9 @@
     if(typeof loadFlagged === 'function') loadFlagged();
     if(typeof loadDevices === 'function') loadDevices();
     if(typeof loadDashboardStats === 'function') loadDashboardStats();
+    if(typeof loadCoursesList === 'function') loadCoursesList();
+    if(typeof loadTeachersList === 'function') loadTeachersList();
+    if(typeof loadStudentsList === 'function') loadStudentsList();
   }
   function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
 
@@ -974,6 +1039,88 @@
     document.getElementById('statDevices').textContent = cappedAccounts;
   }
 
+  async function loadCoursesList(){
+    const { data: courses, error } = await sb.from('courses')
+      .select('id, slug, title, price, is_free, teacher_id')
+      .eq('status', 'published')
+      .order('order_index');
+    const body = document.getElementById('coursesListBody');
+    if(error || !courses || courses.length === 0){
+      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_courses_list')}</td></tr>`;
+      return;
+    }
+    const teacherIds = [...new Set(courses.map(c => c.teacher_id).filter(Boolean))];
+    const { data: teachers } = teacherIds.length
+      ? await sb.from('profiles').select('id, full_name').in('id', teacherIds)
+      : { data: [] };
+    const nameById = {};
+    (teachers || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    body.innerHTML = courses.map(c => {
+      const teacherName = c.teacher_id ? (nameById[c.teacher_id] || '—') : '—';
+      return `
+        <tr>
+          <td>${escapeHtml(c.title)}</td>
+          <td>${escapeHtml(teacherName)}</td>
+          <td>${c.is_free ? t('free_label') : escapeHtml(String(c.price))}</td>
+          <td><a class="btn" href="course.html?slug=${encodeURIComponent(c.slug)}" target="_blank" style="text-decoration:none;">${t('view_course')}</a></td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function loadTeachersList(){
+    const { data: teachers, error } = await sb.from('profiles')
+      .select('id, full_name, phone')
+      .eq('is_teacher', true)
+      .order('full_name');
+    const body = document.getElementById('teachersListBody');
+    if(error || !teachers || teachers.length === 0){
+      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_teachers')}</td></tr>`;
+      return;
+    }
+    const { data: logins } = await sb.from('login_events').select('user_id, email, created_at').order('created_at', { ascending: false });
+    const emailByUser = {};
+    (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
+
+    body.innerHTML = teachers.map(p => {
+      const email = emailByUser[p.id] || '—';
+      return `
+        <tr>
+          <td>${escapeHtml(p.full_name) || '—'}</td>
+          <td>${escapeHtml(email)}</td>
+          <td>${escapeHtml(p.phone) || '—'}</td>
+          <td><a class="btn" href="teacher-profile.html?id=${encodeURIComponent(p.id)}" target="_blank" style="text-decoration:none;">${t('view_profile')}</a></td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function loadStudentsList(){
+    const { data: enrollments, error } = await sb.from('enrollments').select('user_id').eq('status', 'active');
+    const body = document.getElementById('studentsListBody');
+    if(error || !enrollments || enrollments.length === 0){
+      body.innerHTML = `<tr><td colspan="3" class="empty">${t('no_students_active')}</td></tr>`;
+      return;
+    }
+    const userIds = [...new Set(enrollments.map(e => e.user_id))];
+    const { data: profiles } = await sb.from('profiles').select('id, full_name, phone').in('id', userIds);
+    const { data: logins } = await sb.from('login_events').select('user_id, email, created_at').order('created_at', { ascending: false });
+    const emailByUser = {};
+    (logins || []).forEach(l => { if(!emailByUser[l.user_id]) emailByUser[l.user_id] = l.email; });
+    const profileByUser = {};
+    (profiles || []).forEach(p => { profileByUser[p.id] = p; });
+
+    body.innerHTML = userIds.map(uid => {
+      const prof = profileByUser[uid] || {};
+      const email = emailByUser[uid] || '—';
+      return `
+        <tr>
+          <td>${escapeHtml(prof.full_name) || '—'}</td>
+          <td>${escapeHtml(email)}</td>
+          <td>${escapeHtml(prof.phone) || '—'}</td>
+        </tr>`;
+    }).join('');
+  }
+
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
     if(!session){ window.location.href = 'index.html'; return; }
@@ -997,6 +1144,9 @@
     loadFlagged();
     loadDevices();
     loadDashboardStats();
+    loadCoursesList();
+    loadTeachersList();
+    loadStudentsList();
   })();
 
   // ---- Click dispatch (replaces inline onclick="" attributes) ----

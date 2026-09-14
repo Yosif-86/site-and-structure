@@ -42,7 +42,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..');
-const PAGES = ['index.html', 'course.html', 'admin.html', 'my-courses.html', 'reset-password.html', 'teacher.html'];
+const PAGES = ['index.html', 'course.html', 'admin.html', 'my-courses.html', 'reset-password.html', 'teacher.html', 'teacher-profile.html'];
 const VERCEL_JSON = path.join(ROOT, 'vercel.json');
 
 // --- Origins the pages legitimately talk to ------------------------------

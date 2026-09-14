@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teacher — Site & Structure</title>
+<script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
+<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#14120F; --panel:#1D1A16; --panel2:#26221C; --line:rgba(243,237,228,0.12); --red:#E8622C; --yellow:#6FA8A0;
+    --green:#6FA8A0; --text:#F3EDE4; --muted:#AFA492; --muted2:#7D7362;
+    --glass-bg:rgba(38,34,28,0.5); --glass-border:rgba(243,237,228,0.16); --glare:rgba(255,255,255,0.14);
+  }
+  :root[data-theme="light"]{
+    --bg:#F3EFE7; --panel:#FFFFFF; --panel2:#EAE3D6; --line:rgba(30,25,18,0.14); --red:#C94E1F; --yellow:#3E7D74;
+    --green:#3E7D74; --text:#1E1912; --muted:#5C5344; --muted2:#8C8171;
+    --glass-bg:rgba(255,255,255,0.55); --glass-border:rgba(255,255,255,0.7); --glare:rgba(255,255,255,0.8);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html, body{overflow-x:hidden; max-width:100%;}
+  body{background:var(--bg); color:var(--text); font-family:'Work Sans', sans-serif; line-height:1.6; transition:background .2s ease, color .2s ease;}
+  .wrap{max-width:900px; margin:0 auto; padding:0 24px;}
+
+  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px); z-index:50;}
+  header .wrap{display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:10px;}
+  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit; min-width:0;}
+  .brand-mark{width:34px; height:34px; border-radius:8px; background:linear-gradient(145deg, var(--red), color-mix(in srgb, var(--red) 55%, black)); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:#fff; flex-shrink:0;}
+  .brand-name{font-family:'Big Shoulders Display'; font-weight:800; font-size:19px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); font-weight:400; letter-spacing:1px; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  nav{display:flex; gap:10px; align-items:center; flex-wrap:nowrap; flex-shrink:0;}
+  :root[dir="rtl"] body{font-family:'Cairo', 'Work Sans', sans-serif;}
+  :root[dir="rtl"] h1, :root[dir="rtl"] h2, :root[dir="rtl"] .brand-name{font-family:'Cairo', sans-serif; text-transform:none;}
+  :root[dir="rtl"] .tag{font-family:'Cairo', sans-serif; text-transform:none;}
+
+  .nav-links-desktop{display:none;}
+  .nav-links-desktop a{color:var(--muted); text-decoration:none; font-size:14px;}
+  .nav-links-desktop a:hover{color:var(--text);}
+  .hamburger-btn{display:flex; width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; align-items:center; justify-content:center; font-size:18px; padding:0; flex-shrink:0;}
+  .hamburger-btn:hover{background:var(--panel2);}
+  .theme-toggle{width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; padding:0; line-height:1; flex-shrink:0;}
+  .theme-toggle:hover{background:var(--panel2);}
+  .lang-toggle{height:38px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; font-family:'IBM Plex Mono'; letter-spacing:0.5px; flex-shrink:0;}
+  .lang-toggle:hover{background:var(--panel2);}
+
+  .drawer-backdrop{display:none; position:fixed; inset:0; background:rgba(10,8,6,0.6); z-index:199;}
+  .drawer-backdrop.open{display:block;}
+  .drawer{position:fixed; top:0; bottom:0; width:min(300px,82vw); z-index:200; background:var(--panel); padding:20px; display:flex; flex-direction:column; gap:6px; transition:transform .3s cubic-bezier(0.16,1,0.3,1); overflow-y:auto;}
+  :root:not([dir="rtl"]) .drawer{left:0; transform:translateX(-100%); border-right:1px solid var(--line);}
+  :root:not([dir="rtl"]) .drawer.open{transform:translateX(0);}
+  :root[dir="rtl"] .drawer{right:0; transform:translateX(100%); border-left:1px solid var(--line);}
+  :root[dir="rtl"] .drawer.open{transform:translateX(0);}
+  .drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--line);}
+  .drawer-title{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px; text-transform:uppercase;}
+  :root[dir="rtl"] .drawer-title{font-family:'Cairo', sans-serif; text-transform:none;}
+  .drawer-close{background:none; border:none; color:var(--red); font-size:20px; cursor:pointer; line-height:1;}
+  .drawer-links{display:flex; flex-direction:column; gap:4px;}
+  .drawer-links a{color:var(--text); text-decoration:none; font-size:15px; padding:12px 8px; border-radius:8px;}
+  .drawer-links a:hover{background:var(--panel2);}
+
+  @media (max-width:480px){ .brand-name{font-size:15px;} .brand-name small{font-size:8px;} .lang-toggle{padding:0 8px;} }
+
+  .btn{font-family:'Work Sans'; font-size:13px; font-weight:600; padding:10px 20px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer; text-decoration:none; display:inline-block; transition:transform .15s ease, box-shadow .15s ease, background .15s ease;}
+  .btn:hover{background:var(--panel2);}
+
+  .profile-head{padding:48px 0 32px; display:flex; gap:24px; align-items:flex-start; flex-wrap:wrap;}
+  .profile-photo{width:104px; height:104px; border-radius:50%; object-fit:cover; border:1px solid var(--line); flex-shrink:0; background:var(--panel2);}
+  .profile-photo-placeholder{width:104px; height:104px; border-radius:50%; border:1px solid var(--line); flex-shrink:0; background:var(--panel2); display:flex; align-items:center; justify-content:center; font-family:'Big Shoulders Display'; font-weight:800; font-size:34px; color:var(--muted2);}
+  h1{font-family:'Big Shoulders Display'; font-weight:800; font-size:32px; margin-bottom:6px; text-transform:uppercase;}
+  .tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--red); letter-spacing:1px; text-transform:uppercase; margin-bottom:8px; display:block;}
+  .bio{color:var(--muted); font-size:14.5px; max-width:560px; margin-top:8px;}
+
+  .section{padding:32px 0; border-top:1px solid var(--line);}
+  h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:22px; margin-bottom:20px; text-transform:uppercase;}
+  .course-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:16px;}
+  .card{--mx:50%; --my:50%; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; padding:20px; position:relative; overflow:hidden; isolation:isolate; backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%); transition:transform .4s cubic-bezier(0.16,1,0.3,1), box-shadow .4s cubic-bezier(0.16,1,0.3,1); display:flex; flex-direction:column; gap:10px;}
+  .card:hover{transform:translateY(-4px); box-shadow:0 20px 40px -18px rgba(0,0,0,0.3), 0 0 36px -8px color-mix(in srgb, var(--red) 45%, transparent);}
+  .card h3{font-family:'Big Shoulders Display'; font-weight:800; font-size:17px; text-transform:uppercase;}
+  .card .price{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px;}
+  .card .price.free{color:var(--yellow);}
+  .empty{color:var(--muted); font-size:14px;}
+
+  /* glass glare */
+  .card::before{content:''; position:absolute; inset:0; z-index:2; pointer-events:none; background:radial-gradient(260px circle at var(--mx) var(--my), var(--glare), transparent 70%); opacity:0; transition:opacity .8s ease; mix-blend-mode:soft-light;}
+  .card:hover::before{ opacity:1; }
+  @media (prefers-reduced-motion: reduce){ .card::before{ animation:none !important; opacity:0 !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a href="index.html" class="brand">
+      <div class="brand-mark"><span>&#9651;</span></div>
+      <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+    </a>
+    <nav>
+      <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
+      <div class="nav-links-desktop">
+        <a href="index.html" data-i18n="nav_home">Home</a>
+        <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+      </div>
+      <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
+    </nav>
+  </div>
+</header>
+
+<div class="drawer-backdrop" id="drawerBackdrop" data-action="close-drawer"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
+    <div class="drawer-title" data-i18n="menu">Menu</div>
+  </div>
+  <div class="drawer-links">
+    <a href="index.html" data-i18n="nav_home">Home</a>
+    <a href="index.html#courses" data-i18n="nav_courses">Courses</a>
+  </div>
+</div>
+
+<div class="wrap" id="content">
+  <p class="empty" style="padding:60px 0;" data-i18n="loading">Loading…</p>
+</div>
+
+<script>
+  const I18N = {
+    en: {
+      tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE', nav_home: 'Home', nav_courses: 'Courses', menu: 'Menu',
+      loading: 'Loading…', not_found: 'Teacher not found.', no_specified: 'No teacher specified.',
+      courses_by: 'Courses', no_courses: 'No published courses yet.', free_label: 'Free', view_course: 'View course'
+    },
+    ar: {
+      tagline: 'منصة دورات هندسية — نموذج أولي', nav_home: 'الرئيسية', nav_courses: 'الدورات', menu: 'القائمة',
+      loading: 'جاري التحميل…', not_found: 'المدرس غير موجود.', no_specified: 'لم يتم تحديد مدرس.',
+      courses_by: 'الدورات', no_courses: 'لا توجد دورات منشورة بعد.', free_label: 'مجاني', view_course: 'عرض الدورة'
+    }
+  };
+  let currentLang = document.documentElement.getAttribute('lang') || 'en';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+
+  // Bio/specialty/full_name are teacher-authored, publicly rendered — must be
+  // escaped the same way the course catalogue is (see index.html/course.html
+  // fix), or a teacher could run script in every visitor's browser via their
+  // own profile fields.
+  function escapeHtml(value){
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  function applyTheme(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    try{ localStorage.setItem('ss_theme', theme); }catch(e){}
+    const btn = document.getElementById('themeToggle');
+    if(btn) btn.textContent = theme === 'dark' ? '☀' : '☾';
+  }
+  function toggleTheme(){
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyTheme(cur === 'dark' ? 'light' : 'dark');
+  }
+  applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
+
+  function applyLang(lang){
+    currentLang = lang;
+    document.documentElement.setAttribute('lang', lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    try{ localStorage.setItem('ss_lang', lang); }catch(e){}
+    const btn = document.getElementById('langToggle');
+    if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+    if(teacher) renderPage();
+  }
+  function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
+  applyLang(currentLang);
+
+  function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); }
+  function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
+
+  document.addEventListener('mousemove', (e) => {
+    const el = e.target.closest('.card');
+    if(!el) return;
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty('--mx', ((e.clientX - rect.left) / rect.width * 100) + '%');
+    el.style.setProperty('--my', ((e.clientY - rect.top) / rect.height * 100) + '%');
+  });
+
+  const params = new URLSearchParams(window.location.search);
+  const teacherId = params.get('id');
+  let teacher = null;
+  let courses = [];
+
+  function renderPage(){
+    const el = document.getElementById('content');
+    if(!teacher){
+      el.innerHTML = `<p class="empty" style="padding:60px 0;">${t('not_found')}</p>`;
+      return;
+    }
+    const name = escapeHtml(teacher.full_name);
+    const specialty = escapeHtml(teacher.teacher_specialty);
+    const bio = escapeHtml(teacher.teacher_bio);
+    const initial = escapeHtml((teacher.full_name || '?').trim().charAt(0).toUpperCase());
+    const photo = teacher.teacher_photo_url
+      ? `<img class="profile-photo" src="${escapeHtml(teacher.teacher_photo_url)}" alt="">`
+      : `<div class="profile-photo-placeholder">${initial}</div>`;
+
+    const courseCards = courses.length === 0
+      ? `<p class="empty">${t('no_courses')}</p>`
+      : `<div class="course-grid">${courses.map(c => {
+          const title = escapeHtml(c.title);
+          const priceHtml = c.is_free ? `<span class="price free">${t('free_label')}</span>` : `<span class="price">${escapeHtml(c.price)}</span>`;
+          return `
+            <div class="card">
+              <h3>${title}</h3>
+              ${priceHtml}
+              <a class="btn" href="course.html?slug=${encodeURIComponent(c.slug)}" style="text-align:center;">${t('view_course')}</a>
+            </div>`;
+        }).join('')}</div>`;
+
+    el.innerHTML = `
+      <div class="profile-head">
+        ${photo}
+        <div>
+          ${specialty ? `<span class="tag">${specialty}</span>` : ''}
+          <h1>${name}</h1>
+          ${bio ? `<p class="bio">${bio}</p>` : ''}
+        </div>
+      </div>
+      <div class="section">
+        <h2>${t('courses_by')}</h2>
+        ${courseCards}
+      </div>`;
+  }
+
+  (async () => {
+    if(!teacherId){
+      document.getElementById('content').innerHTML = `<p class="empty" style="padding:60px 0;">${t('no_specified')}</p>`;
+      return;
+    }
+    const { data: prof } = await sb.from('teacher_public_profiles').select('*').eq('id', teacherId).maybeSingle();
+    teacher = prof;
+    if(teacher){
+      const { data: pubCourses } = await sb.from('courses')
+        .select('slug, title, price, is_free')
+        .eq('teacher_id', teacherId)
+        .eq('status', 'published')
+        .order('order_index');
+      courses = pubCourses || [];
+    }
+    renderPage();
+  })();
+
+  const CLICK_ACTIONS = {
+    'open-drawer': () => openDrawer(),
+    'close-drawer': () => closeDrawer(),
+    'toggle-theme': () => toggleTheme(),
+    'toggle-lang': () => toggleLang()
+  };
+  document.addEventListener('click', (ev) => {
+    const el = ev.target.closest('[data-action]');
+    if(!el) return;
+    const handler = CLICK_ACTIONS[el.dataset.action];
+    if(!handler) return;
+    handler(el, ev);
+  });
+</script>
+
+</body>
+</html>
