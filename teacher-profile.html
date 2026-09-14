@@ -139,6 +139,8 @@
     }
   };
   let currentLang = document.documentElement.getAttribute('lang') || 'en';
+  let teacher = null;
+  let courses = [];
   function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
 
   // Bio/specialty/full_name are teacher-authored, publicly rendered — must be
@@ -193,8 +195,6 @@
 
   const params = new URLSearchParams(window.location.search);
   const teacherId = params.get('id');
-  let teacher = null;
-  let courses = [];
 
   function renderPage(){
     const el = document.getElementById('content');
