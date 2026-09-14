@@ -1051,7 +1051,8 @@
     let revenue = 0;
     (activeEnrollments || []).forEach(e => {
       const c = courseTitles[e.course_slug];
-      if(c && !c.is_free && c.price) revenue += Number(c.price);
+      // price is free text (e.g. "15,000 IQD"), so pull digits out rather than Number()
+      if(c && !c.is_free && c.price) revenue += parseInt(String(c.price).replace(/[^\d]/g, ''), 10) || 0;
     });
     document.getElementById('statRevenue').textContent = revenue.toLocaleString();
 
@@ -1121,16 +1122,24 @@
     const nameById = {};
     (teachers || []).forEach(p => { nameById[p.id] = p.full_name; });
 
+    // price is a free-text field (e.g. "15,000 IQD"), not a number column —
+    // pull the numeric amount out of it rather than coercing the string.
+    const parsePrice = (price) => {
+      const digits = String(price || '').replace(/[^\d]/g, '');
+      return digits ? parseInt(digits, 10) : 0;
+    };
+
     let totalRevenue = 0, totalTeacher = 0, totalMine = 0;
     const rows = courses
-      .filter(c => !c.is_free && c.price)
+      .filter(c => !c.is_free && parsePrice(c.price) > 0)
       .map(c => {
         const students = countBySlug[c.slug] || 0;
-        const revenue = students * Number(c.price);
+        const priceNum = parsePrice(c.price);
+        const revenue = students * priceNum;
         const teacherAmt = c.pay_to_teacher ? revenue : 0;
         const mineAmt = c.pay_to_teacher ? 0 : revenue;
         totalRevenue += revenue; totalTeacher += teacherAmt; totalMine += mineAmt;
-        return { c, students, revenue, teacherAmt, mineAmt };
+        return { c, students, priceNum, revenue, teacherAmt, mineAmt };
       })
       .sort((a, b) => b.revenue - a.revenue);
 
@@ -1140,14 +1149,14 @@
       return;
     }
 
-    body.innerHTML = rows.map(({ c, students, revenue, teacherAmt, mineAmt }) => {
+    body.innerHTML = rows.map(({ c, students, priceNum, revenue, teacherAmt, mineAmt }) => {
       const teacherName = c.teacher_id ? (nameById[c.teacher_id] || '—') : '—';
       return `
         <tr>
           <td>${escapeHtml(c.title)}</td>
           <td>${escapeHtml(teacherName)}</td>
           <td>${students}</td>
-          <td>${Number(c.price).toLocaleString()}</td>
+          <td>${escapeHtml(c.price)}</td>
           <td>${revenue.toLocaleString()}</td>
           <td>${teacherAmt.toLocaleString()}</td>
           <td>${mineAmt.toLocaleString()}</td>
