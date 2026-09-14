@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Courses — Site & Structure</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
-<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -190,7 +189,7 @@
         <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
+
     </nav>
   </div>
 </header>
@@ -222,13 +221,6 @@
 
 <script>
   const I18N = {
-    en: {
-      tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
-      nav_home: 'Home', nav_courses: 'Courses', nav_teacher: 'Teacher dashboard', nav_admin: 'Admin', log_out: 'Log out',
-      menu: 'Menu', your_account: 'Your account', my_courses: 'My courses',
-      no_enrollments: "You haven't enrolled in any courses yet.", browse_catalogue: 'Browse the catalogue',
-      enrolled_on: 'Enrolled', watch: 'Watch', view: 'View', status_active: 'Active', status_pending: 'Awaiting approval'
-    },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
       nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة', log_out: 'تسجيل الخروج',
@@ -237,8 +229,8 @@
       enrolled_on: 'تاريخ التسجيل', watch: 'مشاهدة', view: 'عرض', status_active: 'مفعّل', status_pending: 'بانتظار الموافقة'
     }
   };
-  let currentLang = document.documentElement.getAttribute('lang') || 'en';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+  let currentLang = 'ar';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
 
   // Course titles are teacher-authored, not admin-only content — without
   // escaping, a title like `<img src=x onerror=...>` would run script in

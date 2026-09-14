@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin — Site & Structure</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
-<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -123,6 +122,16 @@
   }
   .copy-icon-btn:hover{background:var(--panel2); color:var(--text);}
 
+  .form-box{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:20px;}
+  .form-box label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; margin-top:14px;}
+  .form-box label:first-child{margin-top:0;}
+  .form-box input[type=text], .form-box select{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:'Work Sans'; font-size:14px;
+  }
+  .field-hint{color:var(--muted2); font-size:11.5px; margin-top:4px;}
+  .form-actions{display:flex; gap:10px; margin-top:18px;}
+  .form-error{color:var(--red); font-size:13px; margin-top:10px;}
+
   .section{padding:48px 0;}
   .section-head{margin-bottom:24px;}
   h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:24px; text-transform:uppercase;}
@@ -209,7 +218,7 @@
         <button class="btn" id="logoutBtn" data-i18n="log_out">Log out</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
+
     </nav>
   </div>
 </header>
@@ -288,6 +297,10 @@
         <button class="stat-card" data-action="go-view" data-view="errorLog">
           <div class="stat-icon">&#9888;</div>
           <div><div class="stat-num" id="statErrorLog">—</div><div class="stat-label" data-i18n="error_log">Error log</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="myPayment">
+          <div class="stat-icon c-green">&#128176;</div>
+          <div><div class="stat-num" id="statMyPayment">—</div><div class="stat-label" data-i18n="my_payment">My payment number</div></div>
         </button>
       </div>
     </div>
@@ -497,6 +510,32 @@
 </section>
 </div>
 
+<div class="view" data-view="myPayment">
+<section class="section">
+  <div class="wrap" style="max-width:520px;">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="overview_tag">Overview</div>
+      <h2 data-i18n="my_payment">My payment number</h2>
+    </div>
+    <div class="form-box">
+      <div class="field-hint" data-i18n="my_payment_sub" style="margin-bottom:10px;">Shown to students at checkout for any course where "Pay to teacher" is off.</div>
+      <label data-i18n="label_payment_method">Method</label>
+      <select id="myPayMethod">
+        <option value="zain" data-i18n="zain_cash">Zain Cash</option>
+        <option value="qi" data-i18n="qi_card">Qi Card</option>
+      </select>
+      <label data-i18n="label_payment_detail">Number</label>
+      <input type="text" id="myPayDetail" placeholder="07XX XXX XXXX">
+      <div id="myPaymentErr" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" data-action="save-my-payment" data-i18n="btn_save">Save</button>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
 <div class="view" data-view="coursesList">
 <section class="section">
   <div class="wrap">
@@ -559,50 +598,6 @@
 
 <script>
   const I18N = {
-    en: {
-      tagline: 'ADMIN DASHBOARD', nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', log_out: 'Log out',
-      overview_tag: 'Overview', dashboard_title: 'Dashboard', manage_tag: 'Manage', back_to_dashboard: 'Back to dashboard',
-      stat_total_courses: 'Published courses', stat_total_teachers: 'Teachers', stat_total_students: 'Active students', stat_revenue: 'Est. revenue (IQD)',
-      menu: 'Menu', enrollments: 'Enrollments', students_courses: 'Students & courses',
-      th_email: 'Email', th_name: 'Name', th_phone: 'Phone', th_course: 'Course', th_status: 'Status',
-      th_payment: 'Payment', th_enrolled: 'Enrolled', th_approved_by: 'Approved by', th_city: 'City', th_country: 'Country', th_distance: 'Distance', th_when: 'When',
-      account_sharing_watch: 'Account sharing watch', flagged_logins: 'Flagged logins',
-      status_active: 'Active', status_pending: 'Pending',
-      view_proof: 'View proof', approve: 'Approve', remove: 'Remove', view_profile: 'View profile', view_course: 'View course',
-      no_courses_list: 'No published courses yet.', no_teachers: 'No teachers yet.', no_students_active: 'No active students yet.',
-      no_enrollments: 'No enrollments yet.', no_flagged: 'No flagged logins.',
-      confirm_remove: 'Remove {email} from "{title}"? This revokes their access.',
-      alert_approve_failed: 'Failed to approve: ', alert_remove_failed: 'Failed to remove: ', alert_proof_failed: 'Failed to load proof: ',
-      device_management: 'Device management', trusted_devices: 'Capped accounts',
-      th_device: 'Device', th_first_seen: 'First seen', th_last_seen: 'Last seen',
-      no_devices: 'No accounts are at the device limit right now.',
-      confirm_remove_device: 'Remove this device for {email}? They\'ll be able to log in on a new device again.',
-      alert_remove_device_failed: 'Failed to remove device: ',
-      teacher_courses_tag: 'Teacher submissions', course_review: 'Course review',
-      th_teacher: 'Teacher', th_price: 'Price', th_pay_to_teacher: 'Pay to teacher', no_pending_courses: 'No courses waiting for review.',
-      publish: 'Publish', reject: 'Send back',
-      confirm_reject_course: 'Send "{title}" back to draft? The teacher can edit and resubmit it.',
-      alert_review_failed: 'Failed: ', free_label: 'Free',
-      teacher_access_tag: 'Teacher access', teacher_invites: 'Teacher invites', create_invite: '+ Create invite link',
-      th_created: 'Created', th_expires: 'Expires', th_used_by: 'Used by', th_link: 'Link', no_invites: 'No invites created yet.',
-      status_unused: 'Unused', status_used: 'Used', status_expired: 'Expired',
-      invite_created: 'Invite link created — copy it and send it to the new teacher:', copy: 'Copy', copied: 'Copied',
-      revoke: 'Revoke', confirm_revoke_invite: 'Revoke this invite? The link will stop working.',
-      alert_invite_failed: 'Failed to create invite: ',
-      lecture_uploads_tag: 'Lecture processing', pending_uploads: 'Pending lecture uploads',
-      th_lecture: 'Lecture', th_publish_video: 'Publish video', no_pending_uploads: 'No pending lecture uploads.',
-      download: 'Download', alert_download_failed: 'Failed to load download link: ', copy_lecture_id: 'Copy lecture ID',
-      bunny_placeholder: 'Bunny video ID', r2_placeholder: 'R2 path', save_and_publish: 'Save & go live',
-      alert_publish_video_failed: 'Failed: ', alert_publish_video_empty: 'Enter a Bunny video ID or an R2 path first.',
-      th_students_enrolled: 'Students', th_total_revenue: 'Total revenue', th_teacher_payout: 'Teacher payout', th_your_profit: 'Your profit',
-      no_revenue: 'No revenue yet.', total_row_label: 'Total',
-      discount_codes: 'Discount codes', th_code: 'Code', th_discount: 'Discount', th_uses: 'Uses', th_expires: 'Expires',
-      no_discount_codes: 'No discount codes yet.', status_inactive: 'Stopped',
-      th_discounted_students: 'Discounted',
-      error_log: 'Error log', th_message: 'Message', th_page: 'Page', th_user: 'User', no_errors: 'No errors reported. Good sign.',
-      clear_all: 'Clear all', confirm_clear_errors: 'Delete all error log entries? This cannot be undone.',
-      dismiss: 'Dismiss', alert_clear_errors_failed: 'Failed to clear: '
-    },
     ar: {
       tagline: 'لوحة تحكم الإدارة', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', log_out: 'تسجيل الخروج',
       overview_tag: 'نظرة عامة', dashboard_title: 'لوحة القيادة', manage_tag: 'الإدارة', back_to_dashboard: 'العودة للوحة القيادة',
@@ -645,11 +640,16 @@
       th_discounted_students: 'استخدموا كود خصم',
       error_log: 'سجل الأخطاء', th_message: 'الرسالة', th_page: 'الصفحة', th_user: 'المستخدم', no_errors: 'لا توجد أخطاء مسجلة. علامة جيدة.',
       clear_all: 'مسح الكل', confirm_clear_errors: 'حذف كل سجلات الأخطاء؟ لا يمكن التراجع عن هذا.',
-      dismiss: 'تجاهل', alert_clear_errors_failed: 'فشل المسح: '
+      dismiss: 'تجاهل', alert_clear_errors_failed: 'فشل المسح: ',
+      my_payment: 'رقم الدفع الخاص بي',
+      my_payment_sub: 'يظهر للطلاب عند الدفع لأي دورة يكون فيها "الدفع للمدرس" متوقفًا.',
+      label_payment_method: 'طريقة الدفع', zain_cash: 'زين كاش', qi_card: 'كي كارد',
+      label_payment_detail: 'الرقم', btn_save: 'حفظ', save_success: 'تم الحفظ.',
+      alert_save_payment_failed: 'فشل الحفظ: '
     }
   };
-  let currentLang = document.documentElement.getAttribute('lang') || 'en';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+  let currentLang = 'ar';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
 
   function applyLang(lang){
     currentLang = lang;
@@ -669,6 +669,7 @@
     if(typeof loadRevenue === 'function') loadRevenue();
     if(typeof loadDiscountCodes === 'function') loadDiscountCodes();
     if(typeof loadErrorLog === 'function') loadErrorLog();
+    if(typeof loadMyPayment === 'function') loadMyPayment();
     if(typeof loadCoursesList === 'function') loadCoursesList();
     if(typeof loadTeachersList === 'function') loadTeachersList();
     if(typeof loadStudentsList === 'function') loadStudentsList();
@@ -1079,7 +1080,7 @@
     loadDevices();
   }
 
-  const MAX_DEVICES = 2; // must match api/check-device.js
+  const MAX_DEVICES = 1; // must match api/check-device.js
 
   async function loadDevices(){
     const { data: devices, error } = await sb.from('trusted_devices')
@@ -1304,6 +1305,28 @@
       <td style="font-weight:700;">${totalMine.toLocaleString()}</td>`;
   }
 
+  async function loadMyPayment(){
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session) return;
+    const { data: prof } = await sb.from('profiles').select('teacher_payment_method, teacher_payment_detail').eq('id', session.user.id).maybeSingle();
+    document.getElementById('myPayMethod').value = (prof && prof.teacher_payment_method) || 'zain';
+    document.getElementById('myPayDetail').value = (prof && prof.teacher_payment_detail) || '';
+    document.getElementById('statMyPayment').textContent = (prof && prof.teacher_payment_detail) ? '✓' : '—';
+  }
+
+  async function saveMyPayment(){
+    const errEl = document.getElementById('myPaymentErr');
+    errEl.style.color = ''; errEl.textContent = '';
+    const { data:{ session } } = await sb.auth.getSession();
+    if(!session) return;
+    const method = document.getElementById('myPayMethod').value;
+    const detail = document.getElementById('myPayDetail').value.trim();
+    const { error } = await sb.from('profiles').update({ teacher_payment_method: method, teacher_payment_detail: detail }).eq('id', session.user.id);
+    if(error){ errEl.textContent = t('alert_save_payment_failed') + error.message; return; }
+    errEl.style.color = 'var(--green)'; errEl.textContent = t('save_success');
+    loadMyPayment();
+  }
+
   async function loadDiscountCodes(){
     const body = document.getElementById('discountCodesBody');
     const { data: courses } = await sb.from('courses').select('id, slug, title, teacher_id');
@@ -1469,6 +1492,7 @@
     loadRevenue();
     loadDiscountCodes();
     loadErrorLog();
+    loadMyPayment();
     loadCoursesList();
     loadTeachersList();
     loadStudentsList();
@@ -1504,6 +1528,7 @@
     'revoke-invite': (el) => revokeInvite(el.dataset.id),
     'dismiss-error': (el) => dismissError(el.dataset.id),
     'clear-error-log': () => clearErrorLog(),
+    'save-my-payment': () => saveMyPayment(),
     'download-upload': (el) => downloadUpload(el.dataset.path),
     'publish-video': (el) => {
       const row = el.closest('tr');

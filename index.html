@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Site & Structure — Engineering Course Platform</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
-<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -239,7 +238,7 @@
         <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
+
     </nav>
   </div>
 </header>
@@ -309,40 +308,6 @@
 
 <script>
   const I18N = {
-    en: {
-      tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
-      nav_courses: 'Courses', nav_service: 'Project service', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', nav_admin: 'Admin',
-      log_in: 'Log in', log_out: 'Log out',
-      hero_eyebrow: 'Rev 01 — Prototype for review',
-      hero_title: 'Built like a drawing set. <em>Taught</em> like a site walkthrough.',
-      hero_sub: 'Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.',
-      browse_courses: 'Browse courses',
-      menu: 'Menu',
-      sheet_index: 'Sheet index', course_catalogue: 'Course catalogue',
-      loading_courses: 'Loading courses…', no_courses: 'No courses published yet.',
-      beyond_course: 'Beyond the course', grad_service_title: 'Graduation project service',
-      grad_service_desc: 'Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.',
-      footer_line: 'PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY',
-      card_view_course: 'View course', card_by: 'By.', card_free: 'Free',
-      auth_login_title: 'Log in', auth_login_sub: 'Access your enrolled courses.',
-      label_email: 'Email', ph_email: 'you@email.com', label_password: 'Password', ph_password: '••••••••',
-      forgot_password: 'Forgot password?', no_account: 'No account?', sign_up: 'Sign up',
-      auth_signup_title: 'Sign up', auth_signup_sub: 'Create your account.',
-      label_fullname: 'Full name', ph_fullname: 'Your name', label_phone: 'Phone number', ph_phone: '07XX XXX XXXX',
-      ph_password_signup: 'At least 6 characters',
-      already_account: 'Already have an account?',
-      auth_forgot_title: 'Reset password', auth_forgot_sub: "We'll email you a link to set a new password.",
-      btn_send_reset: 'Send reset link', back_to_login: 'Back to log in',
-      success_email_title: 'Check your email', success_email_sub: 'If an account exists for that email, a reset link is on its way.',
-      success_account_title: 'Account created', success_account_sub: "You're signed up and logged in.",
-      btn_close: 'Close',
-      invite_invalid_title: 'Invite link no longer valid',
-      invite_invalid_sub: 'This teacher invite has already been used, revoked, or expired. Ask for a new one.',
-      alert_kicked: 'You were logged out because your account was used to log in on another device.',
-      err_enter_email: 'Enter your email.', err_enter_email_pass: 'Enter your email and password.',
-      err_device_limit: 'This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.',
-      err_fill_fields: 'Fill in all fields.', err_pass_length: 'Password must be at least 6 characters.'
-    },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
       nav_courses: 'الدورات', nav_service: 'خدمة المشروع', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة',
@@ -374,12 +339,12 @@
       invite_invalid_sub: 'تم استخدام هذه الدعوة مسبقًا أو إلغاؤها أو انتهت صلاحيتها. اطلب رابطًا جديدًا.',
       alert_kicked: 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
       err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
-      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهازين (الحد الأقصى المسموح). تواصل مع الدعم لتحرير أحد الأجهزة.',
+      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
       err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.'
     }
   };
-  let currentLang = document.documentElement.getAttribute('lang') || 'en';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+  let currentLang = 'ar';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
 
   // Course title/description/meta/etc. are teacher-authored (any redeemed
   // teacher invite can set them), not admin-only content, and this renders

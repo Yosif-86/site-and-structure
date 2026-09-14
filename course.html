@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Course — Site & Structure</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
-<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -137,6 +136,9 @@
   .err.show{display:block;}
   .msg-ok{color:var(--green); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
   .msg-ok.show{display:block;}
+  .send-to-box{background:var(--panel2); border:1px solid var(--yellow); border-radius:10px; padding:12px 14px; margin-bottom:16px;}
+  .send-to-label{font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;}
+  .send-to-value{font-size:15px; font-weight:600;}
   .success-box{text-align:center; padding:10px 0;}
   .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
   .modal-full-btn{width:100%; margin-top:4px;}
@@ -192,7 +194,7 @@
         <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
       </div>
       <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-      <button class="lang-toggle" id="langToggle" data-action="toggle-lang" aria-label="Toggle language" title="Toggle language"></button>
+
     </nav>
   </div>
 </header>
@@ -252,41 +254,6 @@
 
 <script>
   const I18N = {
-    en: {
-      tagline: 'ENGINEERING COURSE PLATFORM — PROTOTYPE',
-      nav_home: 'Home', nav_courses: 'Courses', nav_mycourses: 'My courses', nav_teacher: 'Teacher dashboard', nav_admin: 'Admin', log_in: 'Log in', log_out: 'Log out',
-      menu: 'Menu',
-      loading_course: 'Loading course…', course_not_found: 'Course not found.', no_course_specified: 'No course specified.',
-      curriculum: 'Curriculum', no_lectures: 'No lectures uploaded yet.', free_tag: 'FREE', watch: 'Watch', locked: '🔒 Locked',
-      status_active: 'Active', status_pending: 'Awaiting approval', card_free: 'Free',
-      enroll_free: 'Enroll for free', enroll: 'Enroll', by: 'By.',
-      free_course_sub: 'Free course — access unlocked instantly after enrolling.',
-      choose_payment_sub: ' — choose a payment method.',
-      discount_code_label: 'Discount code (optional)', discount_code_ph: 'e.g. SAVE20', apply: 'Apply',
-      err_enter_discount_code: 'Enter a code first.', err_invalid_discount: 'Invalid, expired, or already-used code.',
-      discount_applied: 'Code applied — new price: {price}',
-      zain_cash: 'Zain Cash', zain_sub: 'Mobile wallet', qi_card: 'Qi Card', qi_sub: 'Card transfer',
-      pay_label: 'Phone / card number', pay_ph_default: 'Select a payment method first',
-      zain_label: 'Zain Cash number', zain_ph: '07XX XXX XXXX', qi_label: 'Qi Card number', qi_ph: 'XXXX XXXX XXXX XXXX',
-      payment_screenshot: 'Payment screenshot', confirm_payment: 'Confirm payment',
-      submitted: 'Submitted', enrolled: 'Enrolled', access_unlocked: ' — access unlocked',
-      pending_note: "Your payment is pending manual verification. Access unlocks once it's approved.",
-      btn_close: 'Close',
-      auth_login_title: 'Log in', auth_login_sub: 'Access your enrolled courses.',
-      label_email: 'Email', ph_email: 'you@email.com', label_password: 'Password', ph_password: '••••••••',
-      no_account: 'No account?', sign_up: 'Sign up', forgot_password: 'Forgot password?',
-      auth_signup_title: 'Sign up', auth_signup_sub: 'Create your account.',
-      label_fullname: 'Full name', ph_fullname: 'Your name', label_phone: 'Phone number', ph_phone: '07XX XXX XXXX',
-      ph_password_signup: 'At least 6 characters', already_account: 'Already have an account?',
-      auth_forgot_title: 'Reset password', auth_forgot_sub: "We'll email you a link to set a new password.",
-      btn_send_reset: 'Send reset link', back_to_login: 'Back to log in',
-      success_email_title: 'Check your email', success_email_sub: 'If an account exists for that email, a reset link is on its way.',
-      err_enter_email: 'Enter your email.', err_enter_email_pass: 'Enter your email and password.',
-      err_device_limit: 'This account is already signed in on 2 devices (the max allowed). Contact support to free up a device.',
-      err_fill_fields: 'Fill in all fields.', err_pass_length: 'Password must be at least 6 characters.',
-      err_choose_payment: 'Choose a payment method and enter your details.', err_upload_proof: 'Upload a screenshot of your payment.',
-      err_upload_failed: 'Screenshot upload failed: ', err_video_unavailable: "This video isn't available yet."
-    },
     ar: {
       tagline: 'منصة دورات هندسية — نموذج أولي',
       nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة', log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
@@ -297,6 +264,7 @@
       enroll_free: 'التسجيل مجانًا', enroll: 'التسجيل', by: 'بواسطة.',
       free_course_sub: 'دورة مجانية — يتم فتح الوصول فور التسجيل.',
       choose_payment_sub: ' — اختر طريقة الدفع.',
+      send_to_label: 'أرسل المبلغ إلى',
       discount_code_label: 'كود الخصم (اختياري)', discount_code_ph: 'مثال: SAVE20', apply: 'تطبيق',
       err_enter_discount_code: 'أدخل الكود أولاً.', err_invalid_discount: 'الكود غير صالح أو منتهي أو استُخدم من قبل.',
       discount_applied: 'تم تطبيق الكود — السعر الجديد: {price}',
@@ -317,14 +285,14 @@
       btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
       success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
       err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
-      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهازين (الحد الأقصى المسموح). تواصل مع الدعم لتحرير أحد الأجهزة.',
+      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
       err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
       err_choose_payment: 'اختر طريقة دفع وأدخل بياناتك.', err_upload_proof: 'ارفع لقطة شاشة لعملية الدفع.',
       err_upload_failed: 'فشل رفع لقطة الشاشة: ', err_video_unavailable: 'هذا الفيديو غير متاح بعد.'
     }
   };
-  let currentLang = document.documentElement.getAttribute('lang') || 'en';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+  let currentLang = 'ar';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
 
   function applyLang(lang){
     currentLang = lang;
@@ -588,9 +556,15 @@
         <button class="btn btn-accent modal-full-btn" data-action="submit-free">${t('enroll_free')}</button>
       `;
     } else {
+      const { data: payInfo } = await sb.rpc('get_course_payment_info', { p_course_slug: course.slug });
+      const pay = payInfo && payInfo[0];
+      const sendToHtml = (pay && pay.payment_detail)
+        ? `<div class="send-to-box"><div class="send-to-label">${t('send_to_label')}</div><div class="send-to-value">${escapeAttr(pay.payment_method === 'qi' ? t('qi_card') : t('zain_cash'))} — <strong>${escapeAttr(pay.payment_detail)}</strong></div></div>`
+        : '';
       body.innerHTML = `
         <h3>${courseTitle()}</h3>
         <p class="sub" id="enrollPriceSub">${course.price}${t('choose_payment_sub')}</p>
+        ${sendToHtml}
         <div class="field">
           <label>${t('discount_code_label')}</label>
           <div style="display:flex; gap:8px;">

@@ -3,7 +3,7 @@ const { allow, clientIp } = require('./_rate-limit');
 
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
-const MAX_DEVICES = 2;
+const MAX_DEVICES = 1;
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {

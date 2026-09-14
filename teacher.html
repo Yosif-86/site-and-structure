@@ -1,11 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Teacher Dashboard — Site & Structure</title>
 <script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
-<script>(function(){try{var l=localStorage.getItem('ss_lang')||'en'; document.documentElement.setAttribute('lang', l); document.documentElement.setAttribute('dir', l==='ar'?'rtl':'ltr');}catch(e){}})();</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -68,10 +67,30 @@
   .view{display:none;}
   .view.active{display:block;}
 
-  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:14px; margin-bottom:32px;}
-  .stat-card{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:20px;}
-  .stat-num{font-family:'Big Shoulders Display'; font-weight:800; font-size:32px;}
-  .stat-label{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px;}
+  .stat-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px; margin-bottom:32px;}
+  .stat-card{
+    display:flex; align-items:center; gap:14px; padding:18px 20px; border-radius:16px;
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    box-shadow:0 16px 40px -24px rgba(30,25,18,0.25);
+    backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
+    transition:transform .25s cubic-bezier(0.16,1,0.3,1), box-shadow .25s cubic-bezier(0.16,1,0.3,1);
+    text-align:left; font-family:inherit; color:inherit;
+  }
+  :root[dir="rtl"] .stat-card{text-align:right;}
+  button.stat-card{border:1px solid var(--glass-border); cursor:pointer; width:100%;}
+  button.stat-card:hover{transform:translateY(-3px); box-shadow:0 24px 48px -20px rgba(30,25,18,0.3), 0 0 32px -10px color-mix(in srgb, var(--red) 40%, transparent);}
+  .stat-icon{
+    width:44px; height:44px; border-radius:12px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:19px;
+    background:color-mix(in srgb, var(--red) 16%, transparent); color:var(--red);
+  }
+  .stat-icon.c-green{background:color-mix(in srgb, var(--green) 18%, transparent); color:var(--green);}
+  .stat-icon.c-yellow{background:color-mix(in srgb, var(--yellow) 18%, transparent); color:var(--yellow);}
+  .stat-icon.c-muted{background:color-mix(in srgb, var(--muted2) 20%, transparent); color:var(--text);}
+  .stat-num{font-family:'Big Shoulders Display'; font-weight:800; font-size:26px; line-height:1.1;}
+  .stat-label{font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
+  :root[dir="rtl"] .stat-label{font-family:'Cairo', sans-serif; text-transform:none; letter-spacing:0;}
+  .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
 
   .section-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap;}
   h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:22px; text-transform:uppercase;}
@@ -126,7 +145,6 @@
     <nav>
       <button class="hamburger-btn" data-action="open-drawer" aria-label="Menu">&#9776;</button>
       <button class="theme-toggle" data-action="toggle-theme" aria-label="Toggle dark mode"></button>
-      <button class="lang-toggle" data-action="toggle-lang" aria-label="Toggle language"></button>
     </nav>
   </div>
 </header>
@@ -157,10 +175,25 @@
 
   <!-- ================= OVERVIEW ================= -->
   <div class="view" data-view="overview">
+    <div class="section-tag" data-i18n="overview_tag">Overview</div>
+    <h2 style="margin-bottom:20px;" data-i18n="dashboard_title">Dashboard</h2>
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-num" id="statStudents">—</div><div class="stat-label" data-i18n="stat_students">Total students</div></div>
-      <div class="stat-card"><div class="stat-num" id="statCourses">—</div><div class="stat-label" data-i18n="stat_courses">Courses</div></div>
-      <div class="stat-card"><div class="stat-num" id="statEarnings">—</div><div class="stat-label" data-i18n="stat_earnings">Earnings (est.)</div></div>
+      <div class="stat-card">
+        <div class="stat-icon c-muted">&#128101;</div>
+        <div><div class="stat-num" id="statStudents">—</div><div class="stat-label" data-i18n="stat_students">Total students</div></div>
+      </div>
+      <button class="stat-card" data-action="go-view" data-view="courses">
+        <div class="stat-icon c-green">&#127891;</div>
+        <div><div class="stat-num" id="statCourses">—</div><div class="stat-label" data-i18n="stat_courses">Courses</div></div>
+      </button>
+      <div class="stat-card">
+        <div class="stat-icon c-yellow">&#128176;</div>
+        <div><div class="stat-num" id="statEarnings">—</div><div class="stat-label" data-i18n="stat_earnings">Earnings (est.)</div></div>
+      </div>
+      <button class="stat-card" data-action="go-view" data-view="profile">
+        <div class="stat-icon c-green">&#9881;</div>
+        <div><div class="stat-num">&#8594;</div><div class="stat-label" data-i18n="nav_profile">Profile</div></div>
+      </button>
     </div>
   </div>
 
@@ -294,45 +327,10 @@
 
 <script>
   const I18N = {
-    en: {
-      tagline: 'TEACHER DASHBOARD', nav_home: 'Home', nav_courses: 'Courses', nav_admin: 'Admin', log_out: 'Log out', menu: 'Menu',
-      nav_overview: 'Overview', nav_my_courses_teacher: 'My courses', nav_profile: 'Profile',
-      stat_students: 'Total students', stat_courses: 'Courses', stat_earnings: 'Earnings (est.)',
-      my_courses_teacher: 'My courses', new_course: '+ New course',
-      no_courses_teacher: "You haven't created any courses yet.",
-      status_draft: 'Draft', status_pending_review: 'Pending review', status_published: 'Published',
-      btn_edit: 'Edit', btn_curriculum: 'Curriculum', btn_codes: 'Codes', btn_submit_review: 'Submit for review', btn_delete: 'Delete',
-      confirm_delete_course: 'Delete "{title}"? This cannot be undone.',
-      confirm_revoke_code: 'Revoke code "{code}"? It will stop working immediately.',
-      confirm_submit_review: 'Submit "{title}" for review? You won\'t be able to edit it until it\'s approved or sent back.',
-      edit_course: 'Edit course', new_course_title: 'New course',
-      label_course_title: 'Title', label_course_desc: 'Description', label_thumbnail: 'Thumbnail image',
-      label_price: 'Price (IQD, 0 = free)',
-      btn_save: 'Save', btn_cancel: 'Cancel', back_to_courses: 'Back to my courses',
-      err_title_required: 'Enter a title.', err_save_failed: 'Failed to save: ',
-      curriculum: 'Curriculum', th_lecture_title: 'Title', th_status: 'Status', th_free: 'Free', th_remove: '',
-      no_lectures_teacher: 'No lectures yet.',
-      add_lecture: 'Add lecture', label_lecture_title: 'Lecture title', label_video_file: 'Video file',
-      video_pending_hint: "Uploaded videos are reviewed and published by the admin — they won't play immediately.",
-      label_free_preview: 'Free preview lecture', btn_add: 'Add lecture',
-      err_lecture_title_required: 'Enter a lecture title.', err_video_required: 'Choose a video file.',
-      status_live: 'Live', status_pending_upload: 'Pending review',
-      discount_codes: 'Discount codes', th_code: 'Code', th_discount: 'Discount', th_uses: 'Uses', th_expires: 'Expires',
-      no_codes: 'No discount codes yet.', new_code: 'New code', label_code: 'Code', label_discount_type: 'Discount type',
-      opt_percent: 'Percentage off', opt_fixed: 'Fixed amount off', label_discount_value: 'Value',
-      label_max_uses: 'Max uses', label_expires: 'Expires', btn_create: 'Create code',
-      err_code_required: 'Enter a code.', err_value_required: 'Enter a value.', err_expires_required: 'Set an expiry date.',
-      err_expires_past: 'Expiry must be in the future.',
-      status_active: 'Active', status_inactive: 'Revoked', btn_stop: 'Revoke',
-      teacher_profile: 'Teacher profile', public_info: 'Public info', label_fullname: 'Full name',
-      label_specialty: 'Specialty', label_bio: 'Short bio', label_photo: 'Photo',
-      private_payment: 'Private payment details', payment_hint: 'Never shown to students — used only when one of your courses is set to pay you directly.',
-      label_payment_method: 'Method', zain_cash: 'Zain Cash', qi_card: 'Qi Card', label_payment_detail: 'Number',
-      alert_generic_failed: 'Something went wrong: ', current_file: 'Current: ', free_label: 'Free'
-    },
     ar: {
       tagline: 'لوحة المدرس', nav_home: 'الرئيسية', nav_courses: 'الدورات', nav_admin: 'الإدارة', log_out: 'تسجيل الخروج', menu: 'القائمة',
       nav_overview: 'نظرة عامة', nav_my_courses_teacher: 'دوراتي', nav_profile: 'الملف الشخصي',
+      overview_tag: 'نظرة عامة', dashboard_title: 'لوحة القيادة',
       stat_students: 'إجمالي الطلاب', stat_courses: 'الدورات', stat_earnings: 'الأرباح (تقديري)',
       my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
       no_courses_teacher: 'لم تنشئ أي دورة بعد.',
@@ -367,8 +365,8 @@
       alert_generic_failed: 'حدث خطأ: ', current_file: 'الحالي: ', free_label: 'مجاني'
     }
   };
-  let currentLang = document.documentElement.getAttribute('lang') || 'en';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key); }
+  let currentLang = 'ar';
+  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
 
   function applyLang(lang){
     currentLang = lang;
