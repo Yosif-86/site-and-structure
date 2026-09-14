@@ -10,6 +10,7 @@ import 'admin_screen.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
+import 'teacher_screen.dart';
 
 /// Port of loadCatalogue() in index.html.
 class CatalogueScreen extends StatefulWidget {
@@ -23,6 +24,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   List<Course>? _courses;
   String? _error;
   bool _isAdmin = false;
+  bool _isTeacher = false;
 
   @override
   void initState() {
@@ -41,10 +43,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       return;
     }
     try {
-      final prof = await SupabaseService.instance.client.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
-      if (mounted) setState(() => _isAdmin = prof?['is_admin'] == true);
+      final prof = await SupabaseService.instance.client.from('profiles').select('is_admin, is_teacher').eq('id', user.id).maybeSingle();
+      if (mounted) setState(() { _isAdmin = prof?['is_admin'] == true; _isTeacher = prof?['is_teacher'] == true; });
     } catch (_) {
-      if (mounted) setState(() => _isAdmin = false);
+      if (mounted) setState(() { _isAdmin = false; _isTeacher = false; });
     }
   }
 
@@ -109,11 +111,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
               icon: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
               onPressed: () => AppTheme.instance.toggle(),
             ),
-            IconButton(
-              tooltip: 'Toggle language',
-              icon: Text('AR/EN', style: AppFonts.mono(size: 11, color: AppColors.muted, weight: FontWeight.w700)),
-              onPressed: () => AppStrings.instance.toggle(),
-            ),
             if (loggedIn)
               IconButton(
                 tooltip: t('my_courses'),
@@ -164,6 +161,15 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 onTap: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen()));
+                },
+              ),
+            if (loggedIn && _isTeacher)
+              ListTile(
+                leading: const Icon(Icons.cast_for_education_outlined),
+                title: Text(t('teacher_dashboard')),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeacherScreen()));
                 },
               ),
             if (loggedIn && _isAdmin)

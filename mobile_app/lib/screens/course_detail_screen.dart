@@ -563,14 +563,90 @@ class _PaidEnrollSheet extends StatefulWidget {
 class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   String? _method; // 'zain' | 'qi'
   final _detailCtrl = TextEditingController();
+  final _discountCtrl = TextEditingController();
   XFile? _proof;
   bool _loading = false;
   String? _error;
   bool _done = false;
 
+  // Payment destination (get_course_payment_info) — who the student sends
+  // money to: the course's teacher (if pay_to_teacher) or the admin.
+  bool _payInfoLoading = true;
+  String? _payToMethod; // 'zain' | 'qi'
+  String? _payToDetail;
+
+  // Discount code (redeem_discount_code), applied client-side to the shown
+  // price — mirrors course.html's applyDiscountCode().
+  String? _discountError;
+  String? _discountOk;
+  num? _discountedPrice;
+  bool _discountApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPaymentInfo();
+  }
+
+  Future<void> _loadPaymentInfo() async {
+    try {
+      final sb = SupabaseService.instance.client;
+      final rows = await sb.rpc('get_course_payment_info', params: {'p_course_slug': widget.course.slug});
+      if (rows is List && rows.isNotEmpty) {
+        final row = rows.first as Map<String, dynamic>;
+        setState(() {
+          _payToMethod = row['payment_method'] as String?;
+          _payToDetail = row['payment_detail'] as String?;
+        });
+      }
+    } catch (_) {
+      // Non-fatal — checkout still works without the send-to box.
+    } finally {
+      if (mounted) setState(() => _payInfoLoading = false);
+    }
+  }
+
+  int _parsePrice(dynamic price) {
+    final digits = RegExp(r'\d').allMatches(price?.toString() ?? '').map((m) => m.group(0)).join();
+    return digits.isEmpty ? 0 : int.parse(digits);
+  }
+
+  Future<void> _applyDiscount() async {
+    final t = AppStrings.instance.t;
+    final code = _discountCtrl.text.trim().toUpperCase();
+    setState(() { _discountError = null; _discountOk = null; });
+    if (code.isEmpty) {
+      setState(() => _discountError = t('err_choose_payment'));
+      return;
+    }
+    try {
+      final sb = SupabaseService.instance.client;
+      final rows = await sb.rpc('redeem_discount_code', params: {'p_code': code, 'p_course_id': widget.course.id});
+      if (rows is! List || rows.isEmpty) {
+        setState(() => _discountError = t('err_invalid_discount'));
+        return;
+      }
+      final row = rows.first as Map<String, dynamic>;
+      final type = row['discount_type'] as String?;
+      final value = (row['discount_value'] as num?) ?? 0;
+      final priceNum = _parsePrice(widget.course.price);
+      final discounted = type == 'percent'
+          ? (priceNum * (1 - value / 100)).round().clamp(0, priceNum)
+          : (priceNum - value).round().clamp(0, priceNum);
+      setState(() {
+        _discountedPrice = discounted;
+        _discountApplied = true;
+        _discountOk = '${t('total_after_discount')}: $discounted';
+      });
+    } catch (e) {
+      setState(() => _discountError = t('err_invalid_discount'));
+    }
+  }
+
   @override
   void dispose() {
     _detailCtrl.dispose();
+    _discountCtrl.dispose();
     super.dispose();
   }
 
@@ -632,7 +708,56 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
               : Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
                   Text(widget.course.localizedTitle(ar), style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 4),
-                  Text('${widget.course.price ?? ''}${t('choose_payment_sub')}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+                  Text(
+                    '${_discountedPrice ?? widget.course.price ?? ''}${t('choose_payment_sub')}',
+                    style: AppFonts.body(size: 13, color: AppColors.muted),
+                  ),
+                  if (_payInfoLoading) ...[
+                    const SizedBox(height: 12),
+                    const SizedBox(height: 2, width: 60, child: LinearProgressIndicator()),
+                  ] else if (_payToDetail != null && _payToDetail!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.teal.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.teal.withOpacity(0.3)),
+                      ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(t('send_payment_to'), style: AppFonts.body(size: 11.5, color: AppColors.muted)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_payToMethod == 'qi' ? t('qi_card') : t('zain_cash')} — $_payToDetail',
+                          style: AppFonts.body(size: 14, weight: FontWeight.w700),
+                        ),
+                      ]),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _discountCtrl,
+                        enabled: !_discountApplied,
+                        decoration: InputDecoration(labelText: t('discount_code')),
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton(onPressed: _discountApplied ? null : _applyDiscount, child: Text(t('apply'))),
+                  ]),
+                  if (_discountError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(_discountError!, style: AppFonts.body(size: 12, color: AppColors.red)),
+                    ),
+                  if (_discountOk != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(_discountOk!, style: AppFonts.body(size: 12, color: AppColors.teal)),
+                    ),
                   const SizedBox(height: 16),
                   Row(children: [
                     Expanded(child: _PayOption(label: t('zain_cash'), sub: t('zain_sub'), selected: _method == 'zain', onTap: () => setState(() => _method = 'zain'))),
