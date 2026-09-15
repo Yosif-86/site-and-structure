@@ -324,6 +324,9 @@
       grad_service_desc: 'الطلاب الذين يكملون دورة إعداد مشروع التخرج ويستعينون بالمدرّس لتنفيذ مشروع كامل يحصلون على خصم من رسوم الدورة — يُطبَّق تلقائيًا عند الدفع.',
       footer_line: 'نموذج أولي — لعرض بنية الموقع، وآلية تقييد الوصول، ومسار الدفع عبر زين كاش / كي كارد فقط',
       card_view_course: 'عرض الدورة', card_by: 'بواسطة.', card_free: 'مجاني',
+      level_beginner: 'مبتدئ', level_intermediate: 'متوسط', level_advanced: 'متقدم',
+      meta_level: 'LEVEL', meta_stage: 'STAGE', meta_duration: 'DURATION', meta_videos: 'VIDEOS',
+      dur_hr: 'h', dur_min: 'm',
       auth_login_title: 'تسجيل الدخول', auth_login_sub: 'الوصول إلى الدورات المسجَّل بها.',
       label_email: 'البريد الإلكتروني', ph_email: 'you@email.com', label_password: 'كلمة المرور', ph_password: '••••••••',
       forgot_password: 'نسيت كلمة المرور؟', no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب',
@@ -729,6 +732,13 @@
     }
   }
 
+  function formatDuration(totalSeconds){
+    const mins = Math.round(totalSeconds / 60);
+    const h = Math.floor(mins / 60), m = mins % 60;
+    if(h > 0) return `${h}${t('dur_hr')} ${m}${t('dur_min')}`;
+    return `${m}${t('dur_min')}`;
+  }
+
   async function loadCatalogue(){
     const { data: courses, error } = await sb.from('courses').select('*').eq('status', 'published').order('order_index');
     const grid = document.getElementById('catalogueGrid');
@@ -736,6 +746,14 @@
       grid.innerHTML = `<p style="color:var(--muted); grid-column:1/-1;">${t('no_courses')}</p>`;
       return;
     }
+    const courseIds = courses.map(c => c.id);
+    const { data: lectures } = await sb.from('lectures').select('course_id, duration_seconds').in('course_id', courseIds);
+    const stats = {};
+    (lectures || []).forEach(l => {
+      const s = stats[l.course_id] || (stats[l.course_id] = { count: 0, seconds: 0 });
+      s.count++;
+      s.seconds += l.duration_seconds || 0;
+    });
     const isAr = currentLang === 'ar';
     grid.innerHTML = courses.map(c => {
       const title = escapeHtml((isAr && c.title_ar) || c.title);
@@ -744,7 +762,16 @@
       const tagLabel = escapeHtml((isAr && c.tag_label_ar) || c.tag_label);
       const badgeText = escapeHtml((isAr && c.badge_text_ar) || c.badge_text);
       const meta = (isAr && c.meta_ar) || c.meta;
-      const metaHtml = Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
+      const autoRows = [];
+      if(c.stage) autoRows.push([t('meta_stage'), escapeHtml(c.stage)]);
+      if(c.level) autoRows.push([t('meta_level'), t('level_' + c.level) || c.level]);
+      const s = stats[c.id];
+      if(s && s.count > 0){
+        autoRows.push([t('meta_videos'), String(s.count)]);
+        if(s.seconds > 0) autoRows.push([t('meta_duration'), formatDuration(s.seconds)]);
+      }
+      const metaHtml = autoRows.map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')
+        + Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
       const priceHtml = c.is_free
         ? `<span class="price free">${t('card_free')}</span>${badgeText ? `<span class="badge">${badgeText}</span>` : ''}`
         : `<span class="price red-price">${escapeHtml(c.price)}</span>`;

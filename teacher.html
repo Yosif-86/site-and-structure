@@ -236,6 +236,17 @@
       <div class="field-hint" id="cThumbCurrent"></div>
       <label data-i18n="label_price">Price (IQD, 0 = free)</label>
       <input type="number" id="cPrice" min="0" step="1" value="0">
+      <label data-i18n="label_stage">Stage</label>
+      <input type="text" id="cStage" placeholder="e.g. Third stage">
+      <label data-i18n="label_level">Level</label>
+      <select id="cLevel">
+        <option value="">—</option>
+        <option value="beginner" data-i18n="level_beginner">Beginner</option>
+        <option value="intermediate" data-i18n="level_intermediate">Intermediate</option>
+        <option value="advanced" data-i18n="level_advanced">Advanced</option>
+      </select>
+      <label data-i18n="label_tag">Tag</label>
+      <input type="text" id="cTag" placeholder="e.g. New">
       <div id="cFormError" class="form-error"></div>
       <div class="form-actions">
         <button class="btn btn-accent" data-action="save-course" data-i18n="btn_save">Save</button>
@@ -364,6 +375,8 @@
       edit_course: 'تعديل الدورة', new_course_title: 'دورة جديدة',
       label_course_title: 'العنوان', label_course_desc: 'الوصف', label_thumbnail: 'صورة الدورة',
       label_price: 'السعر (د.ع، 0 = مجاني)',
+      label_stage: 'المرحلة', label_level: 'المستوى', label_tag: 'الوسم',
+      level_beginner: 'مبتدئ', level_intermediate: 'متوسط', level_advanced: 'متقدم',
       btn_save: 'حفظ', btn_cancel: 'إلغاء', back_to_courses: 'العودة إلى دوراتي',
       err_title_required: 'أدخل عنوانًا.', err_save_failed: 'فشل الحفظ: ',
       curriculum: 'المنهج الدراسي', th_lecture_title: 'العنوان', th_status: 'الحالة', th_free: 'مجاني', th_remove: '',
@@ -593,6 +606,9 @@
     document.getElementById('cPrice').value = 0;
     document.getElementById('cThumbCurrent').textContent = '';
     document.getElementById('cThumbFile').value = '';
+    document.getElementById('cStage').value = '';
+    document.getElementById('cLevel').value = '';
+    document.getElementById('cTag').value = '';
     document.getElementById('cFormError').textContent = '';
     goView('course-edit');
   }
@@ -607,6 +623,9 @@
     document.getElementById('cPrice').value = c.price || 0;
     document.getElementById('cThumbCurrent').textContent = c.thumbnail_url ? (t('current_file') + c.thumbnail_url) : '';
     document.getElementById('cThumbFile').value = '';
+    document.getElementById('cStage').value = c.stage || '';
+    document.getElementById('cLevel').value = c.level || '';
+    document.getElementById('cTag').value = c.tag_label || '';
     document.getElementById('cFormError').textContent = '';
     goView('course-edit');
   }
@@ -626,6 +645,9 @@
     const description = document.getElementById('cDescription').value.trim();
     const price = Number(document.getElementById('cPrice').value) || 0;
     const file = document.getElementById('cThumbFile').files[0];
+    const stage = document.getElementById('cStage').value.trim() || null;
+    const level = document.getElementById('cLevel').value || null;
+    const tagLabel = document.getElementById('cTag').value.trim() || null;
 
     try{
       let thumbnailUrl = activeCourse ? activeCourse.thumbnail_url : null;
@@ -641,14 +663,16 @@
 
       if(activeCourse){
         const { error } = await sb.from('courses').update({
-          title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl, teacher_name: teacherName
+          title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl, teacher_name: teacherName,
+          stage, level, tag_label: tagLabel
         }).eq('id', activeCourse.id);
         if(error) throw error;
       } else {
         const slug = slugify(title) + '-' + Math.random().toString(36).slice(2, 7);
         const { error } = await sb.from('courses').insert({
           slug, title, description, price, is_free: price === 0,
-          thumbnail_url: thumbnailUrl, teacher_id: currentUser.id, teacher_name: teacherName, status: 'draft'
+          thumbnail_url: thumbnailUrl, teacher_id: currentUser.id, teacher_name: teacherName, status: 'draft',
+          stage, level, tag_label: tagLabel
         });
         if(error) throw error;
       }

@@ -262,6 +262,9 @@
       curriculum: 'المنهج', no_lectures: 'لم تُرفع محاضرات بعد.', free_tag: 'مجاني', watch: 'مشاهدة', locked: '🔒 مقفل',
       status_active: 'مفعّل', status_pending: 'بانتظار الموافقة', card_free: 'مجاني',
       enroll_free: 'التسجيل مجانًا', enroll: 'التسجيل', by: 'بواسطة.',
+      level_beginner: 'مبتدئ', level_intermediate: 'متوسط', level_advanced: 'متقدم',
+      meta_level: 'LEVEL', meta_stage: 'STAGE', meta_duration: 'DURATION', meta_videos: 'VIDEOS',
+      dur_hr: 'h', dur_min: 'm',
       free_course_sub: 'دورة مجانية — يتم فتح الوصول فور التسجيل.',
       choose_payment_sub: ' — اختر طريقة الدفع.',
       send_to_label: 'أرسل المبلغ إلى',
@@ -738,7 +741,21 @@
     const teacherName = escapeAttr((isAr && course.teacher_name_ar) || course.teacher_name);
     const tagLabel = escapeAttr((isAr && course.tag_label_ar) || course.tag_label);
     const meta = (isAr && course.meta_ar) || course.meta;
-    const metaHtml = Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeAttr(k)}</span><b>${escapeAttr(v)}</b></div>`).join('');
+    const autoRows = [];
+    if(course.stage) autoRows.push([t('meta_stage'), escapeAttr(course.stage)]);
+    if(course.level) autoRows.push([t('meta_level'), t('level_' + course.level) || course.level]);
+    if(lectures.length > 0){
+      autoRows.push([t('meta_videos'), String(lectures.length)]);
+      const totalSeconds = lectures.reduce((sum, l) => sum + (l.duration_seconds || 0), 0);
+      if(totalSeconds > 0){
+        const mins = Math.round(totalSeconds / 60);
+        const h = Math.floor(mins / 60), m = mins % 60;
+        const durationLabel = h > 0 ? `${h}${t('dur_hr')} ${m}${t('dur_min')}` : `${m}${t('dur_min')}`;
+        autoRows.push([t('meta_duration'), durationLabel]);
+      }
+    }
+    const metaHtml = autoRows.map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')
+      + Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeAttr(k)}</span><b>${escapeAttr(v)}</b></div>`).join('');
 
     let priceHtml;
     if(isActive){
