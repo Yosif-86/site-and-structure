@@ -178,10 +178,10 @@
     <div class="section-tag" data-i18n="overview_tag">Overview</div>
     <h2 style="margin-bottom:20px;" data-i18n="dashboard_title">Dashboard</h2>
     <div class="stat-grid">
-      <div class="stat-card">
+      <button class="stat-card" data-action="go-view" data-view="students">
         <div class="stat-icon c-muted">&#128101;</div>
         <div><div class="stat-num" id="statStudents">—</div><div class="stat-label" data-i18n="stat_students">Total students</div></div>
-      </div>
+      </button>
       <button class="stat-card" data-action="go-view" data-view="courses">
         <div class="stat-icon c-green">&#127891;</div>
         <div><div class="stat-num" id="statCourses">—</div><div class="stat-label" data-i18n="stat_courses">Courses</div></div>
@@ -194,6 +194,21 @@
         <div class="stat-icon c-green">&#9881;</div>
         <div><div class="stat-num">&#8594;</div><div class="stat-label" data-i18n="nav_profile">Profile</div></div>
       </button>
+    </div>
+  </div>
+
+  <!-- ================= STUDENTS ================= -->
+  <div class="view" data-view="students">
+    <button class="back-link" data-action="go-view" data-view="overview">&larr; <span data-i18n="back_to_overview">Back to overview</span></button>
+    <h2 data-i18n="stat_students">Total students</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th data-i18n="th_email">Email</th><th data-i18n="th_name">Name</th><th data-i18n="th_phone">Phone</th>
+          <th data-i18n="th_course">Course</th><th data-i18n="th_status">Status</th><th data-i18n="th_enrolled">Enrolled</th>
+        </tr></thead>
+        <tbody id="studentsBody"></tbody>
+      </table>
     </div>
   </div>
 
@@ -332,6 +347,9 @@
       nav_overview: 'نظرة عامة', nav_my_courses_teacher: 'دوراتي', nav_profile: 'الملف الشخصي',
       overview_tag: 'نظرة عامة', dashboard_title: 'لوحة القيادة',
       stat_students: 'إجمالي الطلاب', stat_courses: 'الدورات', stat_earnings: 'الأرباح (تقديري)',
+      back_to_overview: 'العودة للنظرة العامة', th_email: 'البريد الإلكتروني', th_name: 'الاسم', th_phone: 'الهاتف',
+      th_course: 'الدورة', th_enrolled: 'تاريخ التسجيل', status_pending_enrollment: 'قيد الانتظار',
+      no_students: 'لا يوجد طلاب مسجَّلون بعد.',
       my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
       no_courses_teacher: 'لم تنشئ أي دورة بعد.',
       status_draft: 'مسودة', status_pending_review: 'قيد المراجعة', status_published: 'منشورة',
@@ -463,6 +481,26 @@
     myCourses.forEach(c => { priceBySlug[c.slug] = Number(c.price) || 0; });
     const earnings = (enrollments || []).reduce((sum, e) => sum + (priceBySlug[e.course_slug] || 0), 0);
     document.getElementById('statEarnings').textContent = earnings.toLocaleString();
+  }
+
+  // ---- Students ----
+  async function loadStudents(){
+    const body = document.getElementById('studentsBody');
+    if(!body) return;
+    const { data, error } = await sb.rpc('get_teacher_students');
+    if(error || !data || data.length === 0){
+      body.innerHTML = `<tr><td colspan="6" class="empty">${t('no_students')}</td></tr>`;
+      return;
+    }
+    body.innerHTML = data.map(s => `
+      <tr>
+        <td>${escapeHtml(s.email) || '—'}</td>
+        <td>${escapeHtml(s.full_name) || '—'}</td>
+        <td>${escapeHtml(s.phone) || '—'}</td>
+        <td>${escapeHtml(s.course_title)}</td>
+        <td>${s.status === 'active' ? t('status_active') : t('status_pending_enrollment')}</td>
+        <td>${new Date(s.created_at).toLocaleDateString()}</td>
+      </tr>`).join('');
   }
 
   // ---- My courses ----
@@ -808,6 +846,7 @@
     goView('overview');
     await loadCourses();
     await loadProfile();
+    loadStudents();
   })();
 
   // ---- Click dispatch (no inline onclick — CSP has no 'unsafe-inline' in script-src) ----
