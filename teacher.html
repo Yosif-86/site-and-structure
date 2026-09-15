@@ -117,6 +117,17 @@
     width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:'Work Sans'; font-size:14px;
   }
   textarea{min-height:90px; resize:vertical;}
+  input[type=checkbox]{
+    appearance:none; -webkit-appearance:none; width:18px; height:18px; flex:none; margin:0;
+    border-radius:5px; border:1.5px solid var(--muted2); background:var(--panel); cursor:pointer;
+    position:relative; vertical-align:middle; transition:border-color .15s ease, background .15s ease;
+  }
+  input[type=checkbox]:checked{border-color:var(--red); background:var(--red);}
+  input[type=checkbox]:checked::after{
+    content:''; position:absolute; left:5px; top:1px; width:5px; height:9px;
+    border-right:2px solid #fff; border-bottom:2px solid #fff; transform:rotate(45deg);
+  }
+  input[type=checkbox]:disabled{opacity:0.5; cursor:not-allowed;}
   input[type=file]::file-selector-button{
     font-family:'Work Sans'; font-size:12.5px; font-weight:600; letter-spacing:0.2px;
     padding:9px 16px; margin-inline-end:12px; border-radius:8px; border:1px solid var(--red);
