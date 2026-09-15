@@ -139,6 +139,7 @@
   .send-to-box{background:var(--panel2); border:1px solid var(--yellow); border-radius:10px; padding:12px 14px; margin-bottom:16px;}
   .send-to-label{font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;}
   .send-to-value{font-size:15px; font-weight:600;}
+  .send-to-value + .send-to-value{margin-top:8px;}
   .success-box{text-align:center; padding:10px 0;}
   .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
   .modal-full-btn{width:100%; margin-top:4px;}
@@ -561,8 +562,12 @@
     } else {
       const { data: payInfo } = await sb.rpc('get_course_payment_info', { p_course_slug: course.slug });
       const pay = payInfo && payInfo[0];
-      const sendToHtml = (pay && pay.payment_detail)
-        ? `<div class="send-to-box"><div class="send-to-label">${t('send_to_label')}</div><div class="send-to-value">${escapeAttr(pay.payment_method === 'qi' ? t('qi_card') : t('zain_cash'))} — <strong>${escapeAttr(pay.payment_detail)}</strong></div></div>`
+      const sendToRows = [];
+      if(pay?.zaincash_phone) sendToRows.push(`<div class="send-to-value">${t('zain_cash')} — <strong>${escapeAttr(pay.zaincash_phone)}</strong></div>`);
+      if(pay?.qi_account_number) sendToRows.push(`<div class="send-to-value">${t('qi_card')} — <strong>${escapeAttr(pay.qi_account_number)}</strong></div>`);
+      if(pay?.qi_qr_url) sendToRows.push(`<div class="send-to-value">${t('qi_card')} QR<br><img src="${escapeAttr(pay.qi_qr_url)}" alt="" style="max-width:160px; border-radius:8px; margin-top:6px;"></div>`);
+      const sendToHtml = sendToRows.length
+        ? `<div class="send-to-box"><div class="send-to-label">${t('send_to_label')}</div>${sendToRows.join('')}</div>`
         : '';
       body.innerHTML = `
         <h3>${courseTitle()}</h3>

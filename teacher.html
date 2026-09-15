@@ -338,13 +338,14 @@
     <div class="form-box">
       <h3 data-i18n="private_payment">Private payment details</h3>
       <div class="field-hint" data-i18n="payment_hint" style="margin-bottom:10px;">Never shown to students — used only when one of your courses is set to pay you directly.</div>
-      <label data-i18n="label_payment_method">Method</label>
-      <select id="pPayMethod">
-        <option value="zain" data-i18n="zain_cash">Zain Cash</option>
-        <option value="qi" data-i18n="qi_card">Qi Card</option>
-      </select>
-      <label data-i18n="label_payment_detail">Number</label>
-      <input type="text" id="pPayDetail">
+      <div class="field-hint" data-i18n="payment_required_hint" style="margin-bottom:10px;">Required before admin can let you manage your own payments: a ZainCash number, or a Qi account number/QR code (or both).</div>
+      <label data-i18n="label_zaincash_phone">ZainCash phone</label>
+      <input type="text" id="pZaincashPhone" placeholder="07XX XXX XXXX">
+      <label data-i18n="label_qi_account">Qi Card account number</label>
+      <input type="text" id="pQiAccount" placeholder="XXXX XXXX XXXX XXXX">
+      <label data-i18n="label_qi_qr">Qi QR code image</label>
+      <input type="file" id="pQiQrFile" accept="image/png,image/jpeg,image/webp">
+      <div class="field-hint" id="pQiQrCurrent"></div>
       <div id="pFormError" class="form-error"></div>
       <div class="form-actions">
         <button class="btn btn-accent" data-action="save-profile" data-i18n="btn_save">Save</button>
@@ -400,7 +401,8 @@
       teacher_profile: 'الملف الشخصي للمدرس', public_info: 'معلومات عامة', label_fullname: 'الاسم الكامل',
       label_specialty: 'التخصص', label_bio: 'نبذة قصيرة', label_photo: 'الصورة',
       private_payment: 'بيانات الدفع الخاصة', payment_hint: 'لا تظهر للطلاب أبدًا — تُستخدم فقط عند ضبط إحدى دوراتك للدفع لك مباشرة.',
-      label_payment_method: 'الطريقة', zain_cash: 'زين كاش', qi_card: 'كي كارد', label_payment_detail: 'الرقم',
+      payment_required_hint: 'مطلوبة قبل أن يتمكن الإدمن من السماح لك بإدارة مدفوعاتك: رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما).',
+      label_zaincash_phone: 'رقم زين كاش', label_qi_account: 'رقم حساب كي كارد', label_qi_qr: 'صورة رمز QR لكي كارد',
       alert_generic_failed: 'حدث خطأ: ', current_file: 'الحالي: ', free_label: 'مجاني'
     }
   };
@@ -901,15 +903,16 @@
   // ---- Profile ----
   async function loadProfile(){
     const { data: prof } = await sb.from('profiles')
-      .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_payment_method, teacher_payment_detail')
+      .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
       .eq('id', currentUser.id).maybeSingle();
     if(!prof) return;
     document.getElementById('pName').value = prof.full_name || '';
     document.getElementById('pSpecialty').value = prof.teacher_specialty || '';
     document.getElementById('pBio').value = prof.teacher_bio || '';
     document.getElementById('pPhotoCurrent').textContent = prof.teacher_photo_url ? (t('current_file') + prof.teacher_photo_url) : '';
-    document.getElementById('pPayMethod').value = prof.teacher_payment_method || 'zain';
-    document.getElementById('pPayDetail').value = prof.teacher_payment_detail || '';
+    document.getElementById('pZaincashPhone').value = prof.teacher_zaincash_phone || '';
+    document.getElementById('pQiAccount').value = prof.teacher_qi_account_number || '';
+    document.getElementById('pQiQrCurrent').textContent = prof.teacher_qi_qr_url ? (t('current_file') + prof.teacher_qi_qr_url) : '';
   }
 
   async function saveProfile(){
@@ -918,26 +921,36 @@
     const fullName = document.getElementById('pName').value.trim();
     const specialty = document.getElementById('pSpecialty').value.trim();
     const bio = document.getElementById('pBio').value.trim();
-    const payMethod = document.getElementById('pPayMethod').value;
-    const payDetail = document.getElementById('pPayDetail').value.trim();
-    const file = document.getElementById('pPhotoFile').files[0];
+    const zaincashPhone = document.getElementById('pZaincashPhone').value.trim() || null;
+    const qiAccount = document.getElementById('pQiAccount').value.trim() || null;
+    const photoFile = document.getElementById('pPhotoFile').files[0];
+    const qrFile = document.getElementById('pQiQrFile').files[0];
 
     try{
       let photoUrl;
-      if(file){
-        const path = `${currentUser.id}/avatar-${Date.now()}-${file.name}`;
-        const { error: upErr } = await sb.storage.from('course-thumbnails').upload(path, file);
+      if(photoFile){
+        const path = `${currentUser.id}/avatar-${Date.now()}-${photoFile.name}`;
+        const { error: upErr } = await sb.storage.from('course-thumbnails').upload(path, photoFile);
         if(upErr) throw upErr;
         photoUrl = sb.storage.from('course-thumbnails').getPublicUrl(path).data.publicUrl;
       }
+      let qrUrl;
+      if(qrFile){
+        const path = `${currentUser.id}/${Date.now()}-${qrFile.name}`;
+        const { error: upErr } = await sb.storage.from('payment-qr').upload(path, qrFile);
+        if(upErr) throw upErr;
+        qrUrl = sb.storage.from('payment-qr').getPublicUrl(path).data.publicUrl;
+      }
       const update = {
         full_name: fullName, teacher_specialty: specialty, teacher_bio: bio,
-        teacher_payment_method: payMethod, teacher_payment_detail: payDetail
+        teacher_zaincash_phone: zaincashPhone, teacher_qi_account_number: qiAccount
       };
       if(photoUrl) update.teacher_photo_url = photoUrl;
+      if(qrUrl) update.teacher_qi_qr_url = qrUrl;
       const { error } = await sb.from('profiles').update(update).eq('id', currentUser.id);
       if(error) throw error;
       document.getElementById('pPhotoFile').value = '';
+      document.getElementById('pQiQrFile').value = '';
       loadProfile();
     } catch(e){
       errEl.textContent = t('err_save_failed') + e.message;
