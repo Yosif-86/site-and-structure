@@ -4,7 +4,7 @@
 # Usage:
 #   .\transcode-to-hls.ps1 -VideoPath "D:\path\to\video.mp4" -LectureId test-lecture-1
 #
-# Produces .\hls-out\<lecture-id>\{master.m3u8, 480p\, 720p\, 1080p\}
+# Produces .\hls-out\<lecture-id>\{master.m3u8, 480p\, 720p\, 1080p\, duration.txt}
 # Requires ffmpeg on PATH.
 
 param(
@@ -19,12 +19,17 @@ if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+    Write-Error "ffprobe not found on PATH (ships alongside ffmpeg)."
+    exit 1
+}
+
 if (-not (Test-Path $VideoPath)) {
     Write-Error "Input file not found: $VideoPath"
     exit 1
 }
 
-# Forward slashes throughout, deliberately — ffmpeg writes these path
+# Forward slashes throughout, deliberately -- ffmpeg writes these path
 # templates verbatim into the playlist files as relative URLs. Windows file
 # I/O accepts forward slashes just fine, but HLS players resolve those
 # references as strict URIs and silently mis-resolve a literal backslash,
@@ -39,7 +44,7 @@ New-Item -ItemType Directory -Force -Path "$OutRoot/1080p" | Out-Null
 # level up from e.g. 480p/index.m3u8, landing on $OutRoot/enc.key). The
 # Worker's folder-prefix check only looks at /videos/<lectureId>, so that
 # relative path still resolves to something it authorizes the same as any
-# segment request — no Worker changes needed beyond the playlist-rewrite fix.
+# segment request -- no Worker changes needed beyond the playlist-rewrite fix.
 # No IV is set here; ffmpeg derives one per segment from its sequence number,
 # which is the documented default and standard practice.
 $KeyBytes = New-Object byte[] 16
@@ -51,6 +56,13 @@ $KeyInfoPath = "$OutRoot/enc.keyinfo"
 
 Write-Host "Transcoding $VideoPath -> $OutRoot (480p/720p/1080p, AES-128 encrypted)..."
 
+# ffmpeg writes its version banner and progress to stderr even on success.
+# Windows PowerShell 5.1 wraps every stderr line from a native command into a
+# NativeCommandError when $ErrorActionPreference is "Stop", which aborts the
+# script mid-transcode despite ffmpeg itself succeeding. Run it with
+# ErrorAction temporarily relaxed and check the real exit code instead.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 ffmpeg -y -i "$VideoPath" `
   -filter_complex "[0:v]split=3[v1][v2][v3]; [v1]scale=w=854:h=480[v1out]; [v2]scale=w=1280:h=720[v2out]; [v3]scale=w=1920:h=1080[v3out]" `
   -map "[v1out]" -c:v:0 h264 -b:v:0 900k  -maxrate:v:0 963k  -bufsize:v:0 1350k `
@@ -66,8 +78,22 @@ ffmpeg -y -i "$VideoPath" `
   -master_pl_name master.m3u8 `
   -var_stream_map "v:0,a:0,name:480p v:1,a:1,name:720p v:2,a:2,name:1080p" `
   -hls_segment_filename "$OutRoot/%v/seg_%03d.ts" `
-  "$OutRoot/%v/index.m3u8"
+  "$OutRoot/%v/index.m3u8" 2>&1 | Out-Host
+$ffmpegExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($ffmpegExit -ne 0) {
+    Write-Error "ffmpeg exited with code $ffmpegExit"
+    exit 1
+}
+
+# Duration capture, so upload-to-r2.ps1 can publish it straight to
+# lectures.duration_seconds -- the course cards' auto video-count/runtime
+# rows depend on this being set for every lecture going forward.
+$durationRaw = & ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$VideoPath"
+$durationSeconds = [int][math]::Round([double]$durationRaw)
+Set-Content -Path "$OutRoot/duration.txt" -Value $durationSeconds -NoNewline
 
 Write-Host ""
-Write-Host "Done. HLS output at: $OutRoot"
+Write-Host "Done. HLS output at: $OutRoot (duration: ${durationSeconds}s)"
 Write-Host "Next: .\upload-to-r2.ps1 -LocalDir `"$OutRoot`" -RemotePrefix `"videos/$LectureId`""

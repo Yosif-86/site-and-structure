@@ -9,16 +9,18 @@
 #   .\upload-to-r2.ps1 -LocalDir ".\hls-out\test-lecture-1" -RemotePrefix "videos/test-lecture-1"
 #
 # Requires: AWS CLI (https://aws.amazon.com/cli/) on PATH.
-# Never hardcode your R2 keys in this file — set them as env vars in your own
+# Never hardcode your R2 keys in this file -- set them as env vars in your own
 # shell session first, as shown above.
 #
 # Optional -LectureId: skips the manual "open admin.html and paste r2_path"
-# step — set it and the script sets lectures.r2_path + clears
+# step -- set it and the script sets lectures.r2_path + clears
 # pending_upload_path itself via the Supabase REST API, then deletes the raw
 # upload from the lecture-uploads bucket, same as admin.html's own
-# "Save & go live" button does. Needs SUPABASE_SERVICE_ROLE_KEY in your env
-# (same key Vercel uses — find it in the Supabase dashboard's API settings,
-# never in this file).
+# "Save & go live" button does. Also reads duration.txt from -LocalDir (written
+# by transcode-to-hls.ps1) and sets lectures.duration_seconds, so the course
+# cards' auto video-count/runtime rows pick it up with no extra step. Needs
+# SUPABASE_SERVICE_ROLE_KEY in your env (same key Vercel uses -- find it in
+# the Supabase dashboard's API settings, never in this file).
 param(
     [Parameter(Mandatory=$true)][string]$LocalDir,
     [Parameter(Mandatory=$true)][string]$RemotePrefix,
@@ -52,15 +54,15 @@ aws s3 cp "$LocalDir" "s3://$($env:R2_BUCKET)/$RemotePrefix" `
   --exclude "*" --include "*.m3u8" `
   --content-type "application/vnd.apple.mpegurl"
 
-# .ts segments and the AES-128 enc.key both get a generic type here — the
+# .ts segments and the AES-128 enc.key both get a generic type here -- the
 # Worker always overrides content-type by extension when serving anyway
 # (worker/src/index.js's contentTypeFor), so this only matters for tidiness.
-# enc.keyinfo is a local-only ffmpeg input (holds an absolute local path) and
-# is deliberately never uploaded.
+# enc.keyinfo and duration.txt are local-only files and are deliberately
+# never uploaded.
 aws s3 cp "$LocalDir" "s3://$($env:R2_BUCKET)/$RemotePrefix" `
   --recursive `
   --endpoint-url "$Endpoint" `
-  --exclude "*.m3u8" --exclude "*.keyinfo" `
+  --exclude "*.m3u8" --exclude "*.keyinfo" --exclude "duration.txt" `
   --content-type "video/mp2t"
 
 Write-Host ""
@@ -72,8 +74,14 @@ if (-not $LectureId) {
 }
 
 if (-not (Test-Path "env:SUPABASE_SERVICE_ROLE_KEY")) {
-    Write-Error "LectureId given but SUPABASE_SERVICE_ROLE_KEY is not set — can't auto-publish. Set it, or omit -LectureId and run: update lectures set r2_path = '$RemotePrefix' where id = '$LectureId';"
+    Write-Error "LectureId given but SUPABASE_SERVICE_ROLE_KEY is not set -- can't auto-publish. Set it, or omit -LectureId and run: update lectures set r2_path = '$RemotePrefix' where id = '$LectureId';"
     exit 1
+}
+
+$DurationSeconds = $null
+$DurationFile = Join-Path $LocalDir "duration.txt"
+if (Test-Path $DurationFile) {
+    $DurationSeconds = [int](Get-Content $DurationFile -Raw)
 }
 
 $SupabaseUrl = "https://qdarzhzttjpkgfihupgp.supabase.co"
@@ -88,16 +96,18 @@ $lecture = Invoke-RestMethod -Method Get `
     -Uri "$SupabaseUrl/rest/v1/lectures?id=eq.$LectureId&select=pending_upload_path" `
     -Headers $Headers
 if (-not $lecture -or $lecture.Count -eq 0) {
-    Write-Error "No lecture found with id $LectureId — r2 upload succeeded but the DB was not updated. Publish it manually."
+    Write-Error "No lecture found with id $LectureId -- r2 upload succeeded but the DB was not updated. Publish it manually."
     exit 1
 }
 $pendingPath = $lecture[0].pending_upload_path
 
-Write-Host "Setting lectures.r2_path and clearing pending_upload_path ..."
+Write-Host "Setting lectures.r2_path / duration_seconds and clearing pending_upload_path ..."
+$patchBody = @{ r2_path = $RemotePrefix; pending_upload_path = $null }
+if ($null -ne $DurationSeconds) { $patchBody.duration_seconds = $DurationSeconds }
 Invoke-RestMethod -Method Patch `
     -Uri "$SupabaseUrl/rest/v1/lectures?id=eq.$LectureId" `
     -Headers $Headers `
-    -Body (@{ r2_path = $RemotePrefix; pending_upload_path = $null } | ConvertTo-Json) | Out-Null
+    -Body ($patchBody | ConvertTo-Json) | Out-Null
 
 if ($pendingPath) {
     Write-Host "Deleting raw upload from lecture-uploads bucket ..."

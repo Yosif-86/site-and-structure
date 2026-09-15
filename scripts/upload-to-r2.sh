@@ -8,16 +8,18 @@
 #   ./upload-to-r2.sh ./hls-out/<lecture-id> videos/<lecture-id> [lecture-id]
 #
 # Requires: AWS CLI (https://aws.amazon.com/cli/) on PATH.
-# Never hardcode R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY in this file or in chat —
+# Never hardcode R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY in this file or in chat --
 # pass them as env vars in your own shell, or via a local .env you source yourself.
 #
 # Optional 3rd arg (lecture-id): skips the manual "open admin.html and paste
-# r2_path" step — pass it and the script sets lectures.r2_path + clears
+# r2_path" step -- pass it and the script sets lectures.r2_path + clears
 # pending_upload_path itself via the Supabase REST API, then deletes the raw
 # upload from the lecture-uploads bucket, same as admin.html's own
-# "Save & go live" button does. Needs SUPABASE_SERVICE_ROLE_KEY in your env
-# (same key Vercel uses — find it in the Supabase dashboard's API settings,
-# never in this file).
+# "Save & go live" button does. Also reads duration.txt from <local-hls-dir>
+# (written by transcode-to-hls.sh) and sets lectures.duration_seconds, so the
+# course cards' auto video-count/runtime rows pick it up with no extra step.
+# Needs SUPABASE_SERVICE_ROLE_KEY in your env (same key Vercel uses -- find it
+# in the Supabase dashboard's API settings, never in this file).
 
 set -euo pipefail
 
@@ -56,7 +58,7 @@ aws s3 cp "$LOCAL_DIR" "s3://${R2_BUCKET}/${REMOTE_PREFIX}" \
   --exclude "*" --include "*.m3u8" \
   --content-type "application/vnd.apple.mpegurl"
 
-# .ts segments and the AES-128 enc.key both get a generic type here — the
+# .ts segments and the AES-128 enc.key both get a generic type here -- the
 # Worker always overrides content-type by extension when serving anyway
 # (worker/src/index.js's contentTypeFor), so this only matters for tidiness.
 # enc.keyinfo is a local-only ffmpeg input (holds an absolute local path) and
@@ -64,7 +66,7 @@ aws s3 cp "$LOCAL_DIR" "s3://${R2_BUCKET}/${REMOTE_PREFIX}" \
 aws s3 cp "$LOCAL_DIR" "s3://${R2_BUCKET}/${REMOTE_PREFIX}" \
   --recursive \
   --endpoint-url "$ENDPOINT" \
-  --exclude "*.m3u8" --exclude "*.keyinfo" \
+  --exclude "*.m3u8" --exclude "*.keyinfo" --exclude "duration.txt" \
   --content-type "video/mp2t"
 
 echo ""
@@ -76,8 +78,13 @@ if [ -z "$LECTURE_ID" ]; then
 fi
 
 if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-  echo "Lecture id given but SUPABASE_SERVICE_ROLE_KEY is not set — can't auto-publish. Set it, or omit the lecture id and run: update lectures set r2_path = '${REMOTE_PREFIX}' where id = '${LECTURE_ID}';" >&2
+  echo "Lecture id given but SUPABASE_SERVICE_ROLE_KEY is not set -- can't auto-publish. Set it, or omit the lecture id and run: update lectures set r2_path = '${REMOTE_PREFIX}' where id = '${LECTURE_ID}';" >&2
   exit 1
+fi
+
+DURATION_SECONDS=""
+if [ -f "${LOCAL_DIR}/duration.txt" ]; then
+  DURATION_SECONDS=$(cat "${LOCAL_DIR}/duration.txt")
 fi
 
 SUPABASE_URL="https://qdarzhzttjpkgfihupgp.supabase.co"
@@ -90,17 +97,22 @@ PENDING_PATH=$(curl -sf \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["pending_upload_path"] or "" if d else "")')
 
 if [ -z "$PENDING_PATH" ] && [ "$PENDING_PATH" != "" ]; then
-  echo "No lecture found with id ${LECTURE_ID} — r2 upload succeeded but the DB was not updated. Publish it manually." >&2
+  echo "No lecture found with id ${LECTURE_ID} -- r2 upload succeeded but the DB was not updated. Publish it manually." >&2
   exit 1
 fi
 
-echo "Setting lectures.r2_path and clearing pending_upload_path ..."
+echo "Setting lectures.r2_path / duration_seconds and clearing pending_upload_path ..."
+if [ -n "$DURATION_SECONDS" ]; then
+  PATCH_BODY="{\"r2_path\": \"${REMOTE_PREFIX}\", \"pending_upload_path\": null, \"duration_seconds\": ${DURATION_SECONDS}}"
+else
+  PATCH_BODY="{\"r2_path\": \"${REMOTE_PREFIX}\", \"pending_upload_path\": null}"
+fi
 curl -sf -X PATCH \
   -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
   -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
   -H "Content-Type: application/json" \
   "${SUPABASE_URL}/rest/v1/lectures?id=eq.${LECTURE_ID}" \
-  -d "{\"r2_path\": \"${REMOTE_PREFIX}\", \"pending_upload_path\": null}" > /dev/null
+  -d "$PATCH_BODY" > /dev/null
 
 if [ -n "$PENDING_PATH" ]; then
   echo "Deleting raw upload from lecture-uploads bucket ..."

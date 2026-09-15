@@ -25,6 +25,11 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v ffprobe >/dev/null 2>&1; then
+  echo "ffprobe not found (ships alongside ffmpeg)." >&2
+  exit 1
+fi
+
 if [ ! -f "$INPUT" ]; then
   echo "Input file not found: $INPUT" >&2
   exit 1
@@ -37,7 +42,7 @@ mkdir -p "$OUT_ROOT/480p" "$OUT_ROOT/720p" "$OUT_ROOT/1080p"
 # level up from e.g. 480p/index.m3u8, landing on $OUT_ROOT/enc.key). The
 # Worker's folder-prefix check only looks at /videos/<lectureId>, so that
 # relative path still resolves to something it authorizes the same as any
-# segment request — no Worker changes needed beyond the playlist-rewrite fix.
+# segment request -- no Worker changes needed beyond the playlist-rewrite fix.
 # No IV is set here; ffmpeg derives one per segment from its sequence number,
 # which is the documented default and standard practice.
 openssl rand 16 > "$OUT_ROOT/enc.key"
@@ -67,6 +72,12 @@ ffmpeg -y -i "$INPUT" \
   -hls_segment_filename "$OUT_ROOT/%v/seg_%03d.ts" \
   "$OUT_ROOT/%v/index.m3u8"
 
+# Duration capture, so upload-to-r2.sh can publish it straight to
+# lectures.duration_seconds -- the course cards' auto video-count/runtime
+# rows depend on this being set for every lecture going forward.
+DURATION_SECONDS=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$INPUT" | awk '{printf "%.0f", $1}')
+echo -n "$DURATION_SECONDS" > "$OUT_ROOT/duration.txt"
+
 echo ""
-echo "Done. HLS output at: $OUT_ROOT"
+echo "Done. HLS output at: $OUT_ROOT (duration: ${DURATION_SECONDS}s)"
 echo "Next: ./upload-to-r2.sh \"$OUT_ROOT\" \"videos/${LECTURE_ID}\""
