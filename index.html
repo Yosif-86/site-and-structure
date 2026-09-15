@@ -150,6 +150,7 @@
     overflow:hidden; isolation:isolate;
   }
   .card:hover{transform:translateY(-8px) scale(1.012); box-shadow:0 32px 60px -20px rgba(30,25,18,0.4), 0 0 50px -6px color-mix(in srgb, var(--red) 55%, transparent);}
+  .card-thumb{width:calc(100% + 40px); margin:-20px -20px 0; aspect-ratio:16/9; object-fit:cover; display:block;}
   .card-tag{font-family:'IBM Plex Mono'; font-size:10px; color:var(--red); letter-spacing:1px; text-transform:uppercase;}
   .card-tag.gray{color:var(--muted2);}
   .card-tag.green{color:var(--green);}
@@ -749,6 +750,7 @@
         : `<span class="price red-price">${escapeHtml(c.price)}</span>`;
       return `
         <div class="card crop">
+          ${c.thumbnail_url ? `<img class="card-thumb" src="${escapeHtml(c.thumbnail_url)}" alt="">` : ''}
           <div>
             <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${tagLabel}</div>
             <h3>${title}</h3>

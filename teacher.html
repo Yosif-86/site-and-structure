@@ -636,16 +636,19 @@
         thumbnailUrl = sb.storage.from('course-thumbnails').getPublicUrl(path).data.publicUrl;
       }
 
+      const { data: prof } = await sb.from('profiles').select('full_name').eq('id', currentUser.id).maybeSingle();
+      const teacherName = prof?.full_name || null;
+
       if(activeCourse){
         const { error } = await sb.from('courses').update({
-          title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl
+          title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl, teacher_name: teacherName
         }).eq('id', activeCourse.id);
         if(error) throw error;
       } else {
         const slug = slugify(title) + '-' + Math.random().toString(36).slice(2, 7);
         const { error } = await sb.from('courses').insert({
           slug, title, description, price, is_free: price === 0,
-          thumbnail_url: thumbnailUrl, teacher_id: currentUser.id, status: 'draft'
+          thumbnail_url: thumbnailUrl, teacher_id: currentUser.id, teacher_name: teacherName, status: 'draft'
         });
         if(error) throw error;
       }
