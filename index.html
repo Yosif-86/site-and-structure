@@ -204,7 +204,39 @@
     40%, 60%{transform:translateX(4px);}
   }
   .field-shake{animation:field-shake 0.4s;}
-  .pay-method-check{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13.5px;}
+  .pay-method-checks{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+  .pay-method-check{
+    position:relative; display:flex; align-items:center; gap:10px; padding:13px 14px; border-radius:10px;
+    border:1px solid var(--line); background:var(--panel); cursor:pointer; font-size:13.5px; font-weight:500;
+    transition:border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .pay-method-check:hover{transform:translateY(-1px);}
+  .pay-method-check input{position:absolute; opacity:0; width:0; height:0;}
+  .pay-method-check .chk-box{
+    width:18px; height:18px; flex:none; border-radius:5px; border:1.5px solid var(--muted2);
+    display:flex; align-items:center; justify-content:center; transition:border-color .15s ease, background .15s ease;
+  }
+  .pay-method-check .chk-box::after{
+    content:''; width:9px; height:5px; border-left:2px solid #fff; border-bottom:2px solid #fff;
+    transform:rotate(-45deg) translateY(-1px); opacity:0; transition:opacity .1s ease;
+  }
+  .pay-method-check:has(input:checked){border-color:var(--red); background:rgba(232,98,44,0.08);}
+  .pay-method-check:has(input:checked) .chk-box{border-color:var(--red); background:var(--red);}
+  .pay-method-check:has(input:checked) .chk-box::after{opacity:1;}
+  .pay-method-check:has(input:focus-visible){outline:2px solid var(--red); outline-offset:2px;}
+
+  .file-upload{position:relative;}
+  .file-upload input[type=file]{
+    width:100%; font-family:'Work Sans'; font-size:13px; color:var(--muted); cursor:pointer;
+  }
+  .file-upload input[type=file]::file-selector-button{
+    font-family:'Work Sans'; font-size:12.5px; font-weight:600; letter-spacing:0.2px;
+    padding:9px 16px; margin-inline-end:12px; border-radius:8px; border:1px solid var(--red);
+    background:var(--red); color:#fff; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .file-upload input[type=file]::file-selector-button:hover{
+    transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(201,78,31,0.5);
+  }
   .pay-options{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
   .pay-opt{
     border:1px solid var(--line); border-radius:10px; padding:14px 10px; text-align:center; cursor:pointer; font-size:13px; font-weight:500;
@@ -609,15 +641,19 @@
     } else if(mode === 'signup'){
       const teacherPaymentFields = inviteToken ? `
         <div class="field-hint" style="margin:14px 0 10px;">${t('teacher_payment_required_hint')}</div>
-        <label class="pay-method-check"><input type="checkbox" id="authPayZaincashOn"> ${t('zain_cash')}</label>
-        <label class="pay-method-check"><input type="checkbox" id="authPayQiOn"> ${t('qi_card')}</label>
+        <div class="pay-method-checks">
+          <label class="pay-method-check"><input type="checkbox" id="authPayZaincashOn"><span class="chk-box"></span>${t('zain_cash')}</label>
+          <label class="pay-method-check"><input type="checkbox" id="authPayQiOn"><span class="chk-box"></span>${t('qi_card')}</label>
+        </div>
         <div class="field" id="authZaincashGroup" style="display:none;">
           <label>${t('label_zaincash_phone')}</label>
           <input type="text" id="authZaincashPhone" placeholder="07XX XXX XXXX">
         </div>
         <div id="authQiGroup" style="display:none;">
           <div class="field"><label>${t('label_qi_account')}</label><input type="text" id="authQiAccount" placeholder="XXXX XXXX XXXX XXXX"></div>
-          <div class="field"><label>${t('label_qi_qr')}</label><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
+          <div class="field"><label>${t('label_qi_qr')}</label>
+            <div class="file-upload"><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
+          </div>
         </div>
       ` : '';
       body.innerHTML = `
