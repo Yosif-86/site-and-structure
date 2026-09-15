@@ -203,6 +203,10 @@ class AppStrings extends ChangeNotifier {
     'pending_lectures': 'محاضرات بانتظار الموافقة',
     'error_log': 'سجل الأخطاء',
     'my_payment_number': 'رقم الدفع الخاص بي',
+    'payment_required_hint': 'مطلوبة قبل أن يتمكن الإدمن من السماح لك بإدارة مدفوعاتك: رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما).',
+    'label_zaincash_phone': 'رقم زين كاش',
+    'label_qi_account': 'رقم حساب كي كارد',
+    'label_qi_qr': 'صورة رمز QR لكي كارد',
     'back': 'رجوع',
   };
 }

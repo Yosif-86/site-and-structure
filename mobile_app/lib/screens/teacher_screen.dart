@@ -64,10 +64,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
   final _pName = TextEditingController();
   final _pSpecialty = TextEditingController();
   final _pBio = TextEditingController();
-  String _pPayMethod = 'zain';
-  final _pPayDetail = TextEditingController();
+  final _pZaincashPhone = TextEditingController();
+  final _pQiAccount = TextEditingController();
   String? _pPhotoUrl;
   XFile? _pPhotoFile;
+  String? _pQiQrUrl;
+  XFile? _pQiQrFile;
   String? _pFormError;
   String? _pSavedMsg;
 
@@ -89,7 +91,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _pName.dispose();
     _pSpecialty.dispose();
     _pBio.dispose();
-    _pPayDetail.dispose();
+    _pZaincashPhone.dispose();
+    _pQiAccount.dispose();
     super.dispose();
   }
 
@@ -398,7 +401,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final user = SupabaseService.instance.currentUser!;
       final prof = await sb
           .from('profiles')
-          .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_payment_method, teacher_payment_detail')
+          .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
           .eq('id', user.id)
           .maybeSingle();
       if (prof == null || !mounted) return;
@@ -407,8 +410,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
         _pSpecialty.text = prof['teacher_specialty'] as String? ?? '';
         _pBio.text = prof['teacher_bio'] as String? ?? '';
         _pPhotoUrl = prof['teacher_photo_url'] as String?;
-        _pPayMethod = prof['teacher_payment_method'] as String? ?? 'zain';
-        _pPayDetail.text = prof['teacher_payment_detail'] as String? ?? '';
+        _pZaincashPhone.text = prof['teacher_zaincash_phone'] as String? ?? '';
+        _pQiAccount.text = prof['teacher_qi_account_number'] as String? ?? '';
+        _pQiQrUrl = prof['teacher_qi_qr_url'] as String?;
       });
     } catch (e) {
       _showError('$e');
@@ -427,16 +431,24 @@ class _TeacherScreenState extends State<TeacherScreen> {
         await sb.storage.from('course-thumbnails').upload(path, File(_pPhotoFile!.path));
         photoUrl = sb.storage.from('course-thumbnails').getPublicUrl(path);
       }
+      String? qrUrl;
+      if (_pQiQrFile != null) {
+        final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_pQiQrFile!.name}';
+        await sb.storage.from('payment-qr').upload(path, File(_pQiQrFile!.path));
+        qrUrl = sb.storage.from('payment-qr').getPublicUrl(path);
+      }
       final update = <String, dynamic>{
         'full_name': _pName.text.trim(),
         'teacher_specialty': _pSpecialty.text.trim(),
         'teacher_bio': _pBio.text.trim(),
-        'teacher_payment_method': _pPayMethod,
-        'teacher_payment_detail': _pPayDetail.text.trim(),
+        'teacher_zaincash_phone': _pZaincashPhone.text.trim().isEmpty ? null : _pZaincashPhone.text.trim(),
+        'teacher_qi_account_number': _pQiAccount.text.trim().isEmpty ? null : _pQiAccount.text.trim(),
       };
       if (photoUrl != null) update['teacher_photo_url'] = photoUrl;
+      if (qrUrl != null) update['teacher_qi_qr_url'] = qrUrl;
       await sb.from('profiles').update(update).eq('id', user.id);
       _pPhotoFile = null;
+      _pQiQrFile = null;
       await _loadProfile();
       if (!mounted) return;
       setState(() => _pSavedMsg = 'Saved.');
@@ -735,26 +747,31 @@ class _TeacherScreenState extends State<TeacherScreen> {
         TextField(controller: _pBio, maxLines: 4, decoration: InputDecoration(labelText: t('label_bio'))),
         const SizedBox(height: 20),
         Text(t('my_payment_number'), style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(t('payment_required_hint'), style: AppFonts.body(size: 11.5, color: AppColors.muted)),
         const SizedBox(height: 8),
-        Row(children: [
-          Expanded(
-            child: RadioListTile<String>(
-              value: 'zain',
-              groupValue: _pPayMethod,
-              title: Text(t('zain_cash')),
-              onChanged: (v) => setState(() => _pPayMethod = v!),
-            ),
+        TextField(controller: _pZaincashPhone, decoration: InputDecoration(labelText: t('label_zaincash_phone'), hintText: '07XX XXX XXXX')),
+        const SizedBox(height: 12),
+        TextField(controller: _pQiAccount, decoration: InputDecoration(labelText: t('label_qi_account'), hintText: 'XXXX XXXX XXXX XXXX')),
+        const SizedBox(height: 12),
+        Text(t('label_qi_qr'), style: AppFonts.body(size: 13)),
+        const SizedBox(height: 6),
+        GestureDetector(
+          onTap: () async {
+            final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+            if (picked != null) setState(() => _pQiQrFile = picked);
+          },
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(color: AppColors.panel2, borderRadius: BorderRadius.circular(10)),
+            child: _pQiQrFile != null
+                ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(File(_pQiQrFile!.path), fit: BoxFit.cover))
+                : (_pQiQrUrl != null
+                    ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(_pQiQrUrl!, fit: BoxFit.cover))
+                    : const Icon(Icons.qr_code_2_outlined)),
           ),
-          Expanded(
-            child: RadioListTile<String>(
-              value: 'qi',
-              groupValue: _pPayMethod,
-              title: Text(t('qi_card')),
-              onChanged: (v) => setState(() => _pPayMethod = v!),
-            ),
-          ),
-        ]),
-        TextField(controller: _pPayDetail, decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
+        ),
         if (_pFormError != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_pFormError!, style: AppFonts.body(size: 12, color: AppColors.red))),
         if (_pSavedMsg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_pSavedMsg!, style: AppFonts.body(size: 12, color: AppColors.teal))),
         const SizedBox(height: 18),

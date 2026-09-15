@@ -572,8 +572,9 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   // Payment destination (get_course_payment_info) — who the student sends
   // money to: the course's teacher (if pay_to_teacher) or the admin.
   bool _payInfoLoading = true;
-  String? _payToMethod; // 'zain' | 'qi'
-  String? _payToDetail;
+  String? _payZaincashPhone;
+  String? _payQiAccountNumber;
+  String? _payQiQrUrl;
 
   // Discount code (redeem_discount_code), applied client-side to the shown
   // price — mirrors course.html's applyDiscountCode().
@@ -595,8 +596,9 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       if (rows is List && rows.isNotEmpty) {
         final row = rows.first as Map<String, dynamic>;
         setState(() {
-          _payToMethod = row['payment_method'] as String?;
-          _payToDetail = row['payment_detail'] as String?;
+          _payZaincashPhone = row['zaincash_phone'] as String?;
+          _payQiAccountNumber = row['qi_account_number'] as String?;
+          _payQiQrUrl = row['qi_qr_url'] as String?;
         });
       }
     } catch (_) {
@@ -715,7 +717,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                   if (_payInfoLoading) ...[
                     const SizedBox(height: 12),
                     const SizedBox(height: 2, width: 60, child: LinearProgressIndicator()),
-                  ] else if (_payToDetail != null && _payToDetail!.isNotEmpty) ...[
+                  ] else if ((_payZaincashPhone?.isNotEmpty ?? false) || (_payQiAccountNumber?.isNotEmpty ?? false) || (_payQiQrUrl?.isNotEmpty ?? false)) ...[
                     const SizedBox(height: 12),
                     Container(
                       width: double.infinity,
@@ -727,11 +729,22 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                       ),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text(t('send_payment_to'), style: AppFonts.body(size: 11.5, color: AppColors.muted)),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_payToMethod == 'qi' ? t('qi_card') : t('zain_cash')} — $_payToDetail',
-                          style: AppFonts.body(size: 14, weight: FontWeight.w700),
-                        ),
+                        const SizedBox(height: 4),
+                        if (_payZaincashPhone?.isNotEmpty ?? false)
+                          Text('${t('zain_cash')} — $_payZaincashPhone', style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+                        if (_payQiAccountNumber?.isNotEmpty ?? false)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text('${t('qi_card')} — $_payQiAccountNumber', style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+                          ),
+                        if (_payQiQrUrl?.isNotEmpty ?? false)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(_payQiQrUrl!, width: 140, height: 140, fit: BoxFit.cover),
+                            ),
+                          ),
                       ]),
                     ),
                   ],
