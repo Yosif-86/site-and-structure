@@ -196,6 +196,15 @@
     width:100%; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; font-family:'Work Sans';
   }
   .field input:focus{outline:none; border-color:var(--red);}
+  .field-invalid{border-color:var(--red) !important; box-shadow:0 0 0 1px var(--red);}
+  @keyframes field-shake{
+    10%, 90%{transform:translateX(-1px);}
+    20%, 80%{transform:translateX(2px);}
+    30%, 50%, 70%{transform:translateX(-4px);}
+    40%, 60%{transform:translateX(4px);}
+  }
+  .field-shake{animation:field-shake 0.4s;}
+  .pay-method-check{display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13.5px;}
   .pay-options{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
   .pay-opt{
     border:1px solid var(--line); border-radius:10px; padding:14px 10px; text-align:center; cursor:pointer; font-size:13px; font-weight:500;
@@ -600,9 +609,16 @@
     } else if(mode === 'signup'){
       const teacherPaymentFields = inviteToken ? `
         <div class="field-hint" style="margin:14px 0 10px;">${t('teacher_payment_required_hint')}</div>
-        <div class="field"><label>${t('label_zaincash_phone')}</label><input type="text" id="authZaincashPhone" placeholder="07XX XXX XXXX"></div>
-        <div class="field"><label>${t('label_qi_account')}</label><input type="text" id="authQiAccount" placeholder="XXXX XXXX XXXX XXXX"></div>
-        <div class="field"><label>${t('label_qi_qr')}</label><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
+        <label class="pay-method-check"><input type="checkbox" id="authPayZaincashOn"> ${t('zain_cash')}</label>
+        <label class="pay-method-check"><input type="checkbox" id="authPayQiOn"> ${t('qi_card')}</label>
+        <div class="field" id="authZaincashGroup" style="display:none;">
+          <label>${t('label_zaincash_phone')}</label>
+          <input type="text" id="authZaincashPhone" placeholder="07XX XXX XXXX">
+        </div>
+        <div id="authQiGroup" style="display:none;">
+          <div class="field"><label>${t('label_qi_account')}</label><input type="text" id="authQiAccount" placeholder="XXXX XXXX XXXX XXXX"></div>
+          <div class="field"><label>${t('label_qi_qr')}</label><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
+        </div>
       ` : '';
       body.innerHTML = `
         <h3>${t('auth_signup_title')}</h3>
@@ -616,6 +632,17 @@
         <button class="btn btn-accent modal-full-btn" data-action="submit-signup">${t('auth_signup_title')}</button>
         <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
       `;
+      if(inviteToken){
+        const zainOn = document.getElementById('authPayZaincashOn');
+        const qiOn = document.getElementById('authPayQiOn');
+        const zainGroup = document.getElementById('authZaincashGroup');
+        const qiGroup = document.getElementById('authQiGroup');
+        zainOn.addEventListener('change', () => { zainGroup.style.display = zainOn.checked ? '' : 'none'; });
+        qiOn.addEventListener('change', () => { qiGroup.style.display = qiOn.checked ? '' : 'none'; });
+        ['authZaincashPhone', 'authQiAccount', 'authQiQrFile'].forEach(id => {
+          document.getElementById(id).addEventListener('input', () => clearFieldError(id));
+        });
+      }
     } else if(mode === 'forgot'){
       body.innerHTML = `
         <h3>${t('auth_forgot_title')}</h3>
@@ -650,6 +677,18 @@
     err.classList.add('show');
   }
 
+  function markFieldError(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.add('field-invalid');
+    el.classList.remove('field-shake');
+    void el.offsetWidth;
+    el.classList.add('field-shake');
+  }
+  function clearFieldError(id){
+    document.getElementById(id)?.classList.remove('field-invalid', 'field-shake');
+  }
+
   async function submitLogin(){
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
@@ -668,18 +707,34 @@
   }
 
   async function submitSignup(){
+    ['authName', 'authPhone', 'authEmail', 'authPass', 'authZaincashPhone', 'authQiAccount'].forEach(clearFieldError);
     const name = document.getElementById('authName').value.trim();
     const phone = document.getElementById('authPhone').value.trim();
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
-    if(!name || !phone || !email || !pass){ showAuthErr(t('err_fill_fields')); return; }
-    if(pass.length < 6){ showAuthErr(t('err_pass_length')); return; }
+    const basicMissing = [];
+    if(!name) basicMissing.push('authName');
+    if(!phone) basicMissing.push('authPhone');
+    if(!email) basicMissing.push('authEmail');
+    if(!pass) basicMissing.push('authPass');
+    if(basicMissing.length){
+      basicMissing.forEach(markFieldError);
+      showAuthErr(t('err_fill_fields'));
+      return;
+    }
+    if(pass.length < 6){ markFieldError('authPass'); showAuthErr(t('err_pass_length')); return; }
     let zaincashPhone = null, qiAccount = null, qiQrFile = null;
     if(inviteToken){
+      const zainOn = document.getElementById('authPayZaincashOn').checked;
+      const qiOn = document.getElementById('authPayQiOn').checked;
       zaincashPhone = document.getElementById('authZaincashPhone').value.trim() || null;
       qiAccount = document.getElementById('authQiAccount').value.trim() || null;
       qiQrFile = document.getElementById('authQiQrFile').files[0] || null;
-      if(!zaincashPhone && !qiAccount && !qiQrFile){ showAuthErr(t('err_teacher_payment_required')); return; }
+      if(!zainOn && !qiOn){ showAuthErr(t('err_teacher_payment_required')); return; }
+      if(zainOn && !zaincashPhone){ markFieldError('authZaincashPhone'); showAuthErr(t('err_teacher_payment_required')); return; }
+      if(qiOn && !qiAccount && !qiQrFile){ markFieldError('authQiAccount'); showAuthErr(t('err_teacher_payment_required')); return; }
+      if(!zainOn) zaincashPhone = null;
+      if(!qiOn){ qiAccount = null; qiQrFile = null; }
     }
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
