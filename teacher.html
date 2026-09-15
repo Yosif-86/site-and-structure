@@ -205,7 +205,8 @@
       <table>
         <thead><tr>
           <th data-i18n="th_email">Email</th><th data-i18n="th_name">Name</th><th data-i18n="th_phone">Phone</th>
-          <th data-i18n="th_course">Course</th><th data-i18n="th_status">Status</th><th data-i18n="th_enrolled">Enrolled</th>
+          <th data-i18n="th_course">Course</th><th data-i18n="th_amount">Amount</th><th data-i18n="th_status">Status</th>
+          <th data-i18n="th_enrolled">Enrolled</th><th></th>
         </tr></thead>
         <tbody id="studentsBody"></tbody>
       </table>
@@ -350,6 +351,9 @@
       back_to_overview: 'العودة للنظرة العامة', th_email: 'البريد الإلكتروني', th_name: 'الاسم', th_phone: 'الهاتف',
       th_course: 'الدورة', th_enrolled: 'تاريخ التسجيل', status_pending_enrollment: 'قيد الانتظار',
       no_students: 'لا يوجد طلاب مسجَّلون بعد.',
+      th_amount: 'المبلغ', before_platform_cut: 'قبل عمولة المنصة', managed_by_admin: 'تديرها الإدارة',
+      view_proof: 'عرض الإثبات', approve: 'موافقة',
+      alert_proof_failed: 'فشل تحميل الإثبات: ', alert_approve_failed: 'فشلت الموافقة: ',
       my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
       no_courses_teacher: 'لم تنشئ أي دورة بعد.',
       status_draft: 'مسودة', status_pending_review: 'قيد المراجعة', status_published: 'منشورة',
@@ -484,23 +488,59 @@
   }
 
   // ---- Students ----
+  // course_price is free text (e.g. "15,000 IQD"), not a number — pull the
+  // numeric amount out of it rather than coercing the string.
+  function parsePrice(price){
+    const digits = String(price || '').replace(/[^\d]/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+  }
+
   async function loadStudents(){
     const body = document.getElementById('studentsBody');
     if(!body) return;
     const { data, error } = await sb.rpc('get_teacher_students');
     if(error || !data || data.length === 0){
-      body.innerHTML = `<tr><td colspan="6" class="empty">${t('no_students')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="empty">${t('no_students')}</td></tr>`;
       return;
     }
-    body.innerHTML = data.map(s => `
-      <tr>
-        <td>${escapeHtml(s.email) || '—'}</td>
-        <td>${escapeHtml(s.full_name) || '—'}</td>
-        <td>${escapeHtml(s.phone) || '—'}</td>
-        <td>${escapeHtml(s.course_title)}</td>
-        <td>${s.status === 'active' ? t('status_active') : t('status_pending_enrollment')}</td>
-        <td>${new Date(s.created_at).toLocaleDateString()}</td>
-      </tr>`).join('');
+    body.innerHTML = data.map(s => {
+      const amount = parsePrice(s.course_price).toLocaleString();
+      const amountCell = s.pay_to_teacher
+        ? amount
+        : `${amount} <span class="field-hint" style="margin:0;">(${t('before_platform_cut')})</span>`;
+      let actionCell = '—';
+      if(s.pay_to_teacher){
+        const parts = [];
+        if(s.payment_proof_path) parts.push(`<button class="btn btn-small" data-action="view-student-proof" data-path="${escapeHtml(s.payment_proof_path)}">${t('view_proof')}</button>`);
+        if(s.status !== 'active') parts.push(`<button class="btn btn-small btn-accent" data-action="approve-student" data-id="${escapeHtml(s.enrollment_id)}">${t('approve')}</button>`);
+        actionCell = parts.join(' ') || '—';
+      } else {
+        actionCell = `<span class="field-hint" style="margin:0;">${t('managed_by_admin')}</span>`;
+      }
+      return `
+        <tr>
+          <td>${escapeHtml(s.email) || '—'}</td>
+          <td>${escapeHtml(s.full_name) || '—'}</td>
+          <td>${escapeHtml(s.phone) || '—'}</td>
+          <td>${escapeHtml(s.course_title)}</td>
+          <td>${amountCell}</td>
+          <td>${s.status === 'active' ? t('status_active') : t('status_pending_enrollment')}</td>
+          <td>${new Date(s.created_at).toLocaleDateString()}</td>
+          <td>${actionCell}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function viewStudentProof(path){
+    const { data, error } = await sb.storage.from('payment-proofs').createSignedUrl(path, 60);
+    if(error){ alert(t('alert_proof_failed') + error.message); return; }
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function approveStudent(enrollmentId){
+    const { error } = await sb.rpc('teacher_approve_enrollment', { p_enrollment_id: enrollmentId });
+    if(error){ alert(t('alert_approve_failed') + error.message); return; }
+    loadStudents();
   }
 
   // ---- My courses ----
@@ -856,6 +896,8 @@
     'toggle-theme': () => toggleTheme(),
     'toggle-lang': () => toggleLang(),
     'go-view': (el) => goView(el.dataset.view),
+    'view-student-proof': (el) => viewStudentProof(el.dataset.path),
+    'approve-student': (el) => approveStudent(el.dataset.id),
     'new-course': () => newCourse(),
     'open-course-edit': (el) => openCourseEdit(el.dataset.id),
     'save-course': () => saveCourse(),

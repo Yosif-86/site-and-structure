@@ -547,7 +547,7 @@
     <div class="table-wrap">
       <table id="coursesListTable">
         <thead>
-          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th><th data-i18n="th_price">Price</th><th></th></tr>
+          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_teacher">Teacher</th><th data-i18n="th_price">Price</th><th data-i18n="th_pay_to_teacher">Pay to teacher</th><th></th></tr>
         </thead>
         <tbody id="coursesListBody"></tbody>
       </table>
@@ -567,7 +567,7 @@
     <div class="table-wrap">
       <table id="teachersListTable">
         <thead>
-          <tr><th data-i18n="th_name">Name</th><th data-i18n="th_email">Email</th><th data-i18n="th_phone">Phone</th><th></th></tr>
+          <tr><th data-i18n="th_name">Name</th><th data-i18n="th_email">Email</th><th data-i18n="th_phone">Phone</th><th data-i18n="th_payment_self_service">Manage own payments</th><th></th></tr>
         </thead>
         <tbody id="teachersListBody"></tbody>
       </table>
@@ -641,6 +641,9 @@
       error_log: 'سجل الأخطاء', th_message: 'الرسالة', th_page: 'الصفحة', th_user: 'المستخدم', no_errors: 'لا توجد أخطاء مسجلة. علامة جيدة.',
       clear_all: 'مسح الكل', confirm_clear_errors: 'حذف كل سجلات الأخطاء؟ لا يمكن التراجع عن هذا.',
       dismiss: 'تجاهل', alert_clear_errors_failed: 'فشل المسح: ',
+      th_payment_self_service: 'إدارة الدفع بنفسه', alert_toggle_payment_failed: 'فشل التغيير: ',
+      managed_by_teacher: 'يديرها المدرس',
+      pay_to_teacher_locked_hint: 'يجب تفعيل "إدارة الدفع بنفسه" لهذا المدرس أولاً.',
       my_payment: 'رقم الدفع الخاص بي',
       my_payment_sub: 'يظهر للطلاب عند الدفع لأي دورة يكون فيها "الدفع للمدرس" متوقفًا.',
       label_payment_method: 'طريقة الدفع', zain_cash: 'زين كاش', qi_card: 'كي كارد',
@@ -832,9 +835,11 @@
           <td>${escapeHtml(payment)}</td>
           <td>${date}</td>
           <td>${approvedCell}</td>
-          <td style="display:flex; gap:8px;">
+          <td style="display:flex; gap:8px; align-items:center;">
             ${e.payment_proof_path ? `<button class="btn" data-action="view-proof" data-path="${escapeHtml(e.payment_proof_path)}">${t('view_proof')}</button>` : ''}
-            ${isActive ? '' : `<button class="btn btn-accent" data-action="approve" data-id="${escapeHtml(e.id)}">${t('approve')}</button>`}
+            ${isActive ? '' : (c && c.pay_to_teacher
+              ? `<span class="field-hint" style="margin:0;">${t('managed_by_teacher')}</span>`
+              : `<button class="btn btn-accent" data-action="approve" data-id="${escapeHtml(e.id)}">${t('approve')}</button>`)}
             <button class="btn" data-action="remove-enrollment" data-id="${escapeHtml(e.id)}" data-title="${escapeHtml(title)}" data-email="${escapeHtml(email)}">${t('remove')}</button>
           </td>
         </tr>`;
@@ -856,7 +861,9 @@
 
   async function togglePayToTeacher(id, checked){
     const { error } = await sb.from('courses').update({ pay_to_teacher: checked }).eq('id', id);
-    if(error){ alert(t('alert_review_failed') + error.message); loadReview(); }
+    if(error){ alert(t('alert_review_failed') + error.message); }
+    loadReview();
+    loadCoursesList();
   }
 
   async function loadReview(){
@@ -1173,28 +1180,31 @@
 
   async function loadCoursesList(){
     const { data: courses, error } = await sb.from('courses')
-      .select('id, slug, title, price, is_free, teacher_id')
+      .select('id, slug, title, price, is_free, teacher_id, pay_to_teacher')
       .eq('status', 'published')
       .order('order_index');
     const body = document.getElementById('coursesListBody');
     if(error || !courses || courses.length === 0){
-      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_courses_list')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="5" class="empty">${t('no_courses_list')}</td></tr>`;
       return;
     }
     const teacherIds = [...new Set(courses.map(c => c.teacher_id).filter(Boolean))];
     const { data: teachers } = teacherIds.length
-      ? await sb.from('profiles').select('id, full_name').in('id', teacherIds)
+      ? await sb.from('profiles').select('id, full_name, teacher_payment_enabled').in('id', teacherIds)
       : { data: [] };
-    const nameById = {};
-    (teachers || []).forEach(p => { nameById[p.id] = p.full_name; });
+    const nameById = {}, enabledById = {};
+    (teachers || []).forEach(p => { nameById[p.id] = p.full_name; enabledById[p.id] = p.teacher_payment_enabled; });
 
     body.innerHTML = courses.map(c => {
+      const jsArg = (v) => escapeHtml(v).replace(/"/g, '&quot;');
       const teacherName = c.teacher_id ? (nameById[c.teacher_id] || '—') : '—';
+      const canToggle = c.teacher_id && enabledById[c.teacher_id];
       return `
         <tr>
           <td>${escapeHtml(c.title)}</td>
           <td>${escapeHtml(teacherName)}</td>
           <td>${c.is_free ? t('free_label') : escapeHtml(String(c.price))}</td>
+          <td><input type="checkbox" data-action="toggle-pay-to-teacher" data-id="${jsArg(c.id)}" ${c.pay_to_teacher ? 'checked' : ''} ${canToggle ? '' : 'disabled'} title="${canToggle ? '' : t('pay_to_teacher_locked_hint')}"></td>
           <td><a class="btn" href="course.html?slug=${encodeURIComponent(c.slug)}" target="_blank" style="text-decoration:none;">${t('view_course')}</a></td>
         </tr>`;
     }).join('');
@@ -1415,12 +1425,12 @@
 
   async function loadTeachersList(){
     const { data: teachers, error } = await sb.from('profiles')
-      .select('id, full_name, phone')
+      .select('id, full_name, phone, teacher_payment_enabled')
       .eq('is_teacher', true)
       .order('full_name');
     const body = document.getElementById('teachersListBody');
     if(error || !teachers || teachers.length === 0){
-      body.innerHTML = `<tr><td colspan="4" class="empty">${t('no_teachers')}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="5" class="empty">${t('no_teachers')}</td></tr>`;
       return;
     }
     const { data: logins } = await sb.from('login_events').select('user_id, email, created_at').order('created_at', { ascending: false });
@@ -1434,9 +1444,17 @@
           <td>${escapeHtml(p.full_name) || '—'}</td>
           <td>${escapeHtml(email)}</td>
           <td>${escapeHtml(p.phone) || '—'}</td>
+          <td><input type="checkbox" data-action="toggle-teacher-payment-enabled" data-id="${escapeHtml(p.id)}" ${p.teacher_payment_enabled ? 'checked' : ''}></td>
           <td><a class="btn" href="teacher-profile.html?id=${encodeURIComponent(p.id)}" target="_blank" style="text-decoration:none;">${t('view_profile')}</a></td>
         </tr>`;
     }).join('');
+  }
+
+  async function toggleTeacherPaymentEnabled(teacherId, enabled){
+    const { error } = await sb.rpc('set_teacher_payment_enabled', { p_teacher_id: teacherId, p_enabled: enabled });
+    if(error){ alert(t('alert_toggle_payment_failed') + error.message); loadTeachersList(); return; }
+    loadTeachersList();
+    loadReview();
   }
 
   async function loadStudentsList(){
@@ -1479,7 +1497,7 @@
     // migration was never run against the live DB) — naming it explicitly
     // here 400s the whole query, unlike select('*') elsewhere which just
     // silently omits it.
-    const { data: allCourses } = await sb.from('courses').select('slug, title, price, is_free');
+    const { data: allCourses } = await sb.from('courses').select('slug, title, price, is_free, pay_to_teacher');
     (allCourses || []).forEach(c => { courseTitles[c.slug] = c; });
 
     loadEnrollments();
@@ -1522,6 +1540,7 @@
     'publish-course': (el) => publishCourse(el.dataset.id),
     'reject-course': (el) => rejectCourse(el.dataset.id, el.dataset.title),
     'toggle-pay-to-teacher': (el) => togglePayToTeacher(el.dataset.id, el.checked),
+    'toggle-teacher-payment-enabled': (el) => toggleTeacherPaymentEnabled(el.dataset.id, el.checked),
     'create-invite': () => createInvite(),
     'copy-invite-link': (el) => copyInviteLink(el),
     'copy-lecture-id': (el) => copyLectureId(el),
