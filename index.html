@@ -332,6 +332,9 @@
       forgot_password: 'نسيت كلمة المرور؟', no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب',
       auth_signup_title: 'إنشاء حساب', auth_signup_sub: 'أنشئ حسابك.',
       label_fullname: 'الاسم الكامل', ph_fullname: 'اسمك', label_phone: 'رقم الهاتف', ph_phone: '07XX XXX XXXX',
+      teacher_payment_required_hint: 'بصفتك مدرسًا، يجب إدخال رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما) قبل إنشاء الحساب.',
+      label_zaincash_phone: 'رقم زين كاش', label_qi_account: 'رقم حساب كي كارد', label_qi_qr: 'صورة رمز QR لكي كارد',
+      err_teacher_payment_required: 'أدخل رقم زين كاش، أو رقم حساب كي كارد/رمز QR.',
       ph_password_signup: '٦ أحرف على الأقل',
       already_account: 'لديك حساب بالفعل؟',
       auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
@@ -595,6 +598,12 @@
         <p class="sub" style="margin-top:6px; text-align:center;">${t('no_account')} <a href="#" data-action="auth-mode" data-mode="signup" style="color:var(--yellow);">${t('sign_up')}</a></p>
       `;
     } else if(mode === 'signup'){
+      const teacherPaymentFields = inviteToken ? `
+        <div class="field-hint" style="margin:14px 0 10px;">${t('teacher_payment_required_hint')}</div>
+        <div class="field"><label>${t('label_zaincash_phone')}</label><input type="text" id="authZaincashPhone" placeholder="07XX XXX XXXX"></div>
+        <div class="field"><label>${t('label_qi_account')}</label><input type="text" id="authQiAccount" placeholder="XXXX XXXX XXXX XXXX"></div>
+        <div class="field"><label>${t('label_qi_qr')}</label><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
+      ` : '';
       body.innerHTML = `
         <h3>${t('auth_signup_title')}</h3>
         <p class="sub">${t('auth_signup_sub')}</p>
@@ -602,6 +611,7 @@
         <div class="field"><label>${t('label_phone')}</label><input type="text" id="authPhone" placeholder="${t('ph_phone')}"></div>
         <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
         <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password_signup')}"></div>
+        ${teacherPaymentFields}
         <p class="err" id="authErr"></p>
         <button class="btn btn-accent modal-full-btn" data-action="submit-signup">${t('auth_signup_title')}</button>
         <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
@@ -664,6 +674,13 @@
     const pass = document.getElementById('authPass').value.trim();
     if(!name || !phone || !email || !pass){ showAuthErr(t('err_fill_fields')); return; }
     if(pass.length < 6){ showAuthErr(t('err_pass_length')); return; }
+    let zaincashPhone = null, qiAccount = null, qiQrFile = null;
+    if(inviteToken){
+      zaincashPhone = document.getElementById('authZaincashPhone').value.trim() || null;
+      qiAccount = document.getElementById('authQiAccount').value.trim() || null;
+      qiQrFile = document.getElementById('authQiQrFile').files[0] || null;
+      if(!zaincashPhone && !qiAccount && !qiQrFile){ showAuthErr(t('err_teacher_payment_required')); return; }
+    }
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
     if(data.user){
@@ -684,6 +701,17 @@
       if(inviteToken){
         try{ await sb.rpc('redeem_teacher_invite', { p_token: inviteToken }); }
         catch(e){ /* best-effort — account creation already succeeded */ }
+        try{
+          let qiQrUrl = null;
+          if(qiQrFile){
+            const path = `${data.user.id}/${Date.now()}-${qiQrFile.name}`;
+            const { error: upErr } = await sb.storage.from('payment-qr').upload(path, qiQrFile);
+            if(!upErr) qiQrUrl = sb.storage.from('payment-qr').getPublicUrl(path).data.publicUrl;
+          }
+          const payUpdate = { teacher_zaincash_phone: zaincashPhone, teacher_qi_account_number: qiAccount };
+          if(qiQrUrl) payUpdate.teacher_qi_qr_url = qiQrUrl;
+          await sb.from('profiles').update(payUpdate).eq('id', data.user.id);
+        } catch(e){ /* best-effort — teacher can still fill this in later from their profile */ }
       }
     }
     document.getElementById('authBody').innerHTML = `
