@@ -121,6 +121,14 @@
   .toggle-row{display:flex; align-items:center; gap:10px; margin-top:14px;}
   .form-actions{display:flex; gap:10px; margin-top:18px;}
   .form-error{color:var(--red); font-size:13px; margin-top:10px;}
+  .field-invalid{border-color:var(--red) !important; box-shadow:0 0 0 1px var(--red);}
+  @keyframes field-shake{
+    10%, 90%{transform:translateX(-1px);}
+    20%, 80%{transform:translateX(2px);}
+    30%, 50%, 70%{transform:translateX(-4px);}
+    40%, 60%{transform:translateX(4px);}
+  }
+  .field-shake{animation:field-shake 0.4s;}
   .empty{color:var(--muted); font-size:14px; padding:16px 0;}
 
   .table-wrap{overflow-x:auto;}
@@ -657,13 +665,31 @@
       .slice(0, 60) || 'course';
   }
 
+  function markFieldError(id){
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.add('field-invalid');
+    el.classList.remove('field-shake');
+    void el.offsetWidth;
+    el.classList.add('field-shake');
+  }
+  function clearFieldError(id){
+    document.getElementById(id)?.classList.remove('field-invalid', 'field-shake');
+  }
+  const REQUIRED_EDIT_FIELD_IDS = ['cTitle', 'cDescription', 'cThumbFile', 'cPrice', 'cStage', 'cLevel'];
+  REQUIRED_EDIT_FIELD_IDS.forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => clearFieldError(id));
+  });
+
   async function saveCourse(){
     const errEl = document.getElementById('cFormError');
     errEl.textContent = '';
+    REQUIRED_EDIT_FIELD_IDS.forEach(clearFieldError);
     const title = document.getElementById('cTitle').value.trim();
-    if(!title){ errEl.textContent = t('err_title_required'); return; }
+    if(!title){ errEl.textContent = t('err_title_required'); markFieldError('cTitle'); return; }
     const description = document.getElementById('cDescription').value.trim();
-    const price = Number(document.getElementById('cPrice').value) || 0;
+    const priceRaw = document.getElementById('cPrice').value;
+    const price = Number(priceRaw) || 0;
     const file = document.getElementById('cThumbFile').files[0];
     const stage = document.getElementById('cStage').value.trim() || null;
     const level = document.getElementById('cLevel').value || null;
@@ -682,13 +708,19 @@
       const teacherName = prof?.full_name || null;
 
       if(activeCourse && activeCourse.status === 'published'){
-        const missing = [];
-        if(!description) missing.push(t('label_course_desc'));
-        if(!stage) missing.push(t('label_stage'));
-        if(!level) missing.push(t('label_level'));
-        if(!thumbnailUrl) missing.push(t('label_thumbnail'));
-        if(missing.length){
-          errEl.textContent = t('err_fields_required') + missing.join('، ');
+        const fieldLabelKeys = {
+          cDescription: 'label_course_desc', cThumbFile: 'label_thumbnail',
+          cPrice: 'label_price', cStage: 'label_stage', cLevel: 'label_level'
+        };
+        const missingIds = [];
+        if(!description) missingIds.push('cDescription');
+        if(!thumbnailUrl) missingIds.push('cThumbFile');
+        if(priceRaw.trim() === '') missingIds.push('cPrice');
+        if(!stage) missingIds.push('cStage');
+        if(!level) missingIds.push('cLevel');
+        if(missingIds.length){
+          missingIds.forEach(markFieldError);
+          errEl.textContent = t('err_fields_required') + missingIds.map(id => t(fieldLabelKeys[id])).join('، ');
           return;
         }
         // Published courses stay live with their current content until an
