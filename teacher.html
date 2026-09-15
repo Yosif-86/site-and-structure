@@ -226,6 +226,7 @@
   <div class="view" data-view="course-edit">
     <button class="back-link" data-action="go-view" data-view="courses">&larr; <span data-i18n="back_to_courses">Back to my courses</span></button>
     <h2 id="courseEditTitle" data-i18n="edit_course">Edit course</h2>
+    <div class="field-hint" id="cPublishedEditHint" style="display:none;"></div>
     <div class="form-box">
       <label data-i18n="label_course_title">Title</label>
       <input type="text" id="cTitle" placeholder="e.g. Reinforced Concrete Design">
@@ -368,6 +369,9 @@
       my_courses_teacher: 'دوراتي', new_course: '+ دورة جديدة',
       no_courses_teacher: 'لم تنشئ أي دورة بعد.',
       status_draft: 'مسودة', status_pending_review: 'قيد المراجعة', status_published: 'منشورة',
+      status_edit_pending: 'تعديل بانتظار الموافقة',
+      hint_published_edit: 'هذه الدورة منشورة بالفعل. حفظ التغييرات هنا يرسلها للإدارة للموافقة، ولن تظهر للطلاب حتى تتم الموافقة عليها.',
+      err_fields_required: 'الحقول التالية مطلوبة: ',
       btn_edit: 'تعديل', btn_curriculum: 'المنهج', btn_codes: 'أكواد الخصم', btn_submit_review: 'إرسال للمراجعة', btn_delete: 'حذف',
       confirm_delete_course: 'حذف "{title}"؟ لا يمكن التراجع عن هذا.',
       confirm_revoke_code: 'إلغاء الكود "{code}"؟ سيتوقف عن العمل فورًا.',
@@ -567,8 +571,9 @@
       return;
     }
     list.innerHTML = myCourses.map(c => {
-      const canEdit = c.status === 'draft';
+      const canEdit = c.status === 'draft' || c.status === 'published';
       const canSubmit = c.status === 'draft';
+      const editPending = c.edit_status === 'pending_review';
       return `
         <div class="course-card">
           ${c.thumbnail_url ? `<img class="course-thumb" src="${escapeHtml(c.thumbnail_url)}" alt="">` : `<div class="course-thumb"></div>`}
@@ -576,6 +581,7 @@
             <h3>${escapeHtml(c.title)}</h3>
             <div class="course-meta">
               <span class="badge ${escapeHtml(c.status)}">${courseStatusLabel(c.status)}</span>
+              ${editPending ? `<span class="badge pending_review">${t('status_edit_pending')}</span>` : ''}
               &nbsp; ${c.is_free ? t('free_label') : escapeHtml(String(c.price))}
             </div>
             <div class="course-actions">
@@ -601,6 +607,7 @@
   function newCourse(){
     activeCourse = null;
     document.getElementById('courseEditTitle').textContent = t('new_course_title');
+    document.getElementById('cPublishedEditHint').style.display = 'none';
     document.getElementById('cTitle').value = '';
     document.getElementById('cDescription').value = '';
     document.getElementById('cPrice').value = 0;
@@ -618,15 +625,26 @@
     if(!c) return;
     activeCourse = c;
     document.getElementById('courseEditTitle').textContent = t('edit_course');
-    document.getElementById('cTitle').value = c.title || '';
-    document.getElementById('cDescription').value = c.description || '';
-    document.getElementById('cPrice').value = c.price || 0;
-    document.getElementById('cThumbCurrent').textContent = c.thumbnail_url ? (t('current_file') + c.thumbnail_url) : '';
+    // A published course with a pending edit shows the proposed (not yet
+    // live) values, so a teacher resuming an in-progress edit sees their own
+    // draft rather than what's currently visible to students.
+    const src = (c.status === 'published' && c.pending_edit) ? { ...c, ...c.pending_edit } : c;
+    document.getElementById('cTitle').value = src.title || '';
+    document.getElementById('cDescription').value = src.description || '';
+    document.getElementById('cPrice').value = src.price || 0;
+    document.getElementById('cThumbCurrent').textContent = src.thumbnail_url ? (t('current_file') + src.thumbnail_url) : '';
     document.getElementById('cThumbFile').value = '';
-    document.getElementById('cStage').value = c.stage || '';
-    document.getElementById('cLevel').value = c.level || '';
-    document.getElementById('cTag').value = c.tag_label || '';
+    document.getElementById('cStage').value = src.stage || '';
+    document.getElementById('cLevel').value = src.level || '';
+    document.getElementById('cTag').value = src.tag_label || '';
     document.getElementById('cFormError').textContent = '';
+    const hintEl = document.getElementById('cPublishedEditHint');
+    if(c.status === 'published'){
+      hintEl.textContent = t('hint_published_edit');
+      hintEl.style.display = '';
+    } else {
+      hintEl.style.display = 'none';
+    }
     goView('course-edit');
   }
 
@@ -661,7 +679,28 @@
       const { data: prof } = await sb.from('profiles').select('full_name').eq('id', currentUser.id).maybeSingle();
       const teacherName = prof?.full_name || null;
 
-      if(activeCourse){
+      if(activeCourse && activeCourse.status === 'published'){
+        const missing = [];
+        if(!description) missing.push(t('label_course_desc'));
+        if(!stage) missing.push(t('label_stage'));
+        if(!level) missing.push(t('label_level'));
+        if(!thumbnailUrl) missing.push(t('label_thumbnail'));
+        if(missing.length){
+          errEl.textContent = t('err_fields_required') + missing.join('، ');
+          return;
+        }
+        // Published courses stay live with their current content until an
+        // admin approves this -- proposed values are staged, never written
+        // directly onto the row (the DB trigger would revert them anyway).
+        const { error } = await sb.from('courses').update({
+          pending_edit: {
+            title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl,
+            teacher_name: teacherName, stage, level, tag_label: tagLabel
+          },
+          edit_status: 'pending_review'
+        }).eq('id', activeCourse.id);
+        if(error) throw error;
+      } else if(activeCourse){
         const { error } = await sb.from('courses').update({
           title, description, price, is_free: price === 0, thumbnail_url: thumbnailUrl, teacher_name: teacherName,
           stage, level, tag_label: tagLabel
@@ -684,6 +723,16 @@
   }
 
   async function submitForReview(id, title){
+    const c = myCourses.find(x => x.id === id);
+    const missing = [];
+    if(!c?.description) missing.push(t('label_course_desc'));
+    if(!c?.stage) missing.push(t('label_stage'));
+    if(!c?.level) missing.push(t('label_level'));
+    if(!c?.thumbnail_url) missing.push(t('label_thumbnail'));
+    if(missing.length){
+      alert(t('err_fields_required') + missing.join('، '));
+      return;
+    }
     if(!confirm(t('confirm_submit_review').replace('{title}', title))) return;
     const { error } = await sb.from('courses').update({ status: 'pending_review' }).eq('id', id);
     if(error){ alert(t('alert_generic_failed') + error.message); return; }
