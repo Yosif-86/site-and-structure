@@ -121,9 +121,15 @@ function buildCsp(hashes) {
     // teacher.html renders course-thumbnail/profile-photo <img> tags whose
     // src is a public Supabase Storage URL (course-thumbnails bucket).
     `img-src 'self' data: ${SUPABASE_ORIGIN}`,
-    // fetch/XHR targets: /api/* on the same origin, Supabase, ipapi.co, and
-    // the video Worker.
-    `connect-src 'self' ${SUPABASE_ORIGIN} ${GEO_ORIGIN} ${R2_WORKER_ORIGIN}`,
+    // fetch/XHR targets: /api/* on the same origin, Supabase, ipapi.co, the
+    // video Worker, and the CDN (hls.js's own sourcemap fetch — harmless to
+    // block but noisy in devtools without this).
+    `connect-src 'self' ${SUPABASE_ORIGIN} ${GEO_ORIGIN} ${R2_WORKER_ORIGIN} ${CDN_ORIGIN}`,
+    // course.html's <video> plays HLS via hls.js, which feeds it through a
+    // MediaSource exposed as a blob: URL — without 'media-src' here, CSP
+    // falls back to default-src 'self', which does not cover blob: and
+    // silently blocks all video playback.
+    "media-src 'self' blob:",
     // course.html's #videoFrame iframe: the Cloudflare Worker for R2/HLS.
     `frame-src ${R2_WORKER_ORIGIN}`,
     // No plugins, ever.
