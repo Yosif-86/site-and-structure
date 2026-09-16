@@ -70,8 +70,29 @@ function signPlaylist(text, token, expires, uid) {
     .join('\n');
 }
 
+// The player (hls.js in course.html, video_player_screen.dart in the mobile
+// app) fetches the manifest and every segment via XHR/fetch from a different
+// origin than this Worker, so every response — including error ones, which
+// the player's error handler also reads — needs CORS headers or the browser
+// blocks the read entirely regardless of the underlying HTTP status.
+function corsHeaders() {
+  const headers = new Headers();
+  headers.set('access-control-allow-origin', '*');
+  headers.set('access-control-allow-methods', 'GET, HEAD, OPTIONS');
+  headers.set('access-control-allow-headers', 'range');
+  return headers;
+}
+
+function errorResponse(message, status) {
+  return new Response(message, { status, headers: corsHeaders() });
+}
+
 export default {
   async fetch(request, env) {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     const url = new URL(request.url);
     const path = url.pathname; // e.g. /videos/<lectureId>/480p/index.m3u8
     const token = url.searchParams.get('token');
@@ -79,27 +100,27 @@ export default {
     const uid = url.searchParams.get('uid');
 
     if (!token || !expires || !uid) {
-      return new Response('Missing token', { status: 403 });
+      return errorResponse('Missing token', 403);
     }
 
     const expiresNum = Number(expires);
     if (!Number.isFinite(expiresNum) || Math.floor(Date.now() / 1000) > expiresNum) {
-      return new Response('Token expired', { status: 403 });
+      return errorResponse('Token expired', 403);
     }
 
     const prefix = folderPrefixOf(path);
     const expected = await sha256Hex(env.SECURITY_KEY + prefix + uid + expires);
     if (expected !== token) {
-      return new Response('Invalid token', { status: 403 });
+      return errorResponse('Invalid token', 403);
     }
 
     const objectKey = path.replace(/^\/+/, ''); // R2 keys have no leading slash
     const object = await env.VIDEOS_BUCKET.get(objectKey);
     if (!object) {
-      return new Response('Not found', { status: 404 });
+      return errorResponse('Not found', 404);
     }
 
-    const headers = new Headers();
+    const headers = corsHeaders();
     headers.set('cache-control', 'private, max-age=60');
     headers.set('accept-ranges', 'bytes');
     headers.set('x-content-type-options', 'nosniff');
