@@ -27,6 +27,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   bool _isAdmin = false;
   bool _isTeacher = false;
 
+  // Instagram-style Home<->My Courses swipe, scoped to just these two tabs
+  // (Dashboard/Settings stay as ordinary taps — Instagram itself only makes
+  // the Home tab's Feed<->Reels pair swipeable, not every bottom-bar icon).
+  final _pageController = PageController();
+  final _myCoursesKey = GlobalKey<MyCoursesScreenState>();
+  int _currentPage = 0;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +63,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     AppStrings.instance.removeListener(_onLangChange);
     SupabaseService.instance.removeListener(_onAuthChangeAndAdmin);
     AppTheme.instance.removeListener(_onThemeChange);
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -63,6 +71,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   void _onAuthChangeAndAdmin() {
     setState(() {});
     _loadAdminFlag();
+    // The My Courses tab loads its own data once in initState and PageView
+    // keeps it alive across swipes, so a login/logout that happens while
+    // sitting on the Home tab would otherwise leave it showing stale data.
+    _myCoursesKey.currentState?.reload();
   }
   // AppColors' fields are mutable but plain — nothing subscribes to them on
   // its own. Theme.of(context)-based widgets (Scaffold's background, etc.)
@@ -95,6 +107,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
+  void _goToPage(int index) {
+    _pageController.animateToPage(index, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
@@ -104,9 +120,18 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(title: const BrandTitle()),
-        body: RefreshIndicator(
-          onRefresh: _load,
-          child: _buildBody(t),
+        body: PageView(
+          controller: _pageController,
+          // Swiping into My Courses while logged out would just show the
+          // "no enrollments" empty state instead of the sign-in prompt the
+          // equivalent bottom-bar tap gives — simplest fix is to only allow
+          // the swipe once there's an account to show courses for.
+          physics: loggedIn ? const PageScrollPhysics() : const NeverScrollableScrollPhysics(),
+          onPageChanged: (i) => setState(() => _currentPage = i),
+          children: [
+            RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
+            MyCoursesScreen(key: _myCoursesKey),
+          ],
         ),
         bottomNavigationBar: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -118,13 +143,19 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
 
   List<BottomNavItem> _navItems(String Function(String) t, bool loggedIn) {
     return [
-      BottomNavItem(icon: Icons.home_rounded, tooltip: t('nav_home'), active: true, onTap: () {}),
+      BottomNavItem(
+        icon: Icons.home_rounded,
+        tooltip: t('nav_home'),
+        active: _currentPage == 0,
+        onTap: () => _goToPage(0),
+      ),
       BottomNavItem(
         icon: Icons.school_outlined,
         tooltip: t('my_courses'),
+        active: _currentPage == 1,
         onTap: () {
           if (loggedIn) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen()));
+            _goToPage(1);
           } else {
             _openAuth();
           }
