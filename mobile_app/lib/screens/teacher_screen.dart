@@ -16,7 +16,12 @@ import '../theme.dart';
 /// server-side by RLS on every query below; the guard here just bounces a
 /// non-teacher back out quickly.
 class TeacherScreen extends StatefulWidget {
-  const TeacherScreen({super.key});
+  /// Opens straight on the profile view (which is where the ZainCash / Qi
+  /// Card payout fields live) instead of the overview — used by the
+  /// Settings > Payment info entry so that flow isn't duplicated there.
+  final bool openPaymentInfo;
+
+  const TeacherScreen({super.key, this.openPaymentInfo = false});
 
   @override
   State<TeacherScreen> createState() => _TeacherScreenState();
@@ -106,7 +111,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
     try {
       final prof = await sb.from('profiles').select('is_teacher').eq('id', user.id).maybeSingle();
       final isTeacher = prof?['is_teacher'] == true;
-      setState(() { _checking = false; _isTeacher = isTeacher; });
+      setState(() {
+        _checking = false;
+        _isTeacher = isTeacher;
+        if (isTeacher && widget.openPaymentInfo) _view = _TView.profile;
+      });
       if (isTeacher) {
         await _loadCourses();
         await _loadProfile();

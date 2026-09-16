@@ -7,11 +7,11 @@ import '../theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
-import 'admin_screen.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
-import 'teacher_screen.dart';
+import 'profile_screen.dart';
+import 'settings_screen.dart';
 
 /// Port of loadCatalogue() in index.html.
 class CatalogueScreen extends StatefulWidget {
@@ -24,12 +24,14 @@ class CatalogueScreen extends StatefulWidget {
 class _CatalogueScreenState extends State<CatalogueScreen> {
   List<Course>? _courses;
   String? _error;
-  bool _isAdmin = false;
+  // Only is_teacher is needed here now, to decide whether Settings shows the
+  // Payment info entry. is_admin is read by ProfileScreen itself, which is
+  // the only place a dashboard is reachable from.
   bool _isTeacher = false;
 
   // Instagram-style swipe across Home / My Courses / Settings. Profile stays
-  // an ordinary tap (it pushes the teacher/admin dashboard as a full route,
-  // which doesn't fit as a swipeable page here).
+  // an ordinary tap (it pushes a full route, which doesn't fit as a
+  // swipeable page here).
   final _pageController = PageController();
   final _myCoursesKey = GlobalKey<MyCoursesScreenState>();
   int _currentPage = 0;
@@ -47,14 +49,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   Future<void> _loadAdminFlag() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      if (mounted) setState(() => _isAdmin = false);
+      if (mounted) setState(() => _isTeacher = false);
       return;
     }
     try {
-      final prof = await SupabaseService.instance.client.from('profiles').select('is_admin, is_teacher').eq('id', user.id).maybeSingle();
-      if (mounted) setState(() { _isAdmin = prof?['is_admin'] == true; _isTeacher = prof?['is_teacher'] == true; });
+      final prof = await SupabaseService.instance.client.from('profiles').select('is_teacher').eq('id', user.id).maybeSingle();
+      if (mounted) setState(() => _isTeacher = prof?['is_teacher'] == true);
     } catch (_) {
-      if (mounted) setState(() { _isAdmin = false; _isTeacher = false; });
+      if (mounted) setState(() => _isTeacher = false);
     }
   }
 
@@ -126,7 +128,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           children: [
             RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
             MyCoursesScreen(key: _myCoursesKey),
-            _buildSettingsPage(t, loggedIn),
+            SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
           ],
         ),
         bottomNavigationBar: Padding(
@@ -160,16 +162,18 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       BottomNavItem(
         icon: Icons.person_outline,
         tooltip: t('nav_profile'),
-        onTap: () {
+        // Always the profile now — the teacher/admin dashboards are reached
+        // from inside it, and only by the accounts that actually have the
+        // flag, so they're invisible to regular students.
+        onTap: () async {
           if (!loggedIn) {
             _openAuth();
-          } else if (_isAdmin) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminScreen()));
-          } else if (_isTeacher) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeacherScreen()));
-          } else {
-            _goToPage(2);
+            return;
           }
+          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          // A name change made in the profile can affect what's shown here,
+          // and is_admin/is_teacher could have been granted meanwhile.
+          _loadAdminFlag();
         },
       ),
       BottomNavItem(
@@ -179,32 +183,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         onTap: () => _goToPage(2),
       ),
     ];
-  }
-
-  Widget _buildSettingsPage(String Function(String) t, bool loggedIn) {
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        children: [
-          ListTile(
-            leading: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-            title: Text(t('toggle_theme')),
-            onTap: () => AppTheme.instance.toggle(),
-          ),
-          ListTile(
-            leading: Icon(loggedIn ? Icons.logout : Icons.login),
-            title: Text(loggedIn ? t('log_out') : t('log_in')),
-            onTap: () async {
-              if (loggedIn) {
-                await SupabaseService.instance.logout();
-              } else {
-                _openAuth();
-              }
-            },
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildBody(String Function(String) t) {
