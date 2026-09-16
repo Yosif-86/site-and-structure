@@ -6,8 +6,7 @@ Prereqs: Node.js installed, a Cloudflare account with R2 enabled.
 2. `npm install`
 3. Create the R2 bucket (skip if you already made it in the dashboard):
    `npx wrangler r2 bucket create site-structure-videos`
-4. Set the signing secret — pick any long random string, this is the new
-   equivalent of `BUNNY_STREAM_SECURITY_KEY`:
+4. Set the signing secret — pick any long random string:
    `npx wrangler secret put SECURITY_KEY`
    (paste the secret when prompted — don't put it in any file)
 5. Deploy: `npx wrangler deploy`

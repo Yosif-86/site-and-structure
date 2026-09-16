@@ -660,8 +660,8 @@
       lecture_uploads_tag: 'معالجة المحاضرات', pending_uploads: 'رفوعات المحاضرات المعلّقة',
       th_lecture: 'المحاضرة', th_publish_video: 'نشر الفيديو', no_pending_uploads: 'لا توجد رفوعات معلّقة.',
       download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ', copy_lecture_id: 'نسخ معرّف المحاضرة',
-      bunny_placeholder: 'معرّف فيديو Bunny', r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
-      alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل معرّف فيديو Bunny أو مسار R2 أولاً.',
+      r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
+      alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل مسار R2 أولاً.',
       th_students_enrolled: 'الطلاب', th_total_revenue: 'إجمالي الإيرادات', th_teacher_payout: 'حصة المدرس', th_your_profit: 'ربحك',
       no_revenue: 'لا توجد إيرادات بعد.', total_row_label: 'الإجمالي',
       discount_codes: 'أكواد الخصم', th_code: 'الكود', th_discount: 'الخصم', th_uses: 'الاستخدامات', th_expires: 'ينتهي في',
@@ -1103,17 +1103,13 @@
     window.open(data.signedUrl, '_blank');
   }
 
-  async function publishVideo(id, bunnyInputEl, r2InputEl, uploadPath){
-    const bunnyVal = bunnyInputEl.value.trim();
+  async function publishVideo(id, r2InputEl, uploadPath){
     const r2Val = r2InputEl.value.trim();
-    if(!bunnyVal && !r2Val){ alert(t('alert_publish_video_empty')); return; }
-    const update = { pending_upload_path: null };
-    if(bunnyVal) update.bunny_video_id = bunnyVal;
-    if(r2Val) update.r2_path = r2Val;
-    const { error } = await sb.from('lectures').update(update).eq('id', id);
+    if(!r2Val){ alert(t('alert_publish_video_empty')); return; }
+    const { error } = await sb.from('lectures').update({ pending_upload_path: null, r2_path: r2Val }).eq('id', id);
     if(error){ alert(t('alert_publish_video_failed') + error.message); return; }
-    // Raw source video has been processed into R2/Bunny — the copy sitting
-    // in lecture-uploads is now redundant, so remove it (storage RLS grants
+    // Raw source video has been processed into R2 — the copy sitting in
+    // lecture-uploads is now redundant, so remove it (storage RLS grants
     // admins delete on this bucket specifically for this cleanup step).
     if(uploadPath){ await sb.storage.from('lecture-uploads').remove([uploadPath]); }
     loadUploads();
@@ -1147,7 +1143,6 @@
           </td>
           <td><button class="btn" data-action="download-upload" data-path="${escapeHtml(l.pending_upload_path)}">${t('download')}</button></td>
           <td style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <input type="text" class="bunny-input" placeholder="${t('bunny_placeholder')}" style="width:130px; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px;">
             <input type="text" class="r2-input" placeholder="${t('r2_placeholder')}" style="width:130px; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel2); color:var(--text); font-size:12px;">
             <button class="btn btn-accent" data-action="publish-video" data-id="${escapeHtml(l.id)}" data-path="${escapeHtml(l.pending_upload_path)}">${t('save_and_publish')}</button>
           </td>
@@ -1655,7 +1650,7 @@
     'download-upload': (el) => downloadUpload(el.dataset.path),
     'publish-video': (el) => {
       const row = el.closest('tr');
-      publishVideo(el.dataset.id, row.querySelector('.bunny-input'), row.querySelector('.r2-input'), el.dataset.path);
+      publishVideo(el.dataset.id, row.querySelector('.r2-input'), el.dataset.path);
     }
   };
   document.addEventListener('click', (ev) => {

@@ -617,7 +617,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               Text(l['title'] as String? ?? '—', style: AppFonts.body(size: 14, weight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text(
-                '${(l['bunny_video_id'] != null || l['r2_path'] != null) ? t('status_live') : t('status_pending_upload')}${l['is_free'] == true ? ' · ${t('free_tag')}' : ''}',
+                '${l['r2_path'] != null ? t('status_live') : t('status_pending_upload')}${l['is_free'] == true ? ' · ${t('free_tag')}' : ''}',
                 style: AppFonts.mono(size: 10.5, color: AppColors.muted),
               ),
               const SizedBox(height: 8),

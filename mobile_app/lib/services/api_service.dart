@@ -6,7 +6,7 @@ import 'supabase_service.dart';
 
 class VideoUrlResult {
   final String? url;
-  final String? type; // 'hls' | 'bunny'
+  final String? type; // 'hls'
   final String? error;
   VideoUrlResult({this.url, this.type, this.error});
 }

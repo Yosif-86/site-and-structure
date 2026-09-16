@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../models/lecture.dart';
@@ -45,7 +44,6 @@ class VideoPlayerScreen extends StatefulWidget {
 
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   VideoPlayerController? _hlsController;
-  WebViewController? _webController; // fallback for lectures still on Bunny
   bool _loading = true;
   String? _error;
   String _watermarkLabel = '';
@@ -122,26 +120,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         return;
       }
 
-      if (result.type == 'hls') {
-        _hlsMasterUrl = result.url!;
-        final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
-        await controller.initialize().timeout(const Duration(seconds: 20));
-        final resumeAt = await _loadResumePosition();
-        if (resumeAt != null && resumeAt < controller.value.duration - const Duration(seconds: 5)) {
-          await controller.seekTo(resumeAt);
-        }
-        controller.play();
-        if (!mounted) { controller.dispose(); return; }
-        setState(() { _hlsController = controller; _loading = false; });
-        _startProgressSaving();
-        _scheduleAutoHide();
-      } else {
-        // Bunny iframe embed — needs a WebView, not the native player.
-        final controller = WebViewController()
-          ..setJavaScriptMode(JavaScriptMode.unrestricted)
-          ..loadRequest(Uri.parse(result.url!));
-        setState(() { _webController = controller; _loading = false; });
+      _hlsMasterUrl = result.url!;
+      final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
+      await controller.initialize().timeout(const Duration(seconds: 20));
+      final resumeAt = await _loadResumePosition();
+      if (resumeAt != null && resumeAt < controller.value.duration - const Duration(seconds: 5)) {
+        await controller.seekTo(resumeAt);
       }
+      controller.play();
+      if (!mounted) { controller.dispose(); return; }
+      setState(() { _hlsController = controller; _loading = false; });
+      _startProgressSaving();
+      _scheduleAutoHide();
     } catch (e) {
       if (!mounted) return;
       setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
@@ -355,7 +345,6 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         fit: StackFit.expand,
         children: [
           if (_hlsController != null) VideoPlayer(_hlsController!),
-          if (_webController != null) WebViewWidget(controller: _webController!),
           if (_hlsController != null)
             _GestureLayer(
               controller: _hlsController!,

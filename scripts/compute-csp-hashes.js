@@ -55,8 +55,6 @@ const CDN_ORIGIN = 'https://cdn.jsdelivr.net';
 const SUPABASE_ORIGIN = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 // Coarse geolocation lookup used by the suspicious-login check.
 const GEO_ORIGIN = 'https://ipapi.co';
-// Bunny Stream player, loaded into the #videoFrame iframe on course.html.
-const BUNNY_EMBED_ORIGIN = 'https://iframe.mediadelivery.net';
 // Google Fonts: the stylesheet comes from googleapis, the font files gstatic.
 const FONT_CSS_ORIGIN = 'https://fonts.googleapis.com';
 const FONT_FILE_ORIGIN = 'https://fonts.gstatic.com';
@@ -126,9 +124,8 @@ function buildCsp(hashes) {
     // fetch/XHR targets: /api/* on the same origin, Supabase, ipapi.co, and
     // the video Worker.
     `connect-src 'self' ${SUPABASE_ORIGIN} ${GEO_ORIGIN} ${R2_WORKER_ORIGIN}`,
-    // course.html's #videoFrame iframe: Bunny for older lectures, the
-    // Cloudflare Worker for R2/HLS ones.
-    `frame-src ${BUNNY_EMBED_ORIGIN} ${R2_WORKER_ORIGIN}`,
+    // course.html's #videoFrame iframe: the Cloudflare Worker for R2/HLS.
+    `frame-src ${R2_WORKER_ORIGIN}`,
     // No plugins, ever.
     "object-src 'none'",
     // An injected <base> cannot re-point every relative URL on the page.

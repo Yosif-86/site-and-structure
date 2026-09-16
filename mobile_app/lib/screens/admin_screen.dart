@@ -755,7 +755,7 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Publish this lecture from the admin.html web dashboard once its Bunny/R2 id is ready — the mobile screen surfaces pending uploads for visibility, not full re-encoding controls.',
+            'Publish this lecture from the admin.html web dashboard once its R2 path is ready — the mobile screen surfaces pending uploads for visibility, not full re-encoding controls.',
             style: AppFonts.body(size: 11.5, color: AppColors.muted2),
           ),
         ]);

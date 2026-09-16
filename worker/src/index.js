@@ -1,7 +1,5 @@
 /**
  * Cloudflare Worker: token-gated proxy in front of the R2 video bucket.
- * Mirrors Bunny Stream's own token-auth scheme so api/get-video-url.js
- * only had to change how it builds the URL, not its enrollment logic.
  *
  * The token is scoped to a whole lecture folder (not one file) because HLS
  * playback means many requests — the master playlist, one variant playlist

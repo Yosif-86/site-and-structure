@@ -804,7 +804,7 @@
   }
 
   // ---- Curriculum ----
-  function lectureStatus(l){ return (l.bunny_video_id || l.r2_path) ? 'live' : 'pending_upload'; }
+  function lectureStatus(l){ return l.r2_path ? 'live' : 'pending_upload'; }
 
   function renderLectures(){
     const body = document.getElementById('lectureBody');
