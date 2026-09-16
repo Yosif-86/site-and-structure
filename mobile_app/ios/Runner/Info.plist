@@ -24,6 +24,17 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<!-- iOS counterpart of the Android <queries> block: canLaunchUrl() on a
+	     custom scheme only returns true for schemes listed here. Added for
+	     parity even though iOS isn't built locally. -->
+	<array>
+		<string>instagram</string>
+		<string>tg</string>
+		<string>whatsapp</string>
+		<string>tel</string>
+		<string>mailto</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>

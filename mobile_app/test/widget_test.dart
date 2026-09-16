@@ -1,30 +1,59 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Replaces the stock `flutter create` counter smoke test, which referenced a
+// `MyApp` class and a counter UI that never existed in this app (it was a
+// compile error, not just a failing test). Pumping the real app root isn't
+// practical in a plain unit test — it calls Supabase.initialize() and hits
+// secure storage — so this covers the pure helpers instead.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:site_and_structure/main.dart';
+import 'package:site_and_structure/i18n/strings.dart';
+import 'package:site_and_structure/services/deep_links.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('DeepLinks.handle', () {
+    test('strips a leading @', () {
+      expect(DeepLinks.handle('@someone'), 'someone');
+      expect(DeepLinks.handle('  @someone  '), 'someone');
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('leaves a bare handle alone', () {
+      expect(DeepLinks.handle('someone'), 'someone');
+    });
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  group('DeepLinks.whatsappNumber', () {
+    test('promotes a local Iraqi number to +964', () {
+      expect(DeepLinks.whatsappNumber('07701234567'), '9647701234567');
+      expect(DeepLinks.whatsappNumber('0770 123 4567'), '9647701234567');
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('passes an already-international number through', () {
+      expect(DeepLinks.whatsappNumber('+964 770 123 4567'), '9647701234567');
+      expect(DeepLinks.whatsappNumber('00964 770 123 4567'), '9647701234567');
+    });
+
+    test('strips separators', () {
+      expect(DeepLinks.whatsappNumber('+1 (555) 010-9999'), '15550109999');
+    });
+  });
+
+  group('AppStrings', () {
+    test('resolves the new profile and settings keys', () {
+      final t = AppStrings.instance.t;
+      for (final key in [
+        'profile_title',
+        'edit_profile',
+        'settings_support',
+        'settings_privacy',
+        'settings_payment_info',
+        'privacy_draft_notice',
+      ]) {
+        expect(t(key), isNot(key), reason: 'missing i18n string for "$key"');
+      }
+    });
+
+    test('falls back to the key itself when missing', () {
+      expect(AppStrings.instance.t('definitely_not_a_key'), 'definitely_not_a_key');
+    });
   });
 }

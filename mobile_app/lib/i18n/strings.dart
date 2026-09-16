@@ -213,5 +213,57 @@ class AppStrings extends ChangeNotifier {
     'label_qi_account': 'رقم حساب كي كارد',
     'label_qi_qr': 'صورة رمز QR لكي كارد',
     'back': 'رجوع',
+    // Profile screen
+    'profile_title': 'ملفي الشخصي',
+    'edit_profile': 'تعديل الملف',
+    'profile_add_bio': 'أضف نبذة عنك...',
+    'profile_change_photo': 'تغيير الصورة',
+    'profile_saved': 'تم حفظ التغييرات.',
+    'profile_sign_in_prompt': 'سجّل الدخول لعرض ملفك الشخصي.',
+    'profile_no_name': 'بدون اسم',
+    'label_instagram': 'انستغرام',
+    'label_telegram': 'تيليغرام',
+    'label_whatsapp': 'واتساب',
+    'label_call': 'اتصال',
+    'ph_social_handle': 'اسم المستخدم بدون @',
+    'profile_phone_readonly': 'رقم الهاتف مرتبط بحسابك ويُستخدم لواتساب والاتصال. للتعديل تواصل مع الدعم.',
+    'err_avatar_upload_failed': 'فشل رفع الصورة: ',
+    'err_link_failed': 'تعذر فتح التطبيق.',
+    'teacher_dashboard_sub': 'إدارة دوراتك ومحاضراتك وأرباحك',
+    'admin_dashboard_sub': 'مراجعة الدورات والطلاب والمدرّسين',
+    // Settings list
+    'settings_payment_info': 'معلومات الدفع',
+    'settings_payment_info_sub': 'أرقام زين كاش وكي كارد لاستلام أرباحك',
+    'settings_payment_teacher_only': 'متاح لحسابات المدرّسين فقط',
+    'settings_support': 'الدعم',
+    'settings_support_sub': 'تواصل معنا للمساعدة',
+    'settings_appearance': 'المظهر',
+    'settings_appearance_dark': 'الوضع الداكن',
+    'settings_appearance_light': 'الوضع الفاتح',
+    'settings_privacy': 'الخصوصية',
+    'settings_privacy_sub': 'كيف نتعامل مع بياناتك',
+    // Support screen
+    'support_title': 'الدعم',
+    'support_intro': 'إذا واجهتك مشكلة في الدفع أو الوصول لدورة أو تسجيل الدخول من جهاز جديد، تواصل معنا وسنساعدك.',
+    'support_no_contact': 'لم تُضف بيانات التواصل بعد.',
+    // Privacy screen
+    'privacy_title': 'الخصوصية',
+    'privacy_draft_notice': 'هذه صياغة مبدئية توضيحية وليست سياسة خصوصية نهائية.',
+    'privacy_intro': 'هذا ملخص بلغة واضحة لما يفعله التطبيق ببياناتك.',
+    'privacy_h_collect': 'ما الذي نجمعه',
+    'privacy_b_collect':
+        'الاسم ورقم الهاتف والبريد الإلكتروني عند إنشاء الحساب، وما تضيفه أنت لاحقًا في ملفك الشخصي (صورة، نبذة، حسابات التواصل). كل هذه الحقول اختيارية عدا بيانات إنشاء الحساب.',
+    'privacy_h_courses': 'الدورات والدفع',
+    'privacy_b_courses':
+        'نحفظ الدورات المسجَّل بها وتقدّمك في المحاضرات. عند الدفع اليدوي ترفع لقطة شاشة للتحويل، وتُستخدم للتحقق من الدفعة فقط.',
+    'privacy_h_devices': 'الأجهزة وتسجيل الدخول',
+    'privacy_b_devices':
+        'يُسمح بجهاز واحد لكل حساب لمنع مشاركة الحسابات، لذلك نحفظ معرّف جهاز وسجلّ لعمليات الدخول يتضمن المدينة التقريبية المستخرجة من عنوان الإنترنت.',
+    'privacy_h_protection': 'حماية المحتوى',
+    'privacy_b_protection':
+        'نمنع التقاط الشاشة وتسجيلها داخل شاشات الفيديو، ويظهر اسمك ورقم هاتفك كعلامة مائية على المحاضرات، لحماية محتوى المدرّسين.',
+    'privacy_h_sharing': 'المشاركة',
+    'privacy_b_sharing':
+        'لا نبيع بياناتك. تُخزَّن البيانات لدى مزوّد الاستضافة والخدمات السحابية الذي يشغّل المنصة، ويطّلع فريق الإدارة عليها لتشغيل المنصة والتحقق من المدفوعات فقط.',
   };
 }
