@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/bottom_nav.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
 import 'admin_screen.dart';
@@ -102,91 +103,79 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     return Directionality(
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        drawer: _buildDrawer(t, loggedIn),
-        appBar: AppBar(
-          title: const BrandTitle(),
-          actions: [
-            IconButton(
-              tooltip: 'Toggle theme',
-              icon: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-              onPressed: () => AppTheme.instance.toggle(),
-            ),
-            if (loggedIn)
-              IconButton(
-                tooltip: t('my_courses'),
-                icon: const Icon(Icons.school_outlined),
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen())),
-              ),
-            IconButton(
-              tooltip: loggedIn ? t('log_out') : t('log_in'),
-              icon: Icon(loggedIn ? Icons.logout : Icons.login),
-              onPressed: () async {
-                if (loggedIn) {
-                  await SupabaseService.instance.logout();
-                } else {
-                  _openAuth();
-                }
-              },
-            ),
-          ],
-        ),
+        appBar: AppBar(title: const BrandTitle()),
         body: RefreshIndicator(
           onRefresh: _load,
           child: _buildBody(t),
+        ),
+        bottomNavigationBar: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: FloatingBottomNav(items: _navItems(t, loggedIn)),
         ),
       ),
     );
   }
 
-  Widget _buildDrawer(String Function(String) t, bool loggedIn) {
-    return Drawer(
+  List<BottomNavItem> _navItems(String Function(String) t, bool loggedIn) {
+    return [
+      BottomNavItem(icon: Icons.home_rounded, tooltip: t('nav_home'), active: true, onTap: () {}),
+      BottomNavItem(
+        icon: Icons.school_outlined,
+        tooltip: t('my_courses'),
+        onTap: () {
+          if (loggedIn) {
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen()));
+          } else {
+            _openAuth();
+          }
+        },
+      ),
+      BottomNavItem(
+        icon: _isAdmin ? Icons.admin_panel_settings_outlined : Icons.cast_for_education_outlined,
+        tooltip: _isAdmin ? t('nav_admin') : t('teacher_dashboard'),
+        onTap: () {
+          if (!loggedIn) {
+            _openAuth();
+          } else if (_isAdmin) {
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminScreen()));
+          } else if (_isTeacher) {
+            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeacherScreen()));
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('dashboard_unavailable'))));
+          }
+        },
+      ),
+      BottomNavItem(
+        icon: Icons.settings_outlined,
+        tooltip: t('settings'),
+        onTap: () => _openSettingsSheet(t, loggedIn),
+      ),
+    ];
+  }
+
+  void _openSettingsSheet(String Function(String) t, bool loggedIn) {
+    showModalBottomSheet(
+      context: context,
       backgroundColor: AppColors.panel,
-      child: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            DrawerHeader(
-              decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line))),
-              child: Align(alignment: Alignment.bottomLeft, child: Text(t('menu'), style: AppFonts.heading(size: 20))),
-            ),
+            const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.home_outlined),
-              title: Text(t('nav_home')),
-              onTap: () => Navigator.of(context).pop(),
+              leading: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+              title: Text(t('toggle_theme')),
+              onTap: () {
+                AppTheme.instance.toggle();
+                Navigator.of(ctx).pop();
+              },
             ),
-            if (loggedIn)
-              ListTile(
-                leading: const Icon(Icons.school_outlined),
-                title: Text(t('my_courses')),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyCoursesScreen()));
-                },
-              ),
-            if (loggedIn && _isTeacher)
-              ListTile(
-                leading: const Icon(Icons.cast_for_education_outlined),
-                title: Text(t('teacher_dashboard')),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeacherScreen()));
-                },
-              ),
-            if (loggedIn && _isAdmin)
-              ListTile(
-                leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: Text(t('nav_admin')),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AdminScreen()));
-                },
-              ),
-            const Divider(),
             ListTile(
               leading: Icon(loggedIn ? Icons.logout : Icons.login),
               title: Text(loggedIn ? t('log_out') : t('log_in')),
               onTap: () async {
-                Navigator.of(context).pop();
+                Navigator.of(ctx).pop();
                 if (loggedIn) {
                   await SupabaseService.instance.logout();
                 } else {
@@ -194,6 +183,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 }
               },
             ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
