@@ -62,6 +62,7 @@ class AppStrings extends ChangeNotifier {
     'free_tag': 'مجاني',
     'watch': 'مشاهدة',
     'locked': 'مقفل',
+    'continue_watching': 'اكمل المشاهدة',
     'status_active': 'مفعّل',
     'status_pending': 'بانتظار الموافقة',
     'enroll_free': 'التسجيل مجانًا',

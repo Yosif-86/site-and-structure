@@ -26,6 +26,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   List<Lecture> _lectures = [];
   String? _enrollmentStatus; // 'active' | 'pending' | null
   Set<String> _completedLectureIds = {};
+  // lecture_id -> {position_seconds, duration_seconds}, in-progress (not
+  // completed) lectures only — drives each row's progress bar plus which
+  // lecture (if any) is the "continue watching" one.
+  Map<String, Map<String, int>> _progressByLecture = {};
+  String? _continueWatchingId;
   bool _loading = true;
   String? _error;
 
@@ -54,6 +59,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
       String? status;
       var completedIds = <String>{};
+      var progressByLecture = <String, Map<String, int>>{};
+      String? continueWatchingId;
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
         final enr = await sb.from('enrollments').select('status').eq('user_id', user.id).eq('course_slug', course.slug).maybeSingle();
@@ -62,11 +69,28 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         if (lectures.isNotEmpty) {
           final progressRows = await sb
               .from('lesson_progress')
-              .select('lecture_id')
+              .select('lecture_id, position_seconds, duration_seconds, completed, updated_at')
               .eq('user_id', user.id)
-              .eq('completed', true)
               .inFilter('lecture_id', lectures.map((l) => l.id).toList());
-          completedIds = (progressRows as List).map((r) => r['lecture_id'] as String).toSet();
+
+          DateTime? latestUpdate;
+          for (final row in (progressRows as List)) {
+            final r = row as Map<String, dynamic>;
+            final lectureId = r['lecture_id'] as String;
+            if (r['completed'] == true) {
+              completedIds.add(lectureId);
+              continue;
+            }
+            final position = r['position_seconds'] as int? ?? 0;
+            final duration = r['duration_seconds'] as int? ?? 0;
+            if (position <= 0 || duration <= 0) continue;
+            progressByLecture[lectureId] = {'position': position, 'duration': duration};
+            final updatedAt = DateTime.tryParse(r['updated_at'] as String? ?? '');
+            if (updatedAt != null && (latestUpdate == null || updatedAt.isAfter(latestUpdate))) {
+              latestUpdate = updatedAt;
+              continueWatchingId = lectureId;
+            }
+          }
         }
       }
 
@@ -75,6 +99,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _lectures = lectures;
         _enrollmentStatus = status;
         _completedLectureIds = completedIds;
+        _progressByLecture = progressByLecture;
+        _continueWatchingId = continueWatchingId;
         _loading = false;
       });
     } catch (e) {
@@ -211,9 +237,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
               else
                 _CurriculumCard(
-                  lectures: _lectures,
+                  lectures: _orderedLectures(),
                   isActive: isActive,
                   completedIds: _completedLectureIds,
+                  progressByLecture: _progressByLecture,
+                  continueWatchingId: _continueWatchingId,
                   onWatch: _watchLecture,
                 ),
             ],
@@ -221,6 +249,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ),
       ],
     );
+  }
+
+  // The in-progress lecture (if any) is pulled to the top, same as the
+  // "continue watching" pattern on the website's course page.
+  List<Lecture> _orderedLectures() {
+    if (_continueWatchingId == null) return _lectures;
+    final match = _lectures.where((l) => l.id == _continueWatchingId);
+    if (match.isEmpty) return _lectures;
+    final continueLecture = match.first;
+    return [continueLecture, ..._lectures.where((l) => l.id != _continueWatchingId)];
   }
 
   Widget _buildFeatureBullets(Course course, Lecture? freeLecture) {
@@ -394,8 +432,17 @@ class _CurriculumCard extends StatelessWidget {
   final List<Lecture> lectures;
   final bool isActive;
   final Set<String> completedIds;
+  final Map<String, Map<String, int>> progressByLecture;
+  final String? continueWatchingId;
   final void Function(Lecture) onWatch;
-  const _CurriculumCard({required this.lectures, required this.isActive, required this.completedIds, required this.onWatch});
+  const _CurriculumCard({
+    required this.lectures,
+    required this.isActive,
+    required this.completedIds,
+    required this.progressByLecture,
+    required this.continueWatchingId,
+    required this.onWatch,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -413,6 +460,8 @@ class _CurriculumCard extends StatelessWidget {
               lecture: lectures[i],
               unlocked: lectures[i].isFree || isActive,
               completed: completedIds.contains(lectures[i].id),
+              progress: progressByLecture[lectures[i].id],
+              isContinueWatching: lectures[i].id == continueWatchingId,
               onWatch: () => onWatch(lectures[i]),
             ),
           ],
@@ -446,39 +495,71 @@ class _LectureRow extends StatelessWidget {
   final Lecture lecture;
   final bool unlocked;
   final bool completed;
+  final Map<String, int>? progress;
+  final bool isContinueWatching;
   final VoidCallback onWatch;
-  const _LectureRow({required this.lecture, required this.unlocked, required this.completed, required this.onWatch});
+  const _LectureRow({
+    required this.lecture,
+    required this.unlocked,
+    required this.completed,
+    required this.progress,
+    required this.isContinueWatching,
+    required this.onWatch,
+  });
 
   @override
   Widget build(BuildContext context) {
     final ar = AppStrings.instance.isAr;
     final t = AppStrings.instance.t;
+    final pct = progress == null ? null : (progress!['position']! / progress!['duration']!).clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Row(
-              children: [
-                if (completed) ...[
-                  Icon(Icons.check_circle, size: 15, color: AppColors.teal),
-                  const SizedBox(width: 6),
-                ],
-                Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
-                if (lecture.isFree) ...[
-                  const SizedBox(width: 8),
-                  Text(t('free_tag'), style: AppFonts.mono(size: 10, color: AppColors.teal, weight: FontWeight.w700)),
-                ],
-              ],
+          if (isContinueWatching)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(t('continue_watching'), style: AppFonts.mono(size: 10, color: AppColors.red, weight: FontWeight.w700, letterSpacing: 0.5)),
             ),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    if (completed) ...[
+                      Icon(Icons.check_circle, size: 15, color: AppColors.teal),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
+                    if (lecture.isFree) ...[
+                      const SizedBox(width: 8),
+                      Text(t('free_tag'), style: AppFonts.mono(size: 10, color: AppColors.teal, weight: FontWeight.w700)),
+                    ],
+                  ],
+                ),
+              ),
+              unlocked
+                  ? OutlinedButton(onPressed: onWatch, child: Text(t('watch')))
+                  : Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
+                      const SizedBox(width: 4),
+                      Text(t('locked'), style: AppFonts.body(size: 13, color: AppColors.muted2)),
+                    ]),
+            ],
           ),
-          unlocked
-              ? OutlinedButton(onPressed: onWatch, child: Text(t('watch')))
-              : Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
-                  const SizedBox(width: 4),
-                  Text(t('locked'), style: AppFonts.body(size: 13, color: AppColors.muted2)),
-                ]),
+          if (pct != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: pct,
+                minHeight: 4,
+                backgroundColor: AppColors.line,
+                valueColor: AlwaysStoppedAnimation(AppColors.red),
+              ),
+            ),
+          ],
         ],
       ),
     );

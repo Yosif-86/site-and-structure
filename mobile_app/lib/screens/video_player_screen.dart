@@ -50,6 +50,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _captureNotice = false;
   bool _isFullscreen = false;
   Timer? _progressTimer;
+  bool _autoplayTriggered = false;
   String? _hlsMasterUrl;
   String _currentQuality = 'auto';
   static const _qualities = ['auto', '480p', '720p', '1080p'];
@@ -129,6 +130,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
       controller.play();
       if (!mounted) { controller.dispose(); return; }
+      controller.addListener(_checkAutoplayNext);
       setState(() { _hlsController = controller; _loading = false; });
       _startProgressSaving();
       _scheduleAutoHide();
@@ -178,7 +180,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         'position_seconds': position.inSeconds,
         'duration_seconds': duration.inSeconds,
         'completed': completed,
-        'updated_at': DateTime.now().toIso8601String(),
+        // .toUtc() matters: DateTime.now() is local time, and
+        // toIso8601String() on a local DateTime carries no offset marker, so
+        // Postgres read it as UTC outright -- every save landed 3 hours
+        // ahead of real UTC (Baghdad is UTC+3).
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'user_id,lecture_id');
     } catch (_) {
       // Best-effort — resume position is a convenience, not critical data.
@@ -209,6 +215,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       await controller.seekTo(position);
       if (wasPlaying) controller.play();
       if (!mounted) { controller.dispose(); return; }
+      old?.removeListener(_checkAutoplayNext);
+      controller.addListener(_checkAutoplayNext);
       setState(() { _hlsController = controller; _currentQuality = quality; _loading = false; });
       await old?.dispose();
     } catch (e) {
@@ -288,6 +296,25 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     return (i >= 0 && i < widget.playlist.length - 1) ? widget.playlist[i + 1] : null;
   }
 
+  // Fires on every controller tick, not just at the very end, so it must
+  // stay cheap and self-guarding — _autoplayTriggered stops it firing
+  // repeatedly once the end condition is reached (position doesn't strictly
+  // stop advancing at duration, and this listener keeps getting called).
+  void _checkAutoplayNext() {
+    if (_autoplayTriggered) return;
+    final controller = _hlsController;
+    if (controller == null) return;
+    final value = controller.value;
+    if (!value.isInitialized || value.isBuffering) return;
+    final ended = value.duration > Duration.zero && value.position >= value.duration - const Duration(milliseconds: 400);
+    if (!ended) return;
+    final next = _nextLecture;
+    if (next == null || !widget.isUnlocked(next)) return;
+    _autoplayTriggered = true;
+    unawaited(_saveProgress());
+    _playLecture(next);
+  }
+
   void _playLecture(Lecture lecture) {
     if (!widget.isUnlocked(lecture)) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(
@@ -305,6 +332,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _progressTimer?.cancel();
     _hideControlsTimer?.cancel();
     unawaited(_saveProgress());
+    _hlsController?.removeListener(_checkAutoplayNext);
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
     ScreenSecurity.onCapture(null);
@@ -320,9 +348,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       // of app language instead of mirroring like Arabic text does.
       textDirection: TextDirection.ltr,
       child: PopScope(
-        canPop: !_isFullscreen,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && _isFullscreen) _toggleFullscreen();
+        // Always intercepted (never true canPop) so the pending progress
+        // save can be awaited first — the course page behind this route
+        // reloads the instant Navigator.pop() returns, and dispose() can
+        // only fire an unawaited save, which routinely lost the race and
+        // left the progress bar/checkmark showing stale data until the
+        // course page was left and reopened.
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          if (_isFullscreen) { _toggleFullscreen(); return; }
+          await _saveProgress();
+          if (mounted) Navigator.of(context).pop();
         },
         child: Scaffold(
           backgroundColor: Colors.black,

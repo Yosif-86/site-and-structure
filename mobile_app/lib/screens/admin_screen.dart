@@ -199,7 +199,10 @@ class _AdminScreenState extends State<AdminScreen> {
       await SupabaseService.instance.client.from('enrollments').update({
         'status': 'active',
         'approved_by': adminId,
-        'approved_at': DateTime.now().toIso8601String(),
+        // .toUtc() matters here -- see the same fix in video_player_screen's
+        // progress save for why a bare local DateTime.now() lands 3 hours
+        // ahead of real UTC once Postgres reads it.
+        'approved_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', enrollmentId);
       await _loadAll();
     } catch (e) {
