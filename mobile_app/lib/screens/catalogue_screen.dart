@@ -128,6 +128,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           children: [
             RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
             MyCoursesScreen(key: _myCoursesKey),
+            const ProfileScreen(),
             SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
           ],
         ),
@@ -162,25 +163,25 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       BottomNavItem(
         icon: Icons.person_outline,
         tooltip: t('nav_profile'),
-        // Always the profile now — the teacher/admin dashboards are reached
-        // from inside it, and only by the accounts that actually have the
-        // flag, so they're invisible to regular students.
-        onTap: () async {
-          if (!loggedIn) {
+        active: _currentPage == 2,
+        // A swipeable page now, same as the others, so the bottom nav stays
+        // fixed instead of Profile opening what looked like a separate
+        // screen. The teacher/admin dashboards are reached from inside it,
+        // and only by the accounts that actually have the flag, so they're
+        // invisible to regular students.
+        onTap: () {
+          if (loggedIn) {
+            _goToPage(2);
+          } else {
             _openAuth();
-            return;
           }
-          await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
-          // A name change made in the profile can affect what's shown here,
-          // and is_admin/is_teacher could have been granted meanwhile.
-          _loadAdminFlag();
         },
       ),
       BottomNavItem(
         icon: Icons.settings_outlined,
         tooltip: t('settings'),
-        active: _currentPage == 2,
-        onTap: () => _goToPage(2),
+        active: _currentPage == 3,
+        onTap: () => _goToPage(3),
       ),
     ];
   }

@@ -62,7 +62,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final row = await SupabaseService.instance.client
           .from('profiles')
-          .select('full_name, phone, public_id, avatar_url, bio, instagram_username, telegram_username, is_admin, is_teacher')
+          .select(
+              'full_name, phone, public_id, avatar_url, bio, teacher_photo_url, teacher_bio, instagram_username, telegram_username, is_admin, is_teacher')
           .eq('id', user.id)
           .maybeSingle();
       if (!mounted) return;
@@ -73,12 +74,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  bool get _isTeacher => _profile?['is_teacher'] == true;
+
   String? _str(String key) {
     final v = _profile?[key];
     if (v is! String) return null;
     final s = v.trim();
     return s.isEmpty ? null : s;
   }
+
+  // A teacher already has teacher_bio/teacher_photo_url -- the bio and photo
+  // shown to students on their course listings. Reusing those columns here
+  // (instead of the generic bio/avatar_url every other account gets) is what
+  // keeps a teacher from having two separate, unsynced bios/photos to fill
+  // in across this screen and the teacher dashboard's own profile tab.
+  String? get _effectiveBio => _isTeacher ? _str('teacher_bio') : _str('bio');
+  String? get _effectivePhotoUrl => _isTeacher ? _str('teacher_photo_url') : _str('avatar_url');
 
   // ---- Avatar upload ----
 
@@ -99,7 +110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final path = '${user.id}/avatar-${DateTime.now().millisecondsSinceEpoch}-${picked.name}';
       await sb.storage.from(_avatarBucket).upload(path, File(picked.path));
       final url = sb.storage.from(_avatarBucket).getPublicUrl(path);
-      await sb.from('profiles').update({'avatar_url': url}).eq('id', user.id);
+      await sb.from('profiles').update({_isTeacher ? 'teacher_photo_url' : 'avatar_url': url}).eq('id', user.id);
       await _load();
       _toast(t('profile_saved'));
     } catch (e) {
@@ -117,9 +128,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (user == null) return;
 
     final nameCtrl = TextEditingController(text: _str('full_name') ?? '');
-    final bioCtrl = TextEditingController(text: _str('bio') ?? '');
+    final bioCtrl = TextEditingController(text: _effectiveBio ?? '');
     final igCtrl = TextEditingController(text: _str('instagram_username') ?? '');
     final tgCtrl = TextEditingController(text: _str('telegram_username') ?? '');
+    final bioColumn = _isTeacher ? 'teacher_bio' : 'bio';
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -134,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onSave: () async {
           await SupabaseService.instance.client.from('profiles').update({
             'full_name': nameCtrl.text.trim(),
-            'bio': bioCtrl.text.trim().isEmpty ? null : bioCtrl.text.trim(),
+            bioColumn: bioCtrl.text.trim().isEmpty ? null : bioCtrl.text.trim(),
             'instagram_username':
                 igCtrl.text.trim().isEmpty ? null : DeepLinks.handle(igCtrl.text),
             'telegram_username':
@@ -165,28 +177,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!ok) _toast(AppStrings.instance.t('err_link_failed'));
   }
 
+  // Embedded as the 4th page of the catalogue PageView (alongside Home/My
+  // Courses/Settings) instead of pushed as its own route -- so it shares the
+  // same persistent bottom nav rather than opening what looked like a
+  // separate screen. No Scaffold/AppBar of its own; the edit action lives
+  // inline in the header card instead of an AppBar action.
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
     return Directionality(
       textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        extendBodyBehindAppBar: true,
-        backgroundColor: AppColors.bg,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          title: Text(t('profile_title')),
-          actions: [
-            if (_profile != null)
-              IconButton(
-                tooltip: t('edit_profile'),
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: _openEditSheet,
-              ),
-          ],
-        ),
-        body: AmbientBackground(child: SafeArea(child: _buildBody(t))),
-      ),
+      child: AmbientBackground(child: SafeArea(child: _buildBody(t))),
     );
   }
 
@@ -258,49 +259,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildHeaderCard(String Function(String) t) {
     final name = _str('full_name') ?? t('profile_no_name');
     final publicId = _str('public_id');
-    final bio = _str('bio');
+    final bio = _effectiveBio;
 
     return GlassCard(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-      child: Column(
+      padding: const EdgeInsets.fromLTRB(20, 40, 20, 22),
+      child: Stack(
         children: [
-          _AvatarButton(
-            url: _str('avatar_url'),
-            busy: _uploading,
-            onTap: _changeAvatar,
-          ),
-          const SizedBox(height: 14),
-          Text(
-            name,
-            style: AppFonts.heading(size: 26),
-            textAlign: TextAlign.center,
-          ),
-          if (publicId != null) ...[
-            const SizedBox(height: 8),
-            // public_id is generated by a DB trigger and never writable from
-            // the client — shown here purely as an identifier users can
-            // quote to support.
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.red.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.red.withValues(alpha: 0.35)),
-              ),
-              child: Text('#$publicId', style: AppFonts.mono(size: 12, color: AppColors.red)),
+          Positioned(
+            left: -12,
+            top: -20,
+            child: IconButton(
+              tooltip: t('edit_profile'),
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _openEditSheet,
+              visualDensity: VisualDensity.compact,
             ),
-          ],
-          const SizedBox(height: 14),
-          GestureDetector(
-            onTap: bio == null ? _openEditSheet : null,
-            child: Text(
-              bio ?? t('profile_add_bio'),
-              textAlign: TextAlign.center,
-              style: AppFonts.body(
-                size: 13.5,
-                color: bio == null ? AppColors.muted2 : AppColors.muted,
+          ),
+          Column(
+            children: [
+              _AvatarButton(
+                url: _effectivePhotoUrl,
+                busy: _uploading,
+                onTap: _changeAvatar,
               ),
-            ),
+              const SizedBox(height: 14),
+              Text(
+                name,
+                style: AppFonts.heading(size: 26),
+                textAlign: TextAlign.center,
+              ),
+              if (publicId != null) ...[
+                const SizedBox(height: 8),
+                // public_id is generated by a DB trigger and never writable
+                // from the client — shown here purely as an identifier users
+                // can quote to support.
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppColors.red.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: AppColors.red.withValues(alpha: 0.35)),
+                  ),
+                  child: Text('#$publicId', style: AppFonts.mono(size: 12, color: AppColors.red)),
+                ),
+              ],
+              const SizedBox(height: 14),
+              GestureDetector(
+                onTap: bio == null ? _openEditSheet : null,
+                child: Text(
+                  bio ?? t('profile_add_bio'),
+                  textAlign: TextAlign.center,
+                  style: AppFonts.body(
+                    size: 13.5,
+                    color: bio == null ? AppColors.muted2 : AppColors.muted,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
