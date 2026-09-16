@@ -106,6 +106,7 @@ class AppStrings extends ChangeNotifier {
     'settings': 'الإعدادات',
     'toggle_theme': 'تبديل المظهر',
     'dashboard_unavailable': 'لا توجد لوحة تحكم متاحة لحسابك.',
+    'nav_profile': 'حسابي',
     'students_courses': 'الطلاب والدورات',
     'flagged_logins': 'تسجيلات دخول مشبوهة',
     'trusted_devices': 'الحسابات المكتملة الحد',

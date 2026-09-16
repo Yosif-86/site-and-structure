@@ -27,9 +27,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   bool _isAdmin = false;
   bool _isTeacher = false;
 
-  // Instagram-style Home<->My Courses swipe, scoped to just these two tabs
-  // (Dashboard/Settings stay as ordinary taps — Instagram itself only makes
-  // the Home tab's Feed<->Reels pair swipeable, not every bottom-bar icon).
+  // Instagram-style swipe across Home / My Courses / Settings. Profile stays
+  // an ordinary tap (it pushes the teacher/admin dashboard as a full route,
+  // which doesn't fit as a swipeable page here).
   final _pageController = PageController();
   final _myCoursesKey = GlobalKey<MyCoursesScreenState>();
   int _currentPage = 0;
@@ -122,15 +122,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         appBar: AppBar(title: const BrandTitle()),
         body: PageView(
           controller: _pageController,
-          // Swiping into My Courses while logged out would just show the
-          // "no enrollments" empty state instead of the sign-in prompt the
-          // equivalent bottom-bar tap gives — simplest fix is to only allow
-          // the swipe once there's an account to show courses for.
-          physics: loggedIn ? const PageScrollPhysics() : const NeverScrollableScrollPhysics(),
           onPageChanged: (i) => setState(() => _currentPage = i),
           children: [
             RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
             MyCoursesScreen(key: _myCoursesKey),
+            _buildSettingsPage(t, loggedIn),
           ],
         ),
         bottomNavigationBar: Padding(
@@ -162,8 +158,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         },
       ),
       BottomNavItem(
-        icon: _isAdmin ? Icons.admin_panel_settings_outlined : Icons.cast_for_education_outlined,
-        tooltip: _isAdmin ? t('nav_admin') : t('teacher_dashboard'),
+        icon: Icons.person_outline,
+        tooltip: t('nav_profile'),
         onTap: () {
           if (!loggedIn) {
             _openAuth();
@@ -172,51 +168,41 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           } else if (_isTeacher) {
             Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TeacherScreen()));
           } else {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('dashboard_unavailable'))));
+            _goToPage(2);
           }
         },
       ),
       BottomNavItem(
         icon: Icons.settings_outlined,
         tooltip: t('settings'),
-        onTap: () => _openSettingsSheet(t, loggedIn),
+        active: _currentPage == 2,
+        onTap: () => _goToPage(2),
       ),
     ];
   }
 
-  void _openSettingsSheet(String Function(String) t, bool loggedIn) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.panel,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ListTile(
-              leading: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
-              title: Text(t('toggle_theme')),
-              onTap: () {
-                AppTheme.instance.toggle();
-                Navigator.of(ctx).pop();
-              },
-            ),
-            ListTile(
-              leading: Icon(loggedIn ? Icons.logout : Icons.login),
-              title: Text(loggedIn ? t('log_out') : t('log_in')),
-              onTap: () async {
-                Navigator.of(ctx).pop();
-                if (loggedIn) {
-                  await SupabaseService.instance.logout();
-                } else {
-                  _openAuth();
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
+  Widget _buildSettingsPage(String Function(String) t, bool loggedIn) {
+    return SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        children: [
+          ListTile(
+            leading: Icon(AppTheme.instance.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+            title: Text(t('toggle_theme')),
+            onTap: () => AppTheme.instance.toggle(),
+          ),
+          ListTile(
+            leading: Icon(loggedIn ? Icons.logout : Icons.login),
+            title: Text(loggedIn ? t('log_out') : t('log_in')),
+            onTap: () async {
+              if (loggedIn) {
+                await SupabaseService.instance.logout();
+              } else {
+                _openAuth();
+              }
+            },
+          ),
+        ],
       ),
     );
   }
