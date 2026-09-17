@@ -66,13 +66,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
   String? _dFormError;
 
   // Profile form state.
-  final _pName = TextEditingController();
   final _pSpecialty = TextEditingController();
-  final _pBio = TextEditingController();
   final _pZaincashPhone = TextEditingController();
   final _pQiAccount = TextEditingController();
-  String? _pPhotoUrl;
-  XFile? _pPhotoFile;
   String? _pQiQrUrl;
   XFile? _pQiQrFile;
   String? _pFormError;
@@ -93,9 +89,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _dCode.dispose();
     _dValue.dispose();
     _dMaxUses.dispose();
-    _pName.dispose();
     _pSpecialty.dispose();
-    _pBio.dispose();
     _pZaincashPhone.dispose();
     _pQiAccount.dispose();
     super.dispose();
@@ -410,15 +404,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final user = SupabaseService.instance.currentUser!;
       final prof = await sb
           .from('profiles')
-          .select('full_name, teacher_bio, teacher_specialty, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
+          .select('teacher_specialty, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
           .eq('id', user.id)
           .maybeSingle();
       if (prof == null || !mounted) return;
       setState(() {
-        _pName.text = prof['full_name'] as String? ?? '';
         _pSpecialty.text = prof['teacher_specialty'] as String? ?? '';
-        _pBio.text = prof['teacher_bio'] as String? ?? '';
-        _pPhotoUrl = prof['teacher_photo_url'] as String?;
         _pZaincashPhone.text = prof['teacher_zaincash_phone'] as String? ?? '';
         _pQiAccount.text = prof['teacher_qi_account_number'] as String? ?? '';
         _pQiQrUrl = prof['teacher_qi_qr_url'] as String?;
@@ -434,12 +425,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      String? photoUrl;
-      if (_pPhotoFile != null) {
-        final path = '${user.id}/avatar-${DateTime.now().millisecondsSinceEpoch}-${_pPhotoFile!.name}';
-        await sb.storage.from('course-thumbnails').upload(path, File(_pPhotoFile!.path));
-        photoUrl = sb.storage.from('course-thumbnails').getPublicUrl(path);
-      }
       String? qrUrl;
       if (_pQiQrFile != null) {
         final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_pQiQrFile!.name}';
@@ -447,16 +432,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
         qrUrl = sb.storage.from('payment-qr').getPublicUrl(path);
       }
       final update = <String, dynamic>{
-        'full_name': _pName.text.trim(),
         'teacher_specialty': _pSpecialty.text.trim(),
-        'teacher_bio': _pBio.text.trim(),
         'teacher_zaincash_phone': _pZaincashPhone.text.trim().isEmpty ? null : _pZaincashPhone.text.trim(),
         'teacher_qi_account_number': _pQiAccount.text.trim().isEmpty ? null : _pQiAccount.text.trim(),
       };
-      if (photoUrl != null) update['teacher_photo_url'] = photoUrl;
       if (qrUrl != null) update['teacher_qi_qr_url'] = qrUrl;
       await sb.from('profiles').update(update).eq('id', user.id);
-      _pPhotoFile = null;
       _pQiQrFile = null;
       await _loadProfile();
       if (!mounted) return;
@@ -535,7 +516,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _StatCardData(Icons.menu_book_outlined, '${_myCourses.length}', t('stat_courses'), AppColors.teal, () => setState(() => _view = _TView.courses)),
       _StatCardData(Icons.groups_outlined, '$_statStudents', t('stat_students'), AppColors.teal, () => setState(() => _view = _TView.courses)),
       _StatCardData(Icons.attach_money, '$_statEarnings', t('stat_earnings'), AppColors.red, () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.person_outline, '', t('my_profile'), AppColors.teal, () => setState(() => _view = _TView.profile)),
+      _StatCardData(Icons.account_balance_wallet_outlined, '', t('settings_payment_info'), AppColors.teal, () => setState(() => _view = _TView.profile)),
     ];
     return RefreshIndicator(
       onRefresh: () async { await _loadCourses(); await _loadProfile(); },
@@ -732,28 +713,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Center(
-          child: GestureDetector(
-            onTap: () async {
-              final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-              if (picked != null) setState(() => _pPhotoFile = picked);
-            },
-            child: CircleAvatar(
-              radius: 40,
-              backgroundColor: AppColors.panel2,
-              backgroundImage: _pPhotoFile != null
-                  ? FileImage(File(_pPhotoFile!.path))
-                  : (_pPhotoUrl != null ? NetworkImage(_pPhotoUrl!) : null) as ImageProvider?,
-              child: (_pPhotoFile == null && _pPhotoUrl == null) ? const Icon(Icons.camera_alt_outlined) : null,
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        TextField(controller: _pName, decoration: InputDecoration(labelText: t('label_full_name'))),
-        const SizedBox(height: 12),
         TextField(controller: _pSpecialty, decoration: InputDecoration(labelText: t('label_specialty'))),
-        const SizedBox(height: 12),
-        TextField(controller: _pBio, maxLines: 4, decoration: InputDecoration(labelText: t('label_bio'))),
         const SizedBox(height: 20),
         Text(t('my_payment_number'), style: AppFonts.body(size: 14, weight: FontWeight.w700)),
         const SizedBox(height: 4),

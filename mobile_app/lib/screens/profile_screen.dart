@@ -264,6 +264,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(20, 40, 20, 22),
       child: Stack(
+        alignment: Alignment.topCenter,
         children: [
           Positioned(
             left: -12,
