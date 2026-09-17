@@ -107,7 +107,9 @@ module.exports = async (req, res) => {
         phoneNumber: normalized,
         smsType: 'verification',
         verificationCode: code,
-        provider: 'auto'
+        // WhatsApp first, falling back to plain SMS only if WhatsApp
+        // delivery isn't possible for that number.
+        provider: 'whatsapp-sms'
       })
     });
     if (!otpiqRes.ok) {
