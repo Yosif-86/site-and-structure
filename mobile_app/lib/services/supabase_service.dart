@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -46,12 +47,43 @@ class SupabaseService extends ChangeNotifier {
   User? get currentUser => client.auth.currentUser;
   bool get isLoggedIn => currentUser != null;
 
+  /// A stable per-physical-device identifier for the device cap: Android's
+  /// ANDROID_ID / iOS's identifierForVendor, both scoped to this app by the
+  /// OS and both designed by their platforms specifically for anti-abuse
+  /// device identification (no extra permission, not the same as an
+  /// advertising ID, doesn't identify the person). Unlike a random UUID
+  /// generated once and cached in secure storage, this survives an
+  /// uninstall/reinstall -- so re-installing the app can't silently mint a
+  /// "new device" and eat into the one-device-per-account cap.
+  ///
+  /// A device that already has a cached UUID from before this change keeps
+  /// using it -- switching everyone over immediately would make every
+  /// already-installed app look like a brand-new device to trusted_devices
+  /// and could cap out users who are already logged in. Only a device with
+  /// no cached value (a genuinely fresh or post-uninstall install) computes
+  /// the new stable id, which is exactly the case this is meant to fix.
   Future<String> getDeviceId() async {
-    var id = await _secureStorage.read(key: _deviceIdKey);
-    if (id == null) {
-      id = const Uuid().v4();
-      await _secureStorage.write(key: _deviceIdKey, value: id);
+    final cached = await _secureStorage.read(key: _deviceIdKey);
+    if (cached != null) return cached;
+
+    String? id;
+    if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+      try {
+        final deviceInfo = DeviceInfoPlugin();
+        if (Platform.isAndroid) {
+          final info = await deviceInfo.androidInfo;
+          if (info.id.isNotEmpty) id = 'android-${info.id}';
+        } else {
+          final info = await deviceInfo.iosInfo;
+          final vendorId = info.identifierForVendor;
+          if (vendorId != null && vendorId.isNotEmpty) id = 'ios-$vendorId';
+        }
+      } catch (_) {
+        // Fall through to the random-UUID fallback below.
+      }
     }
+    id ??= const Uuid().v4();
+    await _secureStorage.write(key: _deviceIdKey, value: id);
     return id;
   }
 
