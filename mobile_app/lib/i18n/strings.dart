@@ -43,18 +43,40 @@ class AppStrings extends ChangeNotifier {
     'ph_phone': '07XX XXX XXXX',
     'already_account': 'لديك حساب بالفعل؟',
     'auth_forgot_title': 'إعادة تعيين كلمة المرور',
-    'auth_forgot_sub': 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
+    'auth_forgot_sub':
+        'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
     'btn_send_reset': 'إرسال رابط إعادة التعيين',
     'back_to_login': 'العودة لتسجيل الدخول',
     'success_email_title': 'تحقق من بريدك الإلكتروني',
-    'success_email_sub': 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
+    'success_email_sub':
+        'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
+    // Phone OTP verification
+    'verify_phone_title': 'تأكيد رقم الهاتف',
+    'verify_phone_sub': 'أرسلنا رمز تحقق إلى رقمك عبر واتساب أو رسالة نصية.',
+    'label_otp_code': 'رمز التحقق',
+    'ph_otp_code': '123456',
+    'btn_send_code': 'إرسال الرمز',
+    'btn_verify_code': 'تأكيد',
+    'btn_resend_code': 'إعادة الإرسال',
+    'btn_resend_code_in': 'إعادة الإرسال خلال',
+    'otp_sent': 'تم إرسال الرمز.',
+    'otp_verified': 'تم تأكيد رقم هاتفك.',
+    'err_invalid_phone': 'رقم الهاتف غير صالح.',
+    'err_otp_send_failed': 'تعذر إرسال رمز التحقق. حاول مرة أخرى.',
+    'err_invalid_code': 'أدخل رمز التحقق المكوّن من 6 أرقام.',
+    'err_otp_not_requested': 'اطلب رمز التحقق أولاً.',
+    'err_otp_expired': 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.',
+    'err_otp_too_many_attempts': 'محاولات كثيرة جدًا، اطلب رمزًا جديدًا.',
+    'err_otp_incorrect': 'رمز التحقق غير صحيح.',
     'success_account_title': 'تم إنشاء الحساب',
     'success_account_sub': 'تم تسجيلك وتسجيل دخولك بنجاح.',
     'btn_close': 'إغلاق',
-    'alert_kicked': 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
+    'alert_kicked':
+        'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
     'err_enter_email': 'أدخل بريدك الإلكتروني.',
     'err_enter_email_pass': 'أدخل بريدك الإلكتروني وكلمة المرور.',
-    'err_device_limit': 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
+    'err_device_limit':
+        'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
     'err_fill_fields': 'املأ جميع الحقول.',
     'err_pass_length': 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
     'curriculum': 'المنهج',
@@ -80,7 +102,8 @@ class AppStrings extends ChangeNotifier {
     'submitted': 'تم الإرسال',
     'enrolled': 'تم التسجيل',
     'access_unlocked': ' — تم فتح الوصول',
-    'pending_note': 'دفعتك بانتظار التحقق اليدوي. سيُفتح الوصول فور الموافقة عليها.',
+    'pending_note':
+        'دفعتك بانتظار التحقق اليدوي. سيُفتح الوصول فور الموافقة عليها.',
     'your_account': 'حسابك',
     'my_courses': 'دوراتي',
     'no_enrollments': 'لم تسجَّل في أي دورة بعد.',
@@ -92,7 +115,8 @@ class AppStrings extends ChangeNotifier {
     'err_upload_failed': 'فشل رفع لقطة الشاشة: ',
     'err_video_unavailable': 'هذا الفيديو غير متاح بعد.',
     'capture_detected': 'تم رصد تصوير للشاشة — تم إيقاف الفيديو.',
-    'err_untrusted_device': 'هذا الجهاز لم يعد موثوقًا. الرجاء تسجيل الدخول مرة أخرى.',
+    'err_untrusted_device':
+        'هذا الجهاز لم يعد موثوقًا. الرجاء تسجيل الدخول مرة أخرى.',
     'err_session_kicked': 'تم إنهاء جلستك لأن حسابك سجّل الدخول من جهاز آخر.',
     'retry': 'إعادة المحاولة',
     'episodes': 'الحلقات',
@@ -120,7 +144,8 @@ class AppStrings extends ChangeNotifier {
     'no_flagged': 'لا توجد تسجيلات دخول مشبوهة.',
     'no_devices': 'لا توجد حسابات وصلت للحد الأقصى للأجهزة حاليًا.',
     'confirm_remove': 'إزالة {email} من "{title}"؟ سيؤدي هذا لإلغاء وصوله.',
-    'confirm_remove_device': 'إزالة هذا الجهاز لـ {email}؟ سيتمكن من تسجيل الدخول من جهاز جديد مرة أخرى.',
+    'confirm_remove_device':
+        'إزالة هذا الجهاز لـ {email}؟ سيتمكن من تسجيل الدخول من جهاز جديد مرة أخرى.',
     'alert_approve_failed': 'فشلت الموافقة: ',
     'alert_remove_failed': 'فشلت الإزالة: ',
     'alert_proof_failed': 'فشل تحميل الإثبات: ',
@@ -144,6 +169,7 @@ class AppStrings extends ChangeNotifier {
     'submit_for_review': 'إرسال للمراجعة',
     'save': 'حفظ',
     'cancel': 'إلغاء',
+    'discard': 'تجاهل',
     'btn_edit': 'تعديل',
     'btn_curriculum': 'المنهج',
     'btn_codes': 'أكواد الخصم',
@@ -208,7 +234,8 @@ class AppStrings extends ChangeNotifier {
     'pending_lectures': 'محاضرات بانتظار الموافقة',
     'error_log': 'سجل الأخطاء',
     'my_payment_number': 'رقم الدفع الخاص بي',
-    'payment_required_hint': 'مطلوبة قبل أن يتمكن الإدمن من السماح لك بإدارة مدفوعاتك: رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما).',
+    'payment_required_hint':
+        'مطلوبة قبل أن يتمكن الإدمن من السماح لك بإدارة مدفوعاتك: رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما).',
     'label_zaincash_phone': 'رقم زين كاش',
     'label_qi_account': 'رقم حساب كي كارد',
     'label_qi_qr': 'صورة رمز QR لكي كارد',
@@ -226,7 +253,8 @@ class AppStrings extends ChangeNotifier {
     'label_whatsapp': 'واتساب',
     'label_call': 'اتصال',
     'ph_social_handle': 'اسم المستخدم بدون @',
-    'profile_phone_readonly': 'رقم الهاتف مرتبط بحسابك ويُستخدم لواتساب والاتصال. للتعديل تواصل مع الدعم.',
+    'profile_phone_readonly':
+        'رقم الهاتف مرتبط بحسابك ويُستخدم لواتساب والاتصال. للتعديل تواصل مع الدعم.',
     'err_avatar_upload_failed': 'فشل رفع الصورة: ',
     'err_link_failed': 'تعذر فتح التطبيق.',
     'teacher_dashboard_sub': 'إدارة دوراتك ومحاضراتك وأرباحك',
@@ -244,11 +272,13 @@ class AppStrings extends ChangeNotifier {
     'settings_privacy_sub': 'كيف نتعامل مع بياناتك',
     // Support screen
     'support_title': 'الدعم',
-    'support_intro': 'إذا واجهتك مشكلة في الدفع أو الوصول لدورة أو تسجيل الدخول من جهاز جديد، تواصل معنا وسنساعدك.',
+    'support_intro':
+        'إذا واجهتك مشكلة في الدفع أو الوصول لدورة أو تسجيل الدخول من جهاز جديد، تواصل معنا وسنساعدك.',
     'support_no_contact': 'لم تُضف بيانات التواصل بعد.',
     // Privacy screen
     'privacy_title': 'الخصوصية',
-    'privacy_draft_notice': 'هذه صياغة مبدئية توضيحية وليست سياسة خصوصية نهائية.',
+    'privacy_draft_notice':
+        'هذه صياغة مبدئية توضيحية وليست سياسة خصوصية نهائية.',
     'privacy_intro': 'هذا ملخص بلغة واضحة لما يفعله التطبيق ببياناتك.',
     'privacy_h_collect': 'ما الذي نجمعه',
     'privacy_b_collect':

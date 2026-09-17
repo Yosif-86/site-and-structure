@@ -575,7 +575,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
                               : _TView.overview),
                     )
                   : null,
-          title: Text(widget.openPaymentInfo ? t('settings_payment_info') : t('teacher_dashboard')),
+          title: Text(widget.openPaymentInfo
+              ? t('settings_payment_info')
+              : t('teacher_dashboard')),
         ),
         body: _buildBody(t),
       ),
@@ -946,7 +948,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
               child: Text(_pSavedMsg!,
                   style: AppFonts.body(size: 12, color: AppColors.teal))),
         const SizedBox(height: 18),
-        ElevatedButton(onPressed: _saveProfile, child: Text(t('save'))),
+        Row(children: [
+          Expanded(
+              child: ElevatedButton(
+                  onPressed: _saveProfile, child: Text(t('save')))),
+          const SizedBox(width: 10),
+          Expanded(
+              child: OutlinedButton(
+                  onPressed: () => widget.openPaymentInfo
+                      ? Navigator.of(context).pop()
+                      : setState(() => _view = _TView.overview),
+                  child: Text(t('discard')))),
+        ]),
       ],
     );
   }

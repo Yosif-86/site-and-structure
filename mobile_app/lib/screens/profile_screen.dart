@@ -11,6 +11,7 @@ import '../widgets/ambient_background.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_icon_button.dart';
+import '../widgets/text_scramble.dart';
 import 'admin_screen.dart';
 import 'auth_screen.dart';
 import 'teacher_screen.dart';
@@ -294,13 +295,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final bio = _effectiveBio;
 
     return GlassCard(
-      padding: const EdgeInsets.fromLTRB(20, 40, 20, 22),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
-          Positioned(
-            left: -12,
-            top: -20,
+          PositionedDirectional(
+            top: 8,
+            end: 8,
             child: GlassIconButton(
               tooltip: t('edit_profile'),
               icon: Icons.edit_outlined,
@@ -315,7 +316,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 onTap: _changeAvatar,
               ),
               const SizedBox(height: 14),
-              Text(
+              TextScramble(
                 name,
                 style: AppFonts.heading(size: 26),
                 textAlign: TextAlign.center,
@@ -340,13 +341,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
               if (specialty != null) ...[
                 const SizedBox(height: 6),
-                Text(specialty,
+                TextScramble(specialty,
                     style: AppFonts.mono(size: 11.5, color: AppColors.teal)),
               ],
               const SizedBox(height: 14),
               GestureDetector(
                 onTap: bio == null ? _openEditSheet : null,
-                child: Text(
+                child: TextScramble(
                   bio ?? t('profile_add_bio'),
                   textAlign: TextAlign.center,
                   style: AppFonts.body(
@@ -743,7 +744,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                         onPressed: _saving
                             ? null
                             : () => Navigator.of(context).pop(false),
-                        child: Text(t('cancel')),
+                        child: Text(t('discard')),
                       ),
                     ),
                     const SizedBox(width: 12),

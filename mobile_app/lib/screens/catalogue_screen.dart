@@ -14,6 +14,7 @@ import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'verify_phone_screen.dart';
 
 /// Port of loadCatalogue() in index.html.
 class CatalogueScreen extends StatefulWidget {
@@ -30,6 +31,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   // Payment info entry. is_admin is read by ProfileScreen itself, which is
   // the only place a dashboard is reachable from.
   bool _isTeacher = false;
+  // null = not checked yet (or logged out) -- only an explicit false blocks
+  // the app, so this never flashes the block screen while still loading.
+  bool? _phoneVerified;
 
   // Instagram-style swipe across Home / My Courses / Settings. Profile stays
   // an ordinary tap (it pushes a full route, which doesn't fit as a
@@ -51,19 +55,34 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   Future<void> _loadAdminFlag() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      if (mounted) setState(() => _isTeacher = false);
+      if (mounted)
+        setState(() {
+          _isTeacher = false;
+          _phoneVerified = null;
+        });
       return;
     }
     try {
       final prof = await SupabaseService.instance.client
           .from('profiles')
-          .select('is_teacher')
+          .select('is_teacher, phone_verified')
           .eq('id', user.id)
           .maybeSingle();
-      if (mounted) setState(() => _isTeacher = prof?['is_teacher'] == true);
+      if (mounted) {
+        setState(() {
+          _isTeacher = prof?['is_teacher'] == true;
+          _phoneVerified = prof?['phone_verified'] == true;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _isTeacher = false);
     }
+  }
+
+  Future<void> _openVerifyPhone() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const VerifyPhoneScreen()));
+    _loadAdminFlag();
   }
 
   @override
@@ -134,19 +153,48 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(title: const BrandTitle()),
-        body: PageView(
-          controller: _pageController,
-          onPageChanged: (i) => setState(() => _currentPage = i),
+        body: loggedIn && _phoneVerified == false
+            ? _buildVerifyPhoneGate(t)
+            : PageView(
+                controller: _pageController,
+                onPageChanged: (i) => setState(() => _currentPage = i),
+                children: [
+                  RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
+                  MyCoursesScreen(key: _myCoursesKey),
+                  const ProfileScreen(),
+                  SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
+                ],
+              ),
+        bottomNavigationBar: loggedIn && _phoneVerified == false
+            ? null
+            : Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: FloatingBottomNav(items: _navItems(t, loggedIn)),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildVerifyPhoneGate(String Function(String) t) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
-            MyCoursesScreen(key: _myCoursesKey),
-            const ProfileScreen(),
-            SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
+            Icon(Icons.phone_android_outlined,
+                size: 42, color: AppColors.muted),
+            const SizedBox(height: 14),
+            Text(t('verify_phone_title'),
+                style: AppFonts.heading(size: 20), textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(t('verify_phone_sub'),
+                style: AppFonts.body(size: 13, color: AppColors.muted),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 18),
+            ElevatedButton(
+                onPressed: _openVerifyPhone, child: Text(t('btn_send_code'))),
           ],
-        ),
-        bottomNavigationBar: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: FloatingBottomNav(items: _navItems(t, loggedIn)),
         ),
       ),
     );
