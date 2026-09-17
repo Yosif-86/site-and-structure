@@ -14,8 +14,15 @@ import 'package:uuid/uuid.dart';
 /// since CORS is a browser-only restriction.
 const String kApiBaseUrl = 'https://site-and-structure.vercel.app';
 
+// Paused pre-launch: every OTPIQ send costs money, so signup/launch skip the
+// phone-verify step entirely (no request to send-phone-otp is ever made)
+// until this flips back to true. Flip it, rebuild, and every new signup
+// goes through phone verification again.
+const bool kPhoneOtpEnabled = false;
+
 const String kSupabaseUrl = 'https://qdarzhzttjpkgfihupgp.supabase.co';
-const String kSupabaseAnonKey = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+const String kSupabaseAnonKey =
+    'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
 
 const String _deviceIdKey = 'ss_device_id';
 const String _sessionTokenKey = 'ss_session_token';
@@ -61,12 +68,14 @@ class SupabaseService extends ChangeNotifier {
     if (res.statusCode != 200) return false;
     final result = jsonDecode(res.body) as Map<String, dynamic>;
     if (result['allowed'] != true) return false;
-    await _secureStorage.write(key: _sessionTokenKey, value: result['sessionToken'] as String);
+    await _secureStorage.write(
+        key: _sessionTokenKey, value: result['sessionToken'] as String);
     _startSessionWatch();
     return true;
   }
 
-  Future<String?> getSessionToken() => _secureStorage.read(key: _sessionTokenKey);
+  Future<String?> getSessionToken() =>
+      _secureStorage.read(key: _sessionTokenKey);
 
   void _startSessionWatch() {
     _sessionWatchTimer?.cancel();
@@ -74,7 +83,11 @@ class SupabaseService extends ChangeNotifier {
       final user = currentUser;
       if (user == null) return;
       final myToken = await _secureStorage.read(key: _sessionTokenKey);
-      final row = await client.from('profiles').select('active_session_token').eq('id', user.id).maybeSingle();
+      final row = await client
+          .from('profiles')
+          .select('active_session_token')
+          .eq('id', user.id)
+          .maybeSingle();
       final serverToken = row?['active_session_token'] as String?;
       if (serverToken != myToken) {
         _sessionWatchTimer?.cancel();
@@ -102,7 +115,10 @@ class SupabaseService extends ChangeNotifier {
     final dLat = (lat2 - lat1) * pi / 180;
     final dLon = (lon2 - lon1) * pi / 180;
     final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) * sin(dLon / 2) * sin(dLon / 2);
+        cos(lat1 * pi / 180) *
+            cos(lat2 * pi / 180) *
+            sin(dLon / 2) *
+            sin(dLon / 2);
     return r * 2 * asin(sqrt(a));
   }
 
@@ -112,7 +128,9 @@ class SupabaseService extends ChangeNotifier {
   Future<void> _logLoginEvent(String userId, String email) async {
     Map<String, dynamic> geo = {};
     try {
-      final res = await http.get(Uri.parse('https://ipapi.co/json/')).timeout(const Duration(seconds: 8));
+      final res = await http
+          .get(Uri.parse('https://ipapi.co/json/'))
+          .timeout(const Duration(seconds: 8));
       geo = jsonDecode(res.body) as Map<String, dynamic>;
     } catch (_) {
       // Location lookup failed — log without it, same as the website does.
@@ -144,7 +162,8 @@ class SupabaseService extends ChangeNotifier {
       await client.from('login_events').insert({
         'user_id': userId,
         'email': email,
-        'user_agent': 'Flutter app (${kIsWeb ? 'web' : Platform.operatingSystem})',
+        'user_agent':
+            'Flutter app (${kIsWeb ? 'web' : Platform.operatingSystem})',
         'ip': geo['ip'],
         'city': geo['city'],
         'country': geo['country_name'],
@@ -160,9 +179,11 @@ class SupabaseService extends ChangeNotifier {
 
   /// Returns null on success, or an error message.
   Future<String?> login(String email, String password) async {
-    if (email.trim().isEmpty || password.trim().isEmpty) return 'err_enter_email_pass';
+    if (email.trim().isEmpty || password.trim().isEmpty)
+      return 'err_enter_email_pass';
     try {
-      final res = await client.auth.signInWithPassword(email: email.trim(), password: password.trim());
+      final res = await client.auth
+          .signInWithPassword(email: email.trim(), password: password.trim());
       final accessToken = res.session?.accessToken;
       final user = res.user;
       if (accessToken == null || user == null) return 'Login failed.';
@@ -185,7 +206,10 @@ class SupabaseService extends ChangeNotifier {
     required String email,
     required String password,
   }) async {
-    if (name.trim().isEmpty || phone.trim().isEmpty || email.trim().isEmpty || password.trim().isEmpty) {
+    if (name.trim().isEmpty ||
+        phone.trim().isEmpty ||
+        email.trim().isEmpty ||
+        password.trim().isEmpty) {
       return 'err_fill_fields';
     }
     if (password.trim().length < 6) return 'err_pass_length';
@@ -199,7 +223,8 @@ class SupabaseService extends ChangeNotifier {
       final accessToken = res.session?.accessToken;
       if (user == null || accessToken == null) return 'Sign up failed.';
 
-      await client.from('profiles').insert({'id': user.id, 'full_name': name.trim(), 'phone': phone.trim()});
+      await client.from('profiles').insert(
+          {'id': user.id, 'full_name': name.trim(), 'phone': phone.trim()});
 
       final allowed = await _isDeviceAllowed(accessToken);
       if (!allowed) {

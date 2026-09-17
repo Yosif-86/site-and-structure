@@ -153,7 +153,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(title: const BrandTitle()),
-        body: loggedIn && _phoneVerified == false
+        body: kPhoneOtpEnabled && loggedIn && _phoneVerified == false
             ? _buildVerifyPhoneGate(t)
             : PageView(
                 controller: _pageController,
@@ -165,12 +165,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                   SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
                 ],
               ),
-        bottomNavigationBar: loggedIn && _phoneVerified == false
-            ? null
-            : Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: FloatingBottomNav(items: _navItems(t, loggedIn)),
-              ),
+        bottomNavigationBar:
+            kPhoneOtpEnabled && loggedIn && _phoneVerified == false
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                    child: FloatingBottomNav(items: _navItems(t, loggedIn)),
+                  ),
       ),
     );
   }

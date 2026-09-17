@@ -10,14 +10,17 @@ enum _AuthMode { login, signup, forgot, forgotSent }
 
 /// Port of renderAuth() in index.html — one screen, three modes.
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  final bool startInSignup;
+
+  const AuthScreen({super.key, this.startInSignup = false});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  _AuthMode _mode = _AuthMode.login;
+  late _AuthMode _mode =
+      widget.startInSignup ? _AuthMode.signup : _AuthMode.login;
   bool _loading = false;
   String? _error;
 
@@ -75,13 +78,16 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = _t(err));
       return;
     }
+    if (!mounted) return;
+    if (!kPhoneOtpEnabled) {
+      Navigator.of(context).pop();
+      return;
+    }
     // Replaces this route (rather than pushing) so VerifyPhoneScreen's own
     // pop-on-success goes straight back to whatever opened AuthScreen —
     // the signup form itself is done and shouldn't still be on the stack.
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const VerifyPhoneScreen()));
-    }
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => const VerifyPhoneScreen(fromSignup: true)));
   }
 
   Future<void> _submitForgot() async {
