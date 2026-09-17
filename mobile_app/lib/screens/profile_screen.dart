@@ -8,7 +8,9 @@ import '../services/deep_links.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/ambient_background.dart';
+import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_icon_button.dart';
 import 'admin_screen.dart';
 import 'auth_screen.dart';
 import 'teacher_screen.dart';
@@ -56,21 +58,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _load() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      setState(() { _loading = false; _profile = null; });
+      setState(() {
+        _loading = false;
+        _profile = null;
+      });
       return;
     }
     try {
       final row = await SupabaseService.instance.client
           .from('profiles')
           .select(
-              'full_name, phone, public_id, avatar_url, bio, teacher_photo_url, teacher_bio, instagram_username, telegram_username, is_admin, is_teacher')
+              'full_name, phone, public_id, avatar_url, bio, teacher_photo_url, teacher_bio, teacher_specialty, instagram_username, telegram_username, is_admin, is_teacher')
           .eq('id', user.id)
           .maybeSingle();
       if (!mounted) return;
-      setState(() { _profile = row; _loading = false; _error = null; });
+      setState(() {
+        _profile = row;
+        _loading = false;
+        _error = null;
+      });
     } catch (e) {
       if (!mounted) return;
-      setState(() { _loading = false; _error = '$e'; });
+      setState(() {
+        _loading = false;
+        _error = '$e';
+      });
     }
   }
 
@@ -89,7 +101,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   // keeps a teacher from having two separate, unsynced bios/photos to fill
   // in across this screen and the teacher dashboard's own profile tab.
   String? get _effectiveBio => _isTeacher ? _str('teacher_bio') : _str('bio');
-  String? get _effectivePhotoUrl => _isTeacher ? _str('teacher_photo_url') : _str('avatar_url');
+  String? get _effectivePhotoUrl =>
+      _isTeacher ? _str('teacher_photo_url') : _str('avatar_url');
 
   // ---- Avatar upload ----
 
@@ -98,7 +111,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = SupabaseService.instance.currentUser;
     if (user == null || _uploading) return;
 
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
 
     setState(() => _uploading = true);
@@ -107,10 +121,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       // Same owner-folder convention as the payment-qr bucket: the object is
       // written under a folder named after the caller's auth.uid(), which is
       // what the bucket's storage policy checks.
-      final path = '${user.id}/avatar-${DateTime.now().millisecondsSinceEpoch}-${picked.name}';
+      final path =
+          '${user.id}/avatar-${DateTime.now().millisecondsSinceEpoch}-${picked.name}';
       await sb.storage.from(_avatarBucket).upload(path, File(picked.path));
       final url = sb.storage.from(_avatarBucket).getPublicUrl(path);
-      await sb.from('profiles').update({_isTeacher ? 'teacher_photo_url' : 'avatar_url': url}).eq('id', user.id);
+      await sb
+          .from('profiles')
+          .update({_isTeacher ? 'teacher_photo_url' : 'avatar_url': url}).eq(
+              'id', user.id);
       await _load();
       _toast(t('profile_saved'));
     } catch (e) {
@@ -129,7 +147,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final nameCtrl = TextEditingController(text: _str('full_name') ?? '');
     final bioCtrl = TextEditingController(text: _effectiveBio ?? '');
-    final igCtrl = TextEditingController(text: _str('instagram_username') ?? '');
+    final specialtyCtrl =
+        TextEditingController(text: _str('teacher_specialty') ?? '');
+    final igCtrl =
+        TextEditingController(text: _str('instagram_username') ?? '');
     final tgCtrl = TextEditingController(text: _str('telegram_username') ?? '');
     final bioColumn = _isTeacher ? 'teacher_bio' : 'bio';
 
@@ -140,6 +161,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (ctx) => _EditProfileSheet(
         nameCtrl: nameCtrl,
         bioCtrl: bioCtrl,
+        specialtyCtrl: _isTeacher ? specialtyCtrl : null,
         igCtrl: igCtrl,
         tgCtrl: tgCtrl,
         phone: _str('phone'),
@@ -147,10 +169,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           await SupabaseService.instance.client.from('profiles').update({
             'full_name': nameCtrl.text.trim(),
             bioColumn: bioCtrl.text.trim().isEmpty ? null : bioCtrl.text.trim(),
-            'instagram_username':
-                igCtrl.text.trim().isEmpty ? null : DeepLinks.handle(igCtrl.text),
-            'telegram_username':
-                tgCtrl.text.trim().isEmpty ? null : DeepLinks.handle(tgCtrl.text),
+            if (_isTeacher)
+              'teacher_specialty': specialtyCtrl.text.trim().isEmpty
+                  ? null
+                  : specialtyCtrl.text.trim(),
+            'instagram_username': igCtrl.text.trim().isEmpty
+                ? null
+                : DeepLinks.handle(igCtrl.text),
+            'telegram_username': tgCtrl.text.trim().isEmpty
+                ? null
+                : DeepLinks.handle(tgCtrl.text),
           }).eq('id', user.id);
         },
       ),
@@ -158,6 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     nameCtrl.dispose();
     bioCtrl.dispose();
+    specialtyCtrl.dispose();
     igCtrl.dispose();
     tgCtrl.dispose();
 
@@ -169,7 +198,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _openLink(Future<bool> Function() launch) async {
@@ -186,7 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
     return Directionality(
-      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      textDirection:
+          AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: AmbientBackground(child: SafeArea(child: _buildBody(t))),
     );
   }
@@ -218,12 +249,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _FadeSlideIn(delayMs: 0, child: _buildHeaderCard(t)),
+          FadeSlideIn(delayMs: 0, child: _buildHeaderCard(t)),
           const SizedBox(height: 14),
-          _FadeSlideIn(delayMs: 90, child: _buildSocialRow(t)),
+          FadeSlideIn(delayMs: 90, child: _buildSocialRow(t)),
           if (_profile?['is_teacher'] == true) ...[
             const SizedBox(height: 14),
-            _FadeSlideIn(
+            FadeSlideIn(
               delayMs: 180,
               child: _DashboardTile(
                 icon: Icons.workspace_premium_outlined,
@@ -238,7 +269,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
           if (_profile?['is_admin'] == true) ...[
             const SizedBox(height: 14),
-            _FadeSlideIn(
+            FadeSlideIn(
               delayMs: 240,
               child: _DashboardTile(
                 icon: Icons.shield_outlined,
@@ -259,6 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildHeaderCard(String Function(String) t) {
     final name = _str('full_name') ?? t('profile_no_name');
     final publicId = _str('public_id');
+    final specialty = _isTeacher ? _str('teacher_specialty') : null;
     final bio = _effectiveBio;
 
     return GlassCard(
@@ -269,11 +301,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Positioned(
             left: -12,
             top: -20,
-            child: IconButton(
+            child: GlassIconButton(
               tooltip: t('edit_profile'),
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: _openEditSheet,
-              visualDensity: VisualDensity.compact,
+              icon: Icons.edit_outlined,
+              onTap: _openEditSheet,
             ),
           ),
           Column(
@@ -295,14 +326,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // from the client — shown here purely as an identifier users
                 // can quote to support.
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                   decoration: BoxDecoration(
                     color: AppColors.red.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: AppColors.red.withValues(alpha: 0.35)),
+                    border: Border.all(
+                        color: AppColors.red.withValues(alpha: 0.35)),
                   ),
-                  child: Text('#$publicId', style: AppFonts.mono(size: 12, color: AppColors.red)),
+                  child: Text('#$publicId',
+                      style: AppFonts.mono(size: 12, color: AppColors.red)),
                 ),
+              ],
+              if (specialty != null) ...[
+                const SizedBox(height: 6),
+                Text(specialty,
+                    style: AppFonts.mono(size: 11.5, color: AppColors.teal)),
               ],
               const SizedBox(height: 14),
               GestureDetector(
@@ -381,7 +420,8 @@ class _AvatarButton extends StatefulWidget {
   final bool busy;
   final VoidCallback onTap;
 
-  const _AvatarButton({required this.url, required this.busy, required this.onTap});
+  const _AvatarButton(
+      {required this.url, required this.busy, required this.onTap});
 
   @override
   State<_AvatarButton> createState() => _AvatarButtonState();
@@ -420,12 +460,14 @@ class _AvatarButtonState extends State<_AvatarButton> {
               ],
               image: widget.url == null
                   ? null
-                  : DecorationImage(image: NetworkImage(widget.url!), fit: BoxFit.cover),
+                  : DecorationImage(
+                      image: NetworkImage(widget.url!), fit: BoxFit.cover),
             ),
             child: widget.busy
                 ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : widget.url == null
-                    ? Icon(Icons.add_a_photo_outlined, color: AppColors.muted2, size: 30)
+                    ? Icon(Icons.add_a_photo_outlined,
+                        color: AppColors.muted2, size: 30)
                     : null,
           ),
         ),
@@ -515,40 +557,14 @@ class _DashboardTile extends StatelessWidget {
               children: [
                 Text(title, style: AppFonts.heading(size: 19)),
                 const SizedBox(height: 3),
-                Text(subtitle, style: AppFonts.body(size: 12, color: AppColors.muted)),
+                Text(subtitle,
+                    style: AppFonts.body(size: 12, color: AppColors.muted)),
               ],
             ),
           ),
           Icon(Icons.chevron_right, color: AppColors.muted2),
         ],
       ),
-    );
-  }
-}
-
-/// Entry animation shared by the profile cards — fades and lifts each card
-/// into place with a small stagger.
-class _FadeSlideIn extends StatelessWidget {
-  final Widget child;
-  final int delayMs;
-
-  const _FadeSlideIn({required this.child, required this.delayMs});
-
-  @override
-  Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 420 + delayMs),
-      curve: Interval(
-        delayMs / (420 + delayMs),
-        1,
-        curve: Curves.easeOutCubic,
-      ),
-      builder: (context, v, child) => Opacity(
-        opacity: v.clamp(0, 1),
-        child: Transform.translate(offset: Offset(0, 18 * (1 - v)), child: child),
-      ),
-      child: child,
     );
   }
 }
@@ -572,7 +588,9 @@ class _CenteredPrompt extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message, style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+            Text(message,
+                style: AppFonts.body(color: AppColors.muted),
+                textAlign: TextAlign.center),
             const SizedBox(height: 14),
             OutlinedButton(onPressed: onAction, child: Text(actionLabel)),
           ],
@@ -589,6 +607,7 @@ class _CenteredPrompt extends StatelessWidget {
 class _EditProfileSheet extends StatefulWidget {
   final TextEditingController nameCtrl;
   final TextEditingController bioCtrl;
+  final TextEditingController? specialtyCtrl;
   final TextEditingController igCtrl;
   final TextEditingController tgCtrl;
   final String? phone;
@@ -597,6 +616,7 @@ class _EditProfileSheet extends StatefulWidget {
   const _EditProfileSheet({
     required this.nameCtrl,
     required this.bioCtrl,
+    this.specialtyCtrl,
     required this.igCtrl,
     required this.tgCtrl,
     required this.phone,
@@ -612,12 +632,19 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   String? _error;
 
   Future<void> _save() async {
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await widget.onSave();
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
-      if (mounted) setState(() { _saving = false; _error = '${AppStrings.instance.t('err_save_failed')}$e'; });
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _error = '${AppStrings.instance.t('err_save_failed')}$e';
+        });
     }
   }
 
@@ -625,9 +652,11 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
     return Directionality(
-      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      textDirection:
+          AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
           decoration: BoxDecoration(
             color: AppColors.panel,
@@ -664,6 +693,14 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                   maxLength: 200,
                   decoration: InputDecoration(labelText: t('label_bio')),
                 ),
+                if (widget.specialtyCtrl != null) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: widget.specialtyCtrl,
+                    decoration:
+                        InputDecoration(labelText: t('label_specialty')),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 TextField(
                   controller: widget.igCtrl,
@@ -695,14 +732,17 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: AppFonts.body(size: 12, color: AppColors.red)),
+                  Text(_error!,
+                      style: AppFonts.body(size: 12, color: AppColors.red)),
                 ],
                 const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                        onPressed: _saving
+                            ? null
+                            : () => Navigator.of(context).pop(false),
                         child: Text(t('cancel')),
                       ),
                     ),
@@ -714,7 +754,8 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
                               )
                             : Text(t('save')),
                       ),

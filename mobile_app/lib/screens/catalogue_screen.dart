@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
+import '../widgets/fade_slide_in.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
@@ -53,7 +54,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       return;
     }
     try {
-      final prof = await SupabaseService.instance.client.from('profiles').select('is_teacher').eq('id', user.id).maybeSingle();
+      final prof = await SupabaseService.instance.client
+          .from('profiles')
+          .select('is_teacher')
+          .eq('id', user.id)
+          .maybeSingle();
       if (mounted) setState(() => _isTeacher = prof?['is_teacher'] == true);
     } catch (_) {
       if (mounted) setState(() => _isTeacher = false);
@@ -78,6 +83,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     // sitting on the Home tab would otherwise leave it showing stale data.
     _myCoursesKey.currentState?.reload();
   }
+
   // AppColors' fields are mutable but plain — nothing subscribes to them on
   // its own. Theme.of(context)-based widgets (Scaffold's background, etc.)
   // pick up a new ThemeData automatically via InheritedWidget, but anything
@@ -97,7 +103,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           // the actual, deterministic display order.
           .order('order_index', ascending: true);
       setState(() {
-        _courses = (rows as List).map((r) => Course.fromJson(r as Map<String, dynamic>)).toList();
+        _courses = (rows as List)
+            .map((r) => Course.fromJson(r as Map<String, dynamic>))
+            .toList();
         _error = null;
       });
     } catch (e) {
@@ -106,11 +114,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   void _openAuth() {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
   void _goToPage(int index) {
-    _pageController.animateToPage(index, duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
+    _pageController.animateToPage(index,
+        duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
   }
 
   @override
@@ -119,7 +129,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     final loggedIn = SupabaseService.instance.isLoggedIn;
 
     return Directionality(
-      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      textDirection:
+          AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(title: const BrandTitle()),
         body: PageView(
@@ -192,7 +203,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: TextStyle(color: AppColors.muted), textAlign: TextAlign.center),
+            Text(_error!,
+                style: TextStyle(color: AppColors.muted),
+                textAlign: TextAlign.center),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _load, child: Text(t('retry'))),
           ],
@@ -200,10 +213,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       );
     }
     if (_courses == null) {
-      return Center(child: Text(t('loading_courses'), style: TextStyle(color: AppColors.muted)));
+      return Center(
+          child: Text(t('loading_courses'),
+              style: TextStyle(color: AppColors.muted)));
     }
     if (_courses!.isEmpty) {
-      return Center(child: Text(t('no_courses'), style: TextStyle(color: AppColors.muted)));
+      return Center(
+          child:
+              Text(t('no_courses'), style: TextStyle(color: AppColors.muted)));
     }
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -219,10 +236,16 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       itemCount: _courses!.length,
       itemBuilder: (context, i) {
         final course = _courses![i];
-        return CourseCard(
-          course: course,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => CourseDetailScreen(slug: course.slug)),
+        // Cap the stagger so a long list doesn't leave the last cards
+        // waiting seconds to fade in.
+        return FadeSlideIn(
+          delayMs: (i % 8) * 45,
+          child: CourseCard(
+            course: course,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                  builder: (_) => CourseDetailScreen(slug: course.slug)),
+            ),
           ),
         );
       },

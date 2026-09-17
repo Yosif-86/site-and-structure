@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/fade_slide_in.dart';
 
 /// Net-new teacher dashboard, ported from teacher.html: a dashboard-card
 /// landing (Overview) plus My courses / course edit / curriculum / discount
@@ -66,7 +67,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
   String? _dFormError;
 
   // Profile form state.
-  final _pSpecialty = TextEditingController();
   final _pZaincashPhone = TextEditingController();
   final _pQiAccount = TextEditingController();
   String? _pQiQrUrl;
@@ -89,7 +89,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _dCode.dispose();
     _dValue.dispose();
     _dMaxUses.dispose();
-    _pSpecialty.dispose();
     _pZaincashPhone.dispose();
     _pQiAccount.dispose();
     super.dispose();
@@ -99,11 +98,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      setState(() { _checking = false; _isTeacher = false; });
+      setState(() {
+        _checking = false;
+        _isTeacher = false;
+      });
       return;
     }
     try {
-      final prof = await sb.from('profiles').select('is_teacher').eq('id', user.id).maybeSingle();
+      final prof = await sb
+          .from('profiles')
+          .select('is_teacher')
+          .eq('id', user.id)
+          .maybeSingle();
       final isTeacher = prof?['is_teacher'] == true;
       setState(() {
         _checking = false;
@@ -115,7 +121,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
         await _loadProfile();
       }
     } catch (e) {
-      setState(() { _checking = false; _isTeacher = false; _error = e.toString(); });
+      setState(() {
+        _checking = false;
+        _isTeacher = false;
+        _error = e.toString();
+      });
     }
   }
 
@@ -126,7 +136,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      final data = await sb.from('courses').select('*').eq('teacher_id', user.id).order('created_at', ascending: false);
+      final data = await sb
+          .from('courses')
+          .select('*')
+          .eq('teacher_id', user.id)
+          .order('created_at', ascending: false);
       _myCourses = (data as List).cast<Map<String, dynamic>>();
       await _loadOverview();
     } catch (e) {
@@ -139,21 +153,39 @@ class _TeacherScreenState extends State<TeacherScreen> {
   Future<void> _loadOverview() async {
     final slugs = _myCourses.map((c) => c['slug'] as String).toList();
     if (slugs.isEmpty) {
-      setState(() { _statStudents = 0; _statEarnings = 0; });
+      setState(() {
+        _statStudents = 0;
+        _statEarnings = 0;
+      });
       return;
     }
     final sb = SupabaseService.instance.client;
-    final enrollments = await sb.from('enrollments').select('user_id, course_slug, status').inFilter('course_slug', slugs).eq('status', 'active');
+    final enrollments = await sb
+        .from('enrollments')
+        .select('user_id, course_slug, status')
+        .inFilter('course_slug', slugs)
+        .eq('status', 'active');
     final rows = (enrollments as List).cast<Map<String, dynamic>>();
     final uniqueStudents = {for (final e in rows) e['user_id']}.length;
-    final priceBySlug = {for (final c in _myCourses) c['slug'] as String: (num.tryParse('${c['price']}') ?? 0)};
-    final earnings = rows.fold<num>(0, (sum, e) => sum + (priceBySlug[e['course_slug']] ?? 0));
+    final priceBySlug = {
+      for (final c in _myCourses)
+        c['slug'] as String: (num.tryParse('${c['price']}') ?? 0)
+    };
+    final earnings = rows.fold<num>(
+        0, (sum, e) => sum + (priceBySlug[e['course_slug']] ?? 0));
     if (!mounted) return;
-    setState(() { _statStudents = uniqueStudents; _statEarnings = earnings.round(); });
+    setState(() {
+      _statStudents = uniqueStudents;
+      _statEarnings = earnings.round();
+    });
   }
 
   String _slugify(String title) {
-    var s = title.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9؀-ۿ]+'), '-').replaceAll(RegExp(r'^-+|-+$'), '');
+    var s = title
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[^a-z0-9؀-ۿ]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
     if (s.length > 60) s = s.substring(0, 60);
     return s.isEmpty ? 'course' : s;
   }
@@ -193,8 +225,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final user = SupabaseService.instance.currentUser!;
       String? thumbnailUrl = _activeCourse?['thumbnail_url'] as String?;
       if (_cThumbFile != null) {
-        final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_cThumbFile!.name}';
-        await sb.storage.from('course-thumbnails').upload(path, File(_cThumbFile!.path));
+        final path =
+            '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_cThumbFile!.name}';
+        await sb.storage
+            .from('course-thumbnails')
+            .upload(path, File(_cThumbFile!.path));
         thumbnailUrl = sb.storage.from('course-thumbnails').getPublicUrl(path);
       }
       if (_activeCourse != null) {
@@ -206,7 +241,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
           'thumbnail_url': thumbnailUrl,
         }).eq('id', _activeCourse!['id']);
       } else {
-        final slug = '${_slugify(title)}-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6)}';
+        final slug =
+            '${_slugify(title)}-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6)}';
         await sb.from('courses').insert({
           'slug': slug,
           'title': title,
@@ -228,10 +264,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _submitForReview(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_submit_review').replaceAll('{title}', c['title'] as String? ?? ''));
+    final confirmed = await _confirm(t('confirm_submit_review')
+        .replaceAll('{title}', c['title'] as String? ?? ''));
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('courses').update({'status': 'pending_review'}).eq('id', c['id']);
+      await SupabaseService.instance.client
+          .from('courses')
+          .update({'status': 'pending_review'}).eq('id', c['id']);
       await _loadCourses();
     } catch (e) {
       _showError('${t('alert_generic_failed')}$e');
@@ -240,10 +279,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _deleteCourse(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_delete_course').replaceAll('{title}', c['title'] as String? ?? ''));
+    final confirmed = await _confirm(t('confirm_delete_course')
+        .replaceAll('{title}', c['title'] as String? ?? ''));
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('courses').delete().eq('id', c['id']);
+      await SupabaseService.instance.client
+          .from('courses')
+          .delete()
+          .eq('id', c['id']);
       await _loadCourses();
     } catch (e) {
       _showError('${t('alert_generic_failed')}$e');
@@ -264,9 +307,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _loadLectures() async {
     try {
-      final data = await SupabaseService.instance.client.from('lectures').select('*').eq('course_id', _activeCourse!['id']).order('order_index');
+      final data = await SupabaseService.instance.client
+          .from('lectures')
+          .select('*')
+          .eq('course_id', _activeCourse!['id'])
+          .order('order_index');
       if (!mounted) return;
-      setState(() => _activeLectures = (data as List).cast<Map<String, dynamic>>());
+      setState(
+          () => _activeLectures = (data as List).cast<Map<String, dynamic>>());
     } catch (e) {
       _showError('$e');
     }
@@ -287,11 +335,17 @@ class _TeacherScreenState extends State<TeacherScreen> {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      final path = '${user.id}/${_activeCourse!['id']}/${DateTime.now().millisecondsSinceEpoch}-${_lVideoFile!.name}';
-      await sb.storage.from('lecture-uploads').upload(path, File(_lVideoFile!.path));
+      final path =
+          '${user.id}/${_activeCourse!['id']}/${DateTime.now().millisecondsSinceEpoch}-${_lVideoFile!.name}';
+      await sb.storage
+          .from('lecture-uploads')
+          .upload(path, File(_lVideoFile!.path));
       final orderIndex = _activeLectures.isEmpty
           ? 0
-          : (_activeLectures.map((l) => (l['order_index'] as num?) ?? 0).reduce((a, b) => a > b ? a : b) + 1);
+          : (_activeLectures
+                  .map((l) => (l['order_index'] as num?) ?? 0)
+                  .reduce((a, b) => a > b ? a : b) +
+              1);
       await sb.from('lectures').insert({
         'course_id': _activeCourse!['id'],
         'title': title,
@@ -311,7 +365,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
   Future<void> _deleteLecture(String id) async {
     final t = AppStrings.instance.t;
     try {
-      await SupabaseService.instance.client.from('lectures').delete().eq('id', id);
+      await SupabaseService.instance.client
+          .from('lectures')
+          .delete()
+          .eq('id', id);
       await _loadLectures();
     } catch (e) {
       _showError('${t('alert_generic_failed')}$e');
@@ -334,9 +391,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _loadCodes() async {
     try {
-      final data = await SupabaseService.instance.client.from('discount_codes').select('*').eq('course_id', _activeCourse!['id']).order('created_at', ascending: false);
+      final data = await SupabaseService.instance.client
+          .from('discount_codes')
+          .select('*')
+          .eq('course_id', _activeCourse!['id'])
+          .order('created_at', ascending: false);
       if (!mounted) return;
-      setState(() => _activeCodes = (data as List).cast<Map<String, dynamic>>());
+      setState(
+          () => _activeCodes = (data as List).cast<Map<String, dynamic>>());
     } catch (e) {
       _showError('$e');
     }
@@ -386,10 +448,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _stopCode(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_revoke_code').replaceAll('{code}', c['code'] as String? ?? ''));
+    final confirmed = await _confirm(t('confirm_revoke_code')
+        .replaceAll('{code}', c['code'] as String? ?? ''));
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('discount_codes').update({'is_active': false}).eq('id', c['id']);
+      await SupabaseService.instance.client
+          .from('discount_codes')
+          .update({'is_active': false}).eq('id', c['id']);
       await _loadCodes();
     } catch (e) {
       _showError('${t('alert_generic_failed')}$e');
@@ -404,12 +469,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final user = SupabaseService.instance.currentUser!;
       final prof = await sb
           .from('profiles')
-          .select('teacher_specialty, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
+          .select(
+              'teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
           .eq('id', user.id)
           .maybeSingle();
       if (prof == null || !mounted) return;
       setState(() {
-        _pSpecialty.text = prof['teacher_specialty'] as String? ?? '';
         _pZaincashPhone.text = prof['teacher_zaincash_phone'] as String? ?? '';
         _pQiAccount.text = prof['teacher_qi_account_number'] as String? ?? '';
         _pQiQrUrl = prof['teacher_qi_qr_url'] as String?;
@@ -421,20 +486,28 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _saveProfile() async {
     final t = AppStrings.instance.t;
-    setState(() { _pFormError = null; _pSavedMsg = null; });
+    setState(() {
+      _pFormError = null;
+      _pSavedMsg = null;
+    });
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
       String? qrUrl;
       if (_pQiQrFile != null) {
-        final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_pQiQrFile!.name}';
-        await sb.storage.from('payment-qr').upload(path, File(_pQiQrFile!.path));
+        final path =
+            '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_pQiQrFile!.name}';
+        await sb.storage
+            .from('payment-qr')
+            .upload(path, File(_pQiQrFile!.path));
         qrUrl = sb.storage.from('payment-qr').getPublicUrl(path);
       }
       final update = <String, dynamic>{
-        'teacher_specialty': _pSpecialty.text.trim(),
-        'teacher_zaincash_phone': _pZaincashPhone.text.trim().isEmpty ? null : _pZaincashPhone.text.trim(),
-        'teacher_qi_account_number': _pQiAccount.text.trim().isEmpty ? null : _pQiAccount.text.trim(),
+        'teacher_zaincash_phone': _pZaincashPhone.text.trim().isEmpty
+            ? null
+            : _pZaincashPhone.text.trim(),
+        'teacher_qi_account_number':
+            _pQiAccount.text.trim().isEmpty ? null : _pQiAccount.text.trim(),
       };
       if (qrUrl != null) update['teacher_qi_qr_url'] = qrUrl;
       await sb.from('profiles').update(update).eq('id', user.id);
@@ -451,7 +524,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<bool> _confirm(String message) async {
@@ -462,8 +536,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
         backgroundColor: AppColors.panel,
         content: Text(message, style: TextStyle(color: AppColors.text)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(t('cancel'))),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(t('btn_delete'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(t('cancel'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(t('btn_delete'))),
         ],
       ),
     );
@@ -481,7 +559,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
           leading: _view != _TView.overview
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  onPressed: () => setState(() => _view = (_view == _TView.curriculum || _view == _TView.codes || _view == _TView.courseEdit) ? _TView.courses : _TView.overview),
+                  onPressed: () => setState(() => _view =
+                      (_view == _TView.curriculum ||
+                              _view == _TView.codes ||
+                              _view == _TView.courseEdit)
+                          ? _TView.courses
+                          : _TView.overview),
                 )
               : null,
           title: Text(t('teacher_dashboard')),
@@ -497,7 +580,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error ?? t('gate_not_teacher'), style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+          child: Text(_error ?? t('gate_not_teacher'),
+              style: AppFonts.body(color: AppColors.muted),
+              textAlign: TextAlign.center),
         ),
       );
     }
@@ -513,18 +598,32 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Widget _buildOverview(String Function(String) t) {
     final cards = [
-      _StatCardData(Icons.menu_book_outlined, '${_myCourses.length}', t('stat_courses'), AppColors.teal, () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.groups_outlined, '$_statStudents', t('stat_students'), AppColors.teal, () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.attach_money, '$_statEarnings', t('stat_earnings'), AppColors.red, () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.account_balance_wallet_outlined, '', t('settings_payment_info'), AppColors.teal, () => setState(() => _view = _TView.profile)),
+      _StatCardData(
+          Icons.menu_book_outlined,
+          '${_myCourses.length}',
+          t('stat_courses'),
+          AppColors.teal,
+          () => setState(() => _view = _TView.courses)),
+      _StatCardData(Icons.groups_outlined, '$_statStudents', t('stat_students'),
+          AppColors.teal, () => setState(() => _view = _TView.courses)),
+      _StatCardData(Icons.attach_money, '$_statEarnings', t('stat_earnings'),
+          AppColors.red, () => setState(() => _view = _TView.courses)),
     ];
     return RefreshIndicator(
-      onRefresh: () async { await _loadCourses(); await _loadProfile(); },
+      onRefresh: () async {
+        await _loadCourses();
+        await _loadProfile();
+      },
       child: GridView.builder(
         padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 1.5),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 1.5),
         itemCount: cards.length,
-        itemBuilder: (context, i) => _StatCard(data: cards[i]),
+        itemBuilder: (context, i) =>
+            FadeSlideIn(delayMs: i * 60, child: _StatCard(data: cards[i])),
       ),
     );
   }
@@ -535,19 +634,25 @@ class _TeacherScreenState extends State<TeacherScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ElevatedButton.icon(onPressed: _openNewCourse, icon: const Icon(Icons.add), label: Text(t('create_course'))),
+          ElevatedButton.icon(
+              onPressed: _openNewCourse,
+              icon: const Icon(Icons.add),
+              label: Text(t('create_course'))),
           const SizedBox(height: 12),
           if (_myCourses.isEmpty)
-            Text(t('no_courses_teacher'), style: AppFonts.body(color: AppColors.muted))
+            Text(t('no_courses_teacher'),
+                style: AppFonts.body(color: AppColors.muted))
           else
             for (final c in _myCourses) ...[
               _CourseCard(
                 course: c,
                 t: t,
-                onEdit: c['status'] == 'draft' ? () => _openCourseEdit(c) : null,
+                onEdit:
+                    c['status'] == 'draft' ? () => _openCourseEdit(c) : null,
                 onCurriculum: () => _openCurriculum(c),
                 onCodes: () => _openCodes(c),
-                onSubmit: c['status'] == 'draft' ? () => _submitForReview(c) : null,
+                onSubmit:
+                    c['status'] == 'draft' ? () => _submitForReview(c) : null,
                 onDelete: () => _deleteCourse(c),
               ),
               const SizedBox(height: 10),
@@ -561,17 +666,27 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(_activeCourse != null ? t('edit_course') : t('new_course_title'), style: AppFonts.heading(size: 20)),
+        Text(_activeCourse != null ? t('edit_course') : t('new_course_title'),
+            style: AppFonts.heading(size: 20)),
         const SizedBox(height: 16),
-        TextField(controller: _cTitle, decoration: InputDecoration(labelText: t('label_title'))),
+        TextField(
+            controller: _cTitle,
+            decoration: InputDecoration(labelText: t('label_title'))),
         const SizedBox(height: 12),
-        TextField(controller: _cDescription, maxLines: 4, decoration: InputDecoration(labelText: t('label_description'))),
+        TextField(
+            controller: _cDescription,
+            maxLines: 4,
+            decoration: InputDecoration(labelText: t('label_description'))),
         const SizedBox(height: 12),
-        TextField(controller: _cPrice, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('label_price'))),
+        TextField(
+            controller: _cPrice,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: t('label_price'))),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () async {
-            final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+            final picked = await ImagePicker()
+                .pickImage(source: ImageSource.gallery, imageQuality: 85);
             if (picked != null) setState(() => _cThumbFile = picked);
           },
           icon: const Icon(Icons.image_outlined),
@@ -580,14 +695,27 @@ class _TeacherScreenState extends State<TeacherScreen> {
         if (_activeCourse?['thumbnail_url'] != null && _cThumbFile == null)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text('${t('current_file')}${_activeCourse!['thumbnail_url']}', style: AppFonts.mono(size: 10.5, color: AppColors.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+                '${t('current_file')}${_activeCourse!['thumbnail_url']}',
+                style: AppFonts.mono(size: 10.5, color: AppColors.muted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
           ),
-        if (_cFormError != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_cFormError!, style: AppFonts.body(size: 12, color: AppColors.red))),
+        if (_cFormError != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_cFormError!,
+                  style: AppFonts.body(size: 12, color: AppColors.red))),
         const SizedBox(height: 18),
         Row(children: [
-          Expanded(child: ElevatedButton(onPressed: _saveCourse, child: Text(t('save')))),
+          Expanded(
+              child: ElevatedButton(
+                  onPressed: _saveCourse, child: Text(t('save')))),
           const SizedBox(width: 10),
-          Expanded(child: OutlinedButton(onPressed: () => setState(() => _view = _TView.courses), child: Text(t('cancel')))),
+          Expanded(
+              child: OutlinedButton(
+                  onPressed: () => setState(() => _view = _TView.courses),
+                  child: Text(t('cancel')))),
         ]),
       ],
     );
@@ -597,42 +725,57 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('${t('curriculum')} — ${_activeCourse?['title'] ?? ''}', style: AppFonts.heading(size: 18)),
+        Text('${t('curriculum')} — ${_activeCourse?['title'] ?? ''}',
+            style: AppFonts.heading(size: 18)),
         const SizedBox(height: 16),
         if (_activeLectures.isEmpty)
-          Text(t('no_lectures_teacher'), style: AppFonts.body(color: AppColors.muted))
+          Text(t('no_lectures_teacher'),
+              style: AppFonts.body(color: AppColors.muted))
         else
           for (final l in _activeLectures) ...[
             _AdminCard(children: [
-              Text(l['title'] as String? ?? '—', style: AppFonts.body(size: 14, weight: FontWeight.w600)),
+              Text(l['title'] as String? ?? '—',
+                  style: AppFonts.body(size: 14, weight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text(
                 '${l['r2_path'] != null ? t('status_live') : t('status_pending_upload')}${l['is_free'] == true ? ' · ${t('free_tag')}' : ''}',
                 style: AppFonts.mono(size: 10.5, color: AppColors.muted),
               ),
               const SizedBox(height: 8),
-              OutlinedButton(onPressed: () => _deleteLecture(l['id'] as String), child: Text(t('btn_delete'))),
+              OutlinedButton(
+                  onPressed: () => _deleteLecture(l['id'] as String),
+                  child: Text(t('btn_delete'))),
             ]),
             const SizedBox(height: 10),
           ],
         const Divider(height: 32),
-        Text(t('btn_add'), style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+        Text(t('btn_add'),
+            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
         const SizedBox(height: 10),
-        TextField(controller: _lTitle, decoration: InputDecoration(labelText: t('label_lecture_title'))),
+        TextField(
+            controller: _lTitle,
+            decoration: InputDecoration(labelText: t('label_lecture_title'))),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () async {
-            final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+            final picked =
+                await ImagePicker().pickVideo(source: ImageSource.gallery);
             if (picked != null) setState(() => _lVideoFile = picked);
           },
           icon: const Icon(Icons.videocam_outlined),
           label: Text(_lVideoFile?.name ?? t('label_video_file')),
         ),
         Row(children: [
-          Checkbox(value: _lIsFree, onChanged: (v) => setState(() => _lIsFree = v ?? false)),
-          Expanded(child: Text(t('label_free_lecture'), style: AppFonts.body(size: 12.5, color: AppColors.muted))),
+          Checkbox(
+              value: _lIsFree,
+              onChanged: (v) => setState(() => _lIsFree = v ?? false)),
+          Expanded(
+              child: Text(t('label_free_lecture'),
+                  style: AppFonts.body(size: 12.5, color: AppColors.muted))),
         ]),
-        if (_lFormError != null) Text(_lFormError!, style: AppFonts.body(size: 12, color: AppColors.red)),
+        if (_lFormError != null)
+          Text(_lFormError!,
+              style: AppFonts.body(size: 12, color: AppColors.red)),
         const SizedBox(height: 10),
         ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
       ],
@@ -643,7 +786,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('${t('discount_codes')} — ${_activeCourse?['title'] ?? ''}', style: AppFonts.heading(size: 18)),
+        Text('${t('discount_codes')} — ${_activeCourse?['title'] ?? ''}',
+            style: AppFonts.heading(size: 18)),
         const SizedBox(height: 16),
         if (_activeCodes.isEmpty)
           Text(t('no_codes'), style: AppFonts.body(color: AppColors.muted))
@@ -651,8 +795,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
           for (final c in _activeCodes) ...[
             _AdminCard(children: [
               Row(children: [
-                Expanded(child: Text(c['code'] as String? ?? '—', style: AppFonts.mono(size: 14, weight: FontWeight.w700))),
-                Text(c['is_active'] == true ? t('status_active_code') : t('status_inactive'), style: AppFonts.mono(size: 10.5, color: AppColors.teal)),
+                Expanded(
+                    child: Text(c['code'] as String? ?? '—',
+                        style:
+                            AppFonts.mono(size: 14, weight: FontWeight.w700))),
+                Text(
+                    c['is_active'] == true
+                        ? t('status_active_code')
+                        : t('status_inactive'),
+                    style: AppFonts.mono(size: 10.5, color: AppColors.teal)),
               ]),
               const SizedBox(height: 4),
               Text(
@@ -661,15 +812,20 @@ class _TeacherScreenState extends State<TeacherScreen> {
               ),
               if (c['is_active'] == true) ...[
                 const SizedBox(height: 8),
-                OutlinedButton(onPressed: () => _stopCode(c), child: Text(t('btn_stop'))),
+                OutlinedButton(
+                    onPressed: () => _stopCode(c), child: Text(t('btn_stop'))),
               ],
             ]),
             const SizedBox(height: 10),
           ],
         const Divider(height: 32),
-        Text(t('create_course'), style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+        Text(t('create_course'),
+            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
         const SizedBox(height: 10),
-        TextField(controller: _dCode, textCapitalization: TextCapitalization.characters, decoration: InputDecoration(labelText: t('label_code'))),
+        TextField(
+            controller: _dCode,
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(labelText: t('label_code'))),
         const SizedBox(height: 10),
         Row(children: [
           Expanded(
@@ -684,10 +840,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(child: TextField(controller: _dValue, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('label_discount_value')))),
+          Expanded(
+              child: TextField(
+                  controller: _dValue,
+                  keyboardType: TextInputType.number,
+                  decoration:
+                      InputDecoration(labelText: t('label_discount_value')))),
         ]),
         const SizedBox(height: 10),
-        TextField(controller: _dMaxUses, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: t('label_max_uses'))),
+        TextField(
+            controller: _dMaxUses,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: t('label_max_uses'))),
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () async {
@@ -700,9 +864,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
             if (picked != null) setState(() => _dExpires = picked);
           },
           icon: const Icon(Icons.event_outlined),
-          label: Text(_dExpires != null ? _dExpires!.toString().split(' ').first : t('label_expires')),
+          label: Text(_dExpires != null
+              ? _dExpires!.toString().split(' ').first
+              : t('label_expires')),
         ),
-        if (_dFormError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_dFormError!, style: AppFonts.body(size: 12, color: AppColors.red))),
+        if (_dFormError != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_dFormError!,
+                  style: AppFonts.body(size: 12, color: AppColors.red))),
         const SizedBox(height: 12),
         ElevatedButton(onPressed: _addCode, child: Text(t('btn_add'))),
       ],
@@ -713,36 +883,60 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        TextField(controller: _pSpecialty, decoration: InputDecoration(labelText: t('label_specialty'))),
-        const SizedBox(height: 20),
-        Text(t('my_payment_number'), style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+        Text(t('my_payment_number'),
+            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text(t('payment_required_hint'), style: AppFonts.body(size: 11.5, color: AppColors.muted)),
+        Text(t('payment_required_hint'),
+            style: AppFonts.body(size: 11.5, color: AppColors.muted)),
         const SizedBox(height: 8),
-        TextField(controller: _pZaincashPhone, decoration: InputDecoration(labelText: t('label_zaincash_phone'), hintText: '07XX XXX XXXX')),
+        TextField(
+            controller: _pZaincashPhone,
+            decoration: InputDecoration(
+                labelText: t('label_zaincash_phone'),
+                hintText: '07XX XXX XXXX')),
         const SizedBox(height: 12),
-        TextField(controller: _pQiAccount, decoration: InputDecoration(labelText: t('label_qi_account'), hintText: 'XXXX XXXX XXXX XXXX')),
+        TextField(
+            controller: _pQiAccount,
+            decoration: InputDecoration(
+                labelText: t('label_qi_account'),
+                hintText: 'XXXX XXXX XXXX XXXX')),
         const SizedBox(height: 12),
         Text(t('label_qi_qr'), style: AppFonts.body(size: 13)),
         const SizedBox(height: 6),
         GestureDetector(
           onTap: () async {
-            final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+            final picked = await ImagePicker()
+                .pickImage(source: ImageSource.gallery, imageQuality: 85);
             if (picked != null) setState(() => _pQiQrFile = picked);
           },
           child: Container(
             width: 120,
             height: 120,
-            decoration: BoxDecoration(color: AppColors.panel2, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: AppColors.panel2,
+                borderRadius: BorderRadius.circular(10)),
             child: _pQiQrFile != null
-                ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(File(_pQiQrFile!.path), fit: BoxFit.cover))
+                ? ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child:
+                        Image.file(File(_pQiQrFile!.path), fit: BoxFit.cover))
                 : (_pQiQrUrl != null
-                    ? ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.network(_pQiQrUrl!, fit: BoxFit.cover))
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(_pQiQrUrl!, fit: BoxFit.cover))
                     : const Icon(Icons.qr_code_2_outlined)),
           ),
         ),
-        if (_pFormError != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_pFormError!, style: AppFonts.body(size: 12, color: AppColors.red))),
-        if (_pSavedMsg != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(_pSavedMsg!, style: AppFonts.body(size: 12, color: AppColors.teal))),
+        if (_pFormError != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_pFormError!,
+                  style: AppFonts.body(size: 12, color: AppColors.red))),
+        if (_pSavedMsg != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(_pSavedMsg!,
+                  style: AppFonts.body(size: 12, color: AppColors.teal))),
         const SizedBox(height: 18),
         ElevatedButton(onPressed: _saveProfile, child: Text(t('save'))),
       ],
@@ -774,21 +968,34 @@ class _CourseCard extends StatelessWidget {
     final status = course['status'] as String? ?? 'draft';
     return _AdminCard(children: [
       Row(children: [
-        Expanded(child: Text(course['title'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600))),
+        Expanded(
+            child: Text(course['title'] as String? ?? '—',
+                style: AppFonts.body(size: 15, weight: FontWeight.w600))),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(border: Border.all(color: AppColors.teal), borderRadius: BorderRadius.circular(999)),
-          child: Text(t('status_$status').toUpperCase(), style: AppFonts.mono(size: 9, color: AppColors.teal)),
+          decoration: BoxDecoration(
+              border: Border.all(color: AppColors.teal),
+              borderRadius: BorderRadius.circular(999)),
+          child: Text(t('status_$status').toUpperCase(),
+              style: AppFonts.mono(size: 9, color: AppColors.teal)),
         ),
       ]),
       const SizedBox(height: 4),
-      Text(course['is_free'] == true ? t('card_free') : '${course['price'] ?? '—'}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+      Text(
+          course['is_free'] == true
+              ? t('card_free')
+              : '${course['price'] ?? '—'}',
+          style: AppFonts.body(size: 13, color: AppColors.muted)),
       const SizedBox(height: 10),
       Wrap(spacing: 8, runSpacing: 8, children: [
-        if (onEdit != null) OutlinedButton(onPressed: onEdit, child: Text(t('btn_edit'))),
-        OutlinedButton(onPressed: onCurriculum, child: Text(t('btn_curriculum'))),
+        if (onEdit != null)
+          OutlinedButton(onPressed: onEdit, child: Text(t('btn_edit'))),
+        OutlinedButton(
+            onPressed: onCurriculum, child: Text(t('btn_curriculum'))),
         OutlinedButton(onPressed: onCodes, child: Text(t('btn_codes'))),
-        if (onSubmit != null) ElevatedButton(onPressed: onSubmit, child: Text(t('submit_for_review'))),
+        if (onSubmit != null)
+          ElevatedButton(
+              onPressed: onSubmit, child: Text(t('submit_for_review'))),
         OutlinedButton(onPressed: onDelete, child: Text(t('btn_delete'))),
       ]),
     ]);
@@ -824,7 +1031,9 @@ class _StatCard extends StatelessWidget {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(color: data.color.withOpacity(0.16), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: data.color.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(10)),
             child: Icon(data.icon, color: data.color, size: 20),
           ),
           const SizedBox(width: 10),
@@ -833,8 +1042,12 @@ class _StatCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (data.number.isNotEmpty) Text(data.number, style: AppFonts.heading(size: 20)),
-                Text(data.label, style: AppFonts.mono(size: 9.5, color: AppColors.muted2), maxLines: 2, overflow: TextOverflow.ellipsis),
+                if (data.number.isNotEmpty)
+                  Text(data.number, style: AppFonts.heading(size: 20)),
+                Text(data.label,
+                    style: AppFonts.mono(size: 9.5, color: AppColors.muted2),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -857,7 +1070,8 @@ class _AdminCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.line),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );
   }
 }

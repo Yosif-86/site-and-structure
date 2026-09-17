@@ -4,6 +4,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/fade_slide_in.dart';
 
 /// Port of admin.html's dashboard: a landing view of clickable stat cards,
 /// each drilling into its own list/detail view with a back button — mirrors
@@ -88,37 +89,84 @@ class _AdminScreenState extends State<AdminScreen> {
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      setState(() { _checking = false; _isAdmin = false; });
+      setState(() {
+        _checking = false;
+        _isAdmin = false;
+      });
       return;
     }
     try {
-      final prof = await sb.from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
+      final prof = await sb
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .maybeSingle();
       final isAdmin = prof?['is_admin'] == true;
-      setState(() { _checking = false; _isAdmin = isAdmin; });
+      setState(() {
+        _checking = false;
+        _isAdmin = isAdmin;
+      });
       if (isAdmin) await _loadAll();
     } catch (e) {
-      setState(() { _checking = false; _isAdmin = false; _error = e.toString(); });
+      setState(() {
+        _checking = false;
+        _isAdmin = false;
+        _error = e.toString();
+      });
     }
   }
 
   Future<void> _loadAll() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final sb = SupabaseService.instance.client;
       final results = await Future.wait([
-        sb.from('courses').select('id, slug, title, price, is_free, teacher_id, pay_to_teacher, status'),
-        sb.from('profiles').select('id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail'),
-        sb.from('login_events').select('user_id, email, created_at').order('created_at', ascending: false),
+        sb.from('courses').select(
+            'id, slug, title, price, is_free, teacher_id, pay_to_teacher, status'),
+        sb.from('profiles').select(
+            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail'),
         sb
-            .from('enrollments')
-            .select('id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at, approved_by, approved_at'),
-        sb.from('login_events').select('email, city, country, distance_km, created_at').eq('flagged', true).order('created_at', ascending: false).limit(50),
-        sb.from('trusted_devices').select('id, user_id, device_label, first_seen, last_seen').order('user_id').order('first_seen'),
-        sb.from('teacher_invites').select('id, token, created_at, expires_at, used_at, used_by').order('created_at', ascending: false),
-        sb.from('lectures').select('id, title, course_id, pending_upload_path').not('pending_upload_path', 'is', null).order('order_index'),
-        sb.from('discount_codes').select('id, course_id, code, discount_type, discount_value, max_uses, used_count, expires_at, is_active').order('created_at', ascending: false),
-        sb.from('error_logs').select('id, message, page, user_id, created_at').order('created_at', ascending: false).limit(200),
-        sb.from('discount_code_redemptions').select('discount_code_id, user_id'),
+            .from('login_events')
+            .select('user_id, email, created_at')
+            .order('created_at', ascending: false),
+        sb.from('enrollments').select(
+            'id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at, approved_by, approved_at'),
+        sb
+            .from('login_events')
+            .select('email, city, country, distance_km, created_at')
+            .eq('flagged', true)
+            .order('created_at', ascending: false)
+            .limit(50),
+        sb
+            .from('trusted_devices')
+            .select('id, user_id, device_label, first_seen, last_seen')
+            .order('user_id')
+            .order('first_seen'),
+        sb
+            .from('teacher_invites')
+            .select('id, token, created_at, expires_at, used_at, used_by')
+            .order('created_at', ascending: false),
+        sb
+            .from('lectures')
+            .select('id, title, course_id, pending_upload_path')
+            .not('pending_upload_path', 'is', null)
+            .order('order_index'),
+        sb
+            .from('discount_codes')
+            .select(
+                'id, course_id, code, discount_type, discount_value, max_uses, used_count, expires_at, is_active')
+            .order('created_at', ascending: false),
+        sb
+            .from('error_logs')
+            .select('id, message, page, user_id, created_at')
+            .order('created_at', ascending: false)
+            .limit(200),
+        sb
+            .from('discount_code_redemptions')
+            .select('discount_code_id, user_id'),
       ]);
 
       final courses = (results[0] as List).cast<Map<String, dynamic>>();
@@ -136,38 +184,51 @@ class _AdminScreenState extends State<AdminScreen> {
       final emailByUser = <String, String>{};
       for (final l in logins) {
         final uid = l['user_id'] as String?;
-        if (uid != null && !emailByUser.containsKey(uid)) emailByUser[uid] = l['email'] as String? ?? '—';
+        if (uid != null && !emailByUser.containsKey(uid))
+          emailByUser[uid] = l['email'] as String? ?? '—';
       }
-      final profileByUser = <String, Map<String, dynamic>>{for (final p in profiles) p['id'] as String: p};
-      final courseBySlug = <String, Map<String, dynamic>>{for (final c in courses) c['slug'] as String: c};
+      final profileByUser = <String, Map<String, dynamic>>{
+        for (final p in profiles) p['id'] as String: p
+      };
+      final courseBySlug = <String, Map<String, dynamic>>{
+        for (final c in courses) c['slug'] as String: c
+      };
 
       final myProfile = profileByUser[SupabaseService.instance.currentUser?.id];
 
       if (!mounted) return;
       setState(() {
         _allCourses = courses;
-        _publishedCourses = courses.where((c) => c['status'] == 'published').toList();
-        _pendingReview = courses.where((c) => c['status'] == 'pending_review').toList();
+        _publishedCourses =
+            courses.where((c) => c['status'] == 'published').toList();
+        _pendingReview =
+            courses.where((c) => c['status'] == 'pending_review').toList();
         _allProfiles = profiles;
-        _teacherProfiles = profiles.where((p) => p['is_teacher'] == true).toList();
+        _teacherProfiles =
+            profiles.where((p) => p['is_teacher'] == true).toList();
         _emailByUser = emailByUser;
         _profileByUser = profileByUser;
         _courseBySlug = courseBySlug;
         _enrollments = enrollments;
-        _activeEnrollments = enrollments.where((e) => e['status'] == 'active').toList();
+        _activeEnrollments =
+            enrollments.where((e) => e['status'] == 'active').toList();
         _flagged = flagged;
         final countByUser = <String, int>{};
         for (final d in devices) {
           final uid = d['user_id'] as String;
           countByUser[uid] = (countByUser[uid] ?? 0) + 1;
         }
-        _devices = devices.where((d) => (countByUser[d['user_id']] ?? 0) >= _maxDevices).toList();
+        _devices = devices
+            .where((d) => (countByUser[d['user_id']] ?? 0) >= _maxDevices)
+            .toList();
         _invites = invites;
         _pendingUploads = uploads;
         _discountCodes = codes;
         _errorLogs = errors;
-        _payMethodCtrl.value = (myProfile?['teacher_payment_method'] as String?) ?? 'zain';
-        _payDetailCtrl.text = (myProfile?['teacher_payment_detail'] as String?) ?? '';
+        _payMethodCtrl.value =
+            (myProfile?['teacher_payment_method'] as String?) ?? 'zain';
+        _payDetailCtrl.text =
+            (myProfile?['teacher_payment_detail'] as String?) ?? '';
         _payLoaded = true;
         _loading = false;
       });
@@ -182,13 +243,17 @@ class _AdminScreenState extends State<AdminScreen> {
       };
     } catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.toString(); _loading = false; });
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
   Map<String, Map<String, dynamic>> _redemptionsByCourseUser = {};
 
-  String _courseTitle(String slug) => (_courseBySlug[slug]?['title'] as String?) ?? slug;
+  String _courseTitle(String slug) =>
+      (_courseBySlug[slug]?['title'] as String?) ?? slug;
 
   void _goto(_View v) => setState(() => _view = v);
 
@@ -210,12 +275,18 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _removeEnrollment(String enrollmentId, String title, String email) async {
+  Future<void> _removeEnrollment(
+      String enrollmentId, String title, String email) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_remove').replaceAll('{email}', email).replaceAll('{title}', title));
+    final confirmed = await _confirm(t('confirm_remove')
+        .replaceAll('{email}', email)
+        .replaceAll('{title}', title));
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('enrollments').delete().eq('id', enrollmentId);
+      await SupabaseService.instance.client
+          .from('enrollments')
+          .delete()
+          .eq('id', enrollmentId);
       await _loadAll();
     } catch (e) {
       _showError('${t('alert_remove_failed')}$e');
@@ -225,9 +296,12 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _viewProof(String path) async {
     final t = AppStrings.instance.t;
     try {
-      final signedUrl = await SupabaseService.instance.client.storage.from('payment-proofs').createSignedUrl(path, 60);
+      final signedUrl = await SupabaseService.instance.client.storage
+          .from('payment-proofs')
+          .createSignedUrl(path, 60);
       if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => _ProofViewerScreen(url: signedUrl)));
+      await Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => _ProofViewerScreen(url: signedUrl)));
     } catch (e) {
       _showError('${t('alert_proof_failed')}$e');
     }
@@ -235,12 +309,18 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _removeDevice(String deviceRowId, String email) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_remove_device').replaceAll('{email}', email));
+    final confirmed =
+        await _confirm(t('confirm_remove_device').replaceAll('{email}', email));
     if (!confirmed) return;
     try {
-      final result = await SupabaseService.instance.client.from('trusted_devices').delete().eq('id', deviceRowId).select();
+      final result = await SupabaseService.instance.client
+          .from('trusted_devices')
+          .delete()
+          .eq('id', deviceRowId)
+          .select();
       if ((result as List).isEmpty) {
-        _showError('${t('alert_remove_device_failed')}blocked by database policy (0 rows removed)');
+        _showError(
+            '${t('alert_remove_device_failed')}blocked by database policy (0 rows removed)');
         return;
       }
       await _loadAll();
@@ -252,7 +332,9 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _publishCourse(String id) async {
     final t = AppStrings.instance.t;
     try {
-      await SupabaseService.instance.client.from('courses').update({'status': 'published'}).eq('id', id);
+      await SupabaseService.instance.client
+          .from('courses')
+          .update({'status': 'published'}).eq('id', id);
       await _loadAll();
     } catch (e) {
       _showError('${t('alert_review_failed')}$e');
@@ -261,12 +343,15 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _rejectCourse(String id, String title) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_reject_course') != 'confirm_reject_course'
-        ? t('confirm_reject_course').replaceAll('{title}', title)
-        : 'Return "$title" to draft?');
+    final confirmed = await _confirm(
+        t('confirm_reject_course') != 'confirm_reject_course'
+            ? t('confirm_reject_course').replaceAll('{title}', title)
+            : 'Return "$title" to draft?');
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('courses').update({'status': 'draft'}).eq('id', id);
+      await SupabaseService.instance.client
+          .from('courses')
+          .update({'status': 'draft'}).eq('id', id);
       await _loadAll();
     } catch (e) {
       _showError('${t('alert_review_failed')}$e');
@@ -276,7 +361,9 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _togglePayToTeacher(String id, bool value) async {
     final t = AppStrings.instance.t;
     try {
-      await SupabaseService.instance.client.from('courses').update({'pay_to_teacher': value}).eq('id', id);
+      await SupabaseService.instance.client
+          .from('courses')
+          .update({'pay_to_teacher': value}).eq('id', id);
       await _loadAll();
     } catch (e) {
       _showError('${t('alert_review_failed')}$e');
@@ -288,8 +375,10 @@ class _AdminScreenState extends State<AdminScreen> {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
       final token = _uuid();
-      final expiresAt = DateTime.now().add(const Duration(days: 7)).toIso8601String();
-      await sb.from('teacher_invites').insert({'token': token, 'created_by': user.id, 'expires_at': expiresAt});
+      final expiresAt =
+          DateTime.now().add(const Duration(days: 7)).toIso8601String();
+      await sb.from('teacher_invites').insert(
+          {'token': token, 'created_by': user.id, 'expires_at': expiresAt});
       await _loadAll();
     } catch (e) {
       _showError('Failed to create invite: $e');
@@ -305,10 +394,14 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _revokeInvite(String id) async {
-    final confirmed = await _confirm('Revoke this invite? The link will stop working.');
+    final confirmed =
+        await _confirm('Revoke this invite? The link will stop working.');
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('teacher_invites').delete().eq('id', id);
+      await SupabaseService.instance.client
+          .from('teacher_invites')
+          .delete()
+          .eq('id', id);
       await _loadAll();
     } catch (e) {
       _showError('Failed: $e');
@@ -317,7 +410,10 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _dismissError(String id) async {
     try {
-      await SupabaseService.instance.client.from('error_logs').delete().eq('id', id);
+      await SupabaseService.instance.client
+          .from('error_logs')
+          .delete()
+          .eq('id', id);
       await _loadAll();
     } catch (e) {
       _showError('Failed: $e');
@@ -325,10 +421,14 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _clearErrorLog() async {
-    final confirmed = await _confirm('Delete all error log entries? This cannot be undone.');
+    final confirmed =
+        await _confirm('Delete all error log entries? This cannot be undone.');
     if (!confirmed) return;
     try {
-      await SupabaseService.instance.client.from('error_logs').delete().not('id', 'is', null);
+      await SupabaseService.instance.client
+          .from('error_logs')
+          .delete()
+          .not('id', 'is', null);
       await _loadAll();
     } catch (e) {
       _showError('Failed: $e');
@@ -336,7 +436,10 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _saveMyPayment() async {
-    setState(() { _payError = null; _payOk = null; });
+    setState(() {
+      _payError = null;
+      _payOk = null;
+    });
     try {
       final user = SupabaseService.instance.currentUser!;
       await SupabaseService.instance.client.from('profiles').update({
@@ -351,7 +454,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<bool> _confirm(String message) async {
@@ -362,8 +466,12 @@ class _AdminScreenState extends State<AdminScreen> {
         backgroundColor: AppColors.panel,
         content: Text(message, style: TextStyle(color: AppColors.text)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(t('btn_close'))),
-          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(t('remove'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(t('btn_close'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(t('remove'))),
         ],
       ),
     );
@@ -379,9 +487,12 @@ class _AdminScreenState extends State<AdminScreen> {
       child: Scaffold(
         appBar: AppBar(
           leading: _view != _View.dashboard
-              ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => _goto(_View.dashboard))
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => _goto(_View.dashboard))
               : null,
-          title: Text(_view == _View.dashboard ? t('nav_admin') : _viewTitle(t)),
+          title:
+              Text(_view == _View.dashboard ? t('nav_admin') : _viewTitle(t)),
         ),
         body: _buildBody(t),
       ),
@@ -390,20 +501,34 @@ class _AdminScreenState extends State<AdminScreen> {
 
   String _viewTitle(String Function(String) t) {
     switch (_view) {
-      case _View.courses: return t('published_courses');
-      case _View.teachers: return t('teachers');
-      case _View.students: return t('active_students');
-      case _View.revenue: return t('est_revenue');
-      case _View.enrollments: return t('students_courses');
-      case _View.review: return t('course_review');
-      case _View.invites: return t('teacher_invites');
-      case _View.uploads: return t('pending_lectures');
-      case _View.flagged: return t('flagged_logins');
-      case _View.devices: return t('trusted_devices');
-      case _View.discountCodes: return t('discount_codes');
-      case _View.errorLog: return t('error_log');
-      case _View.myPayment: return t('my_payment_number');
-      case _View.dashboard: return t('nav_admin');
+      case _View.courses:
+        return t('published_courses');
+      case _View.teachers:
+        return t('teachers');
+      case _View.students:
+        return t('active_students');
+      case _View.revenue:
+        return t('est_revenue');
+      case _View.enrollments:
+        return t('students_courses');
+      case _View.review:
+        return t('course_review');
+      case _View.invites:
+        return t('teacher_invites');
+      case _View.uploads:
+        return t('pending_lectures');
+      case _View.flagged:
+        return t('flagged_logins');
+      case _View.devices:
+        return t('trusted_devices');
+      case _View.discountCodes:
+        return t('discount_codes');
+      case _View.errorLog:
+        return t('error_log');
+      case _View.myPayment:
+        return t('my_payment_number');
+      case _View.dashboard:
+        return t('nav_admin');
     }
   }
 
@@ -413,7 +538,9 @@ class _AdminScreenState extends State<AdminScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error ?? t('err_video_unavailable'), style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+          child: Text(_error ?? t('err_video_unavailable'),
+              style: AppFonts.body(color: AppColors.muted),
+              textAlign: TextAlign.center),
         ),
       );
     }
@@ -422,14 +549,17 @@ class _AdminScreenState extends State<AdminScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+            Text(_error!,
+                style: AppFonts.body(color: AppColors.muted),
+                textAlign: TextAlign.center),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _loadAll, child: Text(t('retry'))),
           ],
         ),
       );
     }
-    if (_loading && _allCourses.isEmpty) return const Center(child: CircularProgressIndicator());
+    if (_loading && _allCourses.isEmpty)
+      return const Center(child: CircularProgressIndicator());
 
     return RefreshIndicator(
       onRefresh: _loadAll,
@@ -458,34 +588,74 @@ class _AdminScreenState extends State<AdminScreen> {
     final revenue = _activeEnrollments.fold<int>(0, (sum, e) {
       final c = _courseBySlug[e['course_slug']];
       if (c == null || c['is_free'] == true) return sum;
-      final digits = RegExp(r'\d').allMatches((c['price'] ?? '').toString()).map((m) => m.group(0)).join();
+      final digits = RegExp(r'\d')
+          .allMatches((c['price'] ?? '').toString())
+          .map((m) => m.group(0))
+          .join();
       return sum + (digits.isEmpty ? 0 : int.parse(digits));
     });
-    final activeInvitesCount = _invites.where((i) => i['used_at'] == null && DateTime.parse(i['expires_at'] as String).isAfter(DateTime.now())).length;
-    final activeDiscountCodes = _discountCodes.where((c) => c['is_active'] == true && DateTime.parse(c['expires_at'] as String).isAfter(DateTime.now())).length;
-    final myPaySet = (_profileByUser[SupabaseService.instance.currentUser?.id]?['teacher_payment_detail'] as String?)?.isNotEmpty == true;
+    final activeInvitesCount = _invites
+        .where((i) =>
+            i['used_at'] == null &&
+            DateTime.parse(i['expires_at'] as String).isAfter(DateTime.now()))
+        .length;
+    final activeDiscountCodes = _discountCodes
+        .where((c) =>
+            c['is_active'] == true &&
+            DateTime.parse(c['expires_at'] as String).isAfter(DateTime.now()))
+        .length;
+    final myPaySet = (_profileByUser[SupabaseService.instance.currentUser?.id]
+                ?['teacher_payment_detail'] as String?)
+            ?.isNotEmpty ==
+        true;
 
     final cards = <_StatCardData>[
-      _StatCardData(Icons.school_outlined, '${_publishedCourses.length}', t('published_courses'), AppColors.teal, () => _goto(_View.courses)),
-      _StatCardData(Icons.people_outline, '${_teacherProfiles.length}', t('teachers'), AppColors.red, () => _goto(_View.teachers)),
-      _StatCardData(Icons.groups_outlined, '${{for (final e in _activeEnrollments) e['user_id']}.length}', t('active_students'), AppColors.muted, () => _goto(_View.students)),
-      _StatCardData(Icons.attach_money, revenue.toString(), t('est_revenue'), AppColors.red, () => _goto(_View.revenue)),
-      _StatCardData(Icons.menu_book_outlined, '${_enrollments.length}', t('students_courses'), AppColors.teal, () => _goto(_View.enrollments)),
-      _StatCardData(Icons.fact_check_outlined, '${_pendingReview.length}', t('course_review'), AppColors.teal, () => _goto(_View.review)),
-      _StatCardData(Icons.mail_outline, '$activeInvitesCount', t('teacher_invites'), AppColors.red, () => _goto(_View.invites)),
-      _StatCardData(Icons.video_library_outlined, '${_pendingUploads.length}', t('pending_lectures'), AppColors.muted, () => _goto(_View.uploads)),
-      _StatCardData(Icons.warning_amber_outlined, '${_flagged.length}', t('flagged_logins'), AppColors.red, () => _goto(_View.flagged)),
-      _StatCardData(Icons.phone_android_outlined, '${_devices.length}', t('trusted_devices'), AppColors.teal, () => _goto(_View.devices)),
-      _StatCardData(Icons.local_offer_outlined, '$activeDiscountCodes', t('discount_codes'), AppColors.red, () => _goto(_View.discountCodes)),
-      _StatCardData(Icons.error_outline, '${_errorLogs.length}', t('error_log'), AppColors.red, () => _goto(_View.errorLog)),
-      _StatCardData(Icons.payments_outlined, myPaySet ? '✓' : '—', t('my_payment_number'), AppColors.teal, () => _goto(_View.myPayment)),
+      _StatCardData(Icons.school_outlined, '${_publishedCourses.length}',
+          t('published_courses'), AppColors.teal, () => _goto(_View.courses)),
+      _StatCardData(Icons.people_outline, '${_teacherProfiles.length}',
+          t('teachers'), AppColors.red, () => _goto(_View.teachers)),
+      _StatCardData(
+          Icons.groups_outlined,
+          '${{for (final e in _activeEnrollments) e['user_id']}.length}',
+          t('active_students'),
+          AppColors.muted,
+          () => _goto(_View.students)),
+      _StatCardData(Icons.attach_money, revenue.toString(), t('est_revenue'),
+          AppColors.red, () => _goto(_View.revenue)),
+      _StatCardData(
+          Icons.menu_book_outlined,
+          '${_enrollments.length}',
+          t('students_courses'),
+          AppColors.teal,
+          () => _goto(_View.enrollments)),
+      _StatCardData(Icons.fact_check_outlined, '${_pendingReview.length}',
+          t('course_review'), AppColors.teal, () => _goto(_View.review)),
+      _StatCardData(Icons.mail_outline, '$activeInvitesCount',
+          t('teacher_invites'), AppColors.red, () => _goto(_View.invites)),
+      _StatCardData(Icons.video_library_outlined, '${_pendingUploads.length}',
+          t('pending_lectures'), AppColors.muted, () => _goto(_View.uploads)),
+      _StatCardData(Icons.warning_amber_outlined, '${_flagged.length}',
+          t('flagged_logins'), AppColors.red, () => _goto(_View.flagged)),
+      _StatCardData(Icons.phone_android_outlined, '${_devices.length}',
+          t('trusted_devices'), AppColors.teal, () => _goto(_View.devices)),
+      _StatCardData(Icons.local_offer_outlined, '$activeDiscountCodes',
+          t('discount_codes'), AppColors.red, () => _goto(_View.discountCodes)),
+      _StatCardData(Icons.error_outline, '${_errorLogs.length}', t('error_log'),
+          AppColors.red, () => _goto(_View.errorLog)),
+      _StatCardData(Icons.payments_outlined, myPaySet ? '✓' : '—',
+          t('my_payment_number'), AppColors.teal, () => _goto(_View.myPayment)),
     ];
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 1.5),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.5),
       itemCount: cards.length,
-      itemBuilder: (context, i) => _StatCard(data: cards[i]),
+      itemBuilder: (context, i) =>
+          FadeSlideIn(delayMs: i * 40, child: _StatCard(data: cards[i])),
     );
   }
 
@@ -499,11 +669,15 @@ class _AdminScreenState extends State<AdminScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         final c = _publishedCourses[i];
-        final teacherName = (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
+        final teacherName =
+            (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
         return _AdminCard(children: [
-          Text(c['title'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+          Text(c['title'] as String? ?? '—',
+              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text('$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+          Text(
+              '$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
         ]);
       },
     );
@@ -519,16 +693,19 @@ class _AdminScreenState extends State<AdminScreen> {
         final p = _teacherProfiles[i];
         final email = _emailByUser[p['id']] ?? '—';
         return _AdminCard(children: [
-          Text(p['full_name'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+          Text(p['full_name'] as String? ?? '—',
+              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text('$email · ${p['phone'] ?? '—'}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+          Text('$email · ${p['phone'] ?? '—'}',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
         ]);
       },
     );
   }
 
   Widget _buildStudentsList(String Function(String) t) {
-    final userIds = {for (final e in _activeEnrollments) e['user_id'] as String}.toList();
+    final userIds =
+        {for (final e in _activeEnrollments) e['user_id'] as String}.toList();
     if (userIds.isEmpty) return _empty('No active students yet.');
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -539,9 +716,11 @@ class _AdminScreenState extends State<AdminScreen> {
         final prof = _profileByUser[uid];
         final email = _emailByUser[uid] ?? '—';
         return _AdminCard(children: [
-          Text(prof?['full_name'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+          Text(prof?['full_name'] as String? ?? '—',
+              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text('$email · ${prof?['phone'] ?? '—'}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+          Text('$email · ${prof?['phone'] ?? '—'}',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
         ]);
       },
     );
@@ -549,7 +728,10 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Widget _buildRevenue(String Function(String) t) {
     int parsePrice(dynamic price) {
-      final digits = RegExp(r'\d').allMatches((price ?? '').toString()).map((m) => m.group(0)).join();
+      final digits = RegExp(r'\d')
+          .allMatches((price ?? '').toString())
+          .map((m) => m.group(0))
+          .join();
       return digits.isEmpty ? 0 : int.parse(digits);
     }
 
@@ -559,7 +741,9 @@ class _AdminScreenState extends State<AdminScreen> {
       if (c['is_free'] == true) continue;
       final priceNum = parsePrice(c['price']);
       if (priceNum <= 0) continue;
-      final enrolled = _activeEnrollments.where((e) => e['course_slug'] == c['slug']).toList();
+      final enrolled = _activeEnrollments
+          .where((e) => e['course_slug'] == c['slug'])
+          .toList();
       int revenue = 0, discountedCount = 0;
       for (final e in enrolled) {
         final dc = _redemptionsByCourseUser['${c['id']}|${e['user_id']}'];
@@ -568,7 +752,9 @@ class _AdminScreenState extends State<AdminScreen> {
           discountedCount++;
           final type = dc['discount_type'];
           final value = (dc['discount_value'] as num?) ?? 0;
-          amt = type == 'percent' ? (priceNum * (1 - value / 100)).round() : (priceNum - value).round();
+          amt = type == 'percent'
+              ? (priceNum * (1 - value / 100)).round()
+              : (priceNum - value).round();
           if (amt < 0) amt = 0;
         }
         revenue += amt;
@@ -578,7 +764,14 @@ class _AdminScreenState extends State<AdminScreen> {
       totalRevenue += revenue;
       totalTeacher += teacherAmt;
       totalMine += mineAmt;
-      rows.add({'c': c, 'students': enrolled.length, 'discounted': discountedCount, 'revenue': revenue, 'teacherAmt': teacherAmt, 'mineAmt': mineAmt});
+      rows.add({
+        'c': c,
+        'students': enrolled.length,
+        'discounted': discountedCount,
+        'revenue': revenue,
+        'teacherAmt': teacherAmt,
+        'mineAmt': mineAmt
+      });
     }
     rows.sort((a, b) => (b['revenue'] as int).compareTo(a['revenue'] as int));
 
@@ -587,21 +780,27 @@ class _AdminScreenState extends State<AdminScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _AdminCard(children: [
-          Text('Total', style: AppFonts.body(size: 15, weight: FontWeight.w700)),
+          Text('Total',
+              style: AppFonts.body(size: 15, weight: FontWeight.w700)),
           const SizedBox(height: 4),
-          Text('Revenue: $totalRevenue · Teacher: $totalTeacher · Mine: $totalMine', style: AppFonts.mono(size: 11, color: AppColors.teal)),
+          Text(
+              'Revenue: $totalRevenue · Teacher: $totalTeacher · Mine: $totalMine',
+              style: AppFonts.mono(size: 11, color: AppColors.teal)),
         ]),
         const SizedBox(height: 10),
         for (final r in rows) ...[
           _AdminCard(children: [
-            Text((r['c']['title'] as String?) ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+            Text((r['c']['title'] as String?) ?? '—',
+                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text(
               '${_profileByUser[r['c']['teacher_id']]?['full_name'] ?? '—'} · ${r['students']} students${r['discounted'] > 0 ? ' (${r['discounted']} discounted)' : ''}',
               style: AppFonts.body(size: 13, color: AppColors.muted),
             ),
             const SizedBox(height: 4),
-            Text('Revenue: ${r['revenue']} · Teacher: ${r['teacherAmt']} · Mine: ${r['mineAmt']}', style: AppFonts.mono(size: 10.5)),
+            Text(
+                'Revenue: ${r['revenue']} · Teacher: ${r['teacherAmt']} · Mine: ${r['mineAmt']}',
+                style: AppFonts.mono(size: 10.5)),
           ]),
           const SizedBox(height: 10),
         ],
@@ -633,8 +832,14 @@ class _AdminScreenState extends State<AdminScreen> {
           children: [
             Row(
               children: [
-                Expanded(child: Text(email, style: AppFonts.body(size: 15, weight: FontWeight.w600))),
-                _StatusChip(isActive: isActive, activeLabel: t('status_active'), pendingLabel: t('status_pending')),
+                Expanded(
+                    child: Text(email,
+                        style:
+                            AppFonts.body(size: 15, weight: FontWeight.w600))),
+                _StatusChip(
+                    isActive: isActive,
+                    activeLabel: t('status_active'),
+                    pendingLabel: t('status_pending')),
               ],
             ),
             const SizedBox(height: 6),
@@ -642,11 +847,15 @@ class _AdminScreenState extends State<AdminScreen> {
             if (prof?['full_name'] != null || prof?['phone'] != null)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text('${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}', style: AppFonts.mono(size: 10.5)),
+                child: Text(
+                    '${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}',
+                    style: AppFonts.mono(size: 10.5)),
               ),
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('$payment${createdAt != null ? ' · ${createdAt.toLocal().toString().split(' ').first}' : ''}', style: AppFonts.mono(size: 10.5)),
+              child: Text(
+                  '$payment${createdAt != null ? ' · ${createdAt.toLocal().toString().split(' ').first}' : ''}',
+                  style: AppFonts.mono(size: 10.5)),
             ),
             if (approvedBy != null)
               Padding(
@@ -661,9 +870,18 @@ class _AdminScreenState extends State<AdminScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (proofPath != null) OutlinedButton(onPressed: () => _viewProof(proofPath), child: Text(t('view_proof'))),
-                if (!isActive) ElevatedButton(onPressed: () => _approve(e['id'] as String), child: Text(t('approve'))),
-                OutlinedButton(onPressed: () => _removeEnrollment(e['id'] as String, title, email), child: Text(t('remove'))),
+                if (proofPath != null)
+                  OutlinedButton(
+                      onPressed: () => _viewProof(proofPath),
+                      child: Text(t('view_proof'))),
+                if (!isActive)
+                  ElevatedButton(
+                      onPressed: () => _approve(e['id'] as String),
+                      child: Text(t('approve'))),
+                OutlinedButton(
+                    onPressed: () =>
+                        _removeEnrollment(e['id'] as String, title, email),
+                    child: Text(t('remove'))),
               ],
             ),
           ],
@@ -680,21 +898,31 @@ class _AdminScreenState extends State<AdminScreen> {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
         final c = _pendingReview[i];
-        final teacherName = (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
+        final teacherName =
+            (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
         final id = c['id'] as String;
         final title = c['title'] as String? ?? '—';
         return _AdminCard(children: [
           Text(title, style: AppFonts.body(size: 15, weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text('$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+          Text(
+              '$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
           Row(children: [
-            Checkbox(value: c['pay_to_teacher'] == true, onChanged: (v) => _togglePayToTeacher(id, v ?? false)),
-            Expanded(child: Text('Pay to teacher', style: AppFonts.body(size: 12.5, color: AppColors.muted))),
+            Checkbox(
+                value: c['pay_to_teacher'] == true,
+                onChanged: (v) => _togglePayToTeacher(id, v ?? false)),
+            Expanded(
+                child: Text('Pay to teacher',
+                    style: AppFonts.body(size: 12.5, color: AppColors.muted))),
           ]),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            ElevatedButton(onPressed: () => _publishCourse(id), child: Text('Publish')),
-            OutlinedButton(onPressed: () => _rejectCourse(id, title), child: Text('Reject')),
+            ElevatedButton(
+                onPressed: () => _publishCourse(id), child: Text('Publish')),
+            OutlinedButton(
+                onPressed: () => _rejectCourse(id, title),
+                child: Text('Reject')),
           ]),
         ]);
       },
@@ -705,7 +933,9 @@ class _AdminScreenState extends State<AdminScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        ElevatedButton(onPressed: _createInvite, child: const Text('+ Create invite link')),
+        ElevatedButton(
+            onPressed: _createInvite,
+            child: const Text('+ Create invite link')),
         const SizedBox(height: 12),
         if (_invites.isEmpty)
           Text('No invites yet.', style: AppFonts.body(color: AppColors.muted))
@@ -721,22 +951,36 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Widget> _inviteRow(Map<String, dynamic> inv) {
     final usedAt = inv['used_at'];
     final expiresAt = DateTime.parse(inv['expires_at'] as String);
-    final status = usedAt != null ? 'used' : (expiresAt.isBefore(DateTime.now()) ? 'expired' : 'unused');
-    final usedByName = inv['used_by'] != null ? (_profileByUser[inv['used_by']]?['full_name'] ?? '—') : '—';
+    final status = usedAt != null
+        ? 'used'
+        : (expiresAt.isBefore(DateTime.now()) ? 'expired' : 'unused');
+    final usedByName = inv['used_by'] != null
+        ? (_profileByUser[inv['used_by']]?['full_name'] ?? '—')
+        : '—';
     return [
       Row(children: [
-        Expanded(child: Text('Created ${DateTime.parse(inv['created_at'] as String).toLocal().toString().split(' ').first}', style: AppFonts.body(size: 13, weight: FontWeight.w600))),
+        Expanded(
+            child: Text(
+                'Created ${DateTime.parse(inv['created_at'] as String).toLocal().toString().split(' ').first}',
+                style: AppFonts.body(size: 13, weight: FontWeight.w600))),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(border: Border.all(color: AppColors.teal), borderRadius: BorderRadius.circular(999)),
-          child: Text(status.toUpperCase(), style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
+          decoration: BoxDecoration(
+              border: Border.all(color: AppColors.teal),
+              borderRadius: BorderRadius.circular(999)),
+          child: Text(status.toUpperCase(),
+              style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
         ),
       ]),
       const SizedBox(height: 4),
-      Text('Expires ${expiresAt.toLocal().toString().split(' ').first} · Used by $usedByName', style: AppFonts.body(size: 12.5, color: AppColors.muted)),
+      Text(
+          'Expires ${expiresAt.toLocal().toString().split(' ').first} · Used by $usedByName',
+          style: AppFonts.body(size: 12.5, color: AppColors.muted)),
       if (status == 'unused') ...[
         const SizedBox(height: 8),
-        OutlinedButton(onPressed: () => _revokeInvite(inv['id'] as String), child: const Text('Revoke')),
+        OutlinedButton(
+            onPressed: () => _revokeInvite(inv['id'] as String),
+            child: const Text('Revoke')),
       ],
     ];
   }
@@ -750,7 +994,8 @@ class _AdminScreenState extends State<AdminScreen> {
       itemBuilder: (context, i) {
         final l = _pendingUploads[i];
         return _AdminCard(children: [
-          Text(l['title'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+          Text(l['title'] as String? ?? '—',
+              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
             'Lecture id: ${l['id']}\nPath: ${l['pending_upload_path']}',
@@ -777,9 +1022,11 @@ class _AdminScreenState extends State<AdminScreen> {
         final createdAt = DateTime.tryParse(f['created_at'] as String? ?? '');
         return _AdminCard(
           children: [
-            Text(f['email'] as String? ?? '—', style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+            Text(f['email'] as String? ?? '—',
+                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('${f['city'] ?? '—'}, ${f['country'] ?? '—'}', style: AppFonts.body(size: 13, color: AppColors.muted)),
+            Text('${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
+                style: AppFonts.body(size: 13, color: AppColors.muted)),
             const SizedBox(height: 4),
             Text(
               '${f['distance_km']} km${createdAt != null ? ' · ${createdAt.toLocal()}' : ''}',
@@ -804,9 +1051,13 @@ class _AdminScreenState extends State<AdminScreen> {
         final lastSeen = DateTime.tryParse(d['last_seen'] as String? ?? '');
         return _AdminCard(
           children: [
-            Text(email, style: AppFonts.body(size: 15, weight: FontWeight.w600)),
+            Text(email,
+                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text(d['device_label'] as String? ?? '—', style: AppFonts.body(size: 13, color: AppColors.muted), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(d['device_label'] as String? ?? '—',
+                style: AppFonts.body(size: 13, color: AppColors.muted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
             const SizedBox(height: 4),
             Text(
               '${t('th_first_seen')}: ${firstSeen != null ? firstSeen.toLocal().toString().split(' ').first : '—'} · ${t('th_last_seen')}: ${lastSeen != null ? lastSeen.toLocal() : '—'}',
@@ -815,7 +1066,9 @@ class _AdminScreenState extends State<AdminScreen> {
             const SizedBox(height: 10),
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: OutlinedButton(onPressed: () => _removeDevice(d['id'] as String, email), child: Text(t('remove'))),
+              child: OutlinedButton(
+                  onPressed: () => _removeDevice(d['id'] as String, email),
+                  child: Text(t('remove'))),
             ),
           ],
         );
@@ -832,24 +1085,39 @@ class _AdminScreenState extends State<AdminScreen> {
       itemBuilder: (context, i) {
         final c = _discountCodes[i];
         final courseId = c['course_id'];
-        final course = _allCourses.firstWhere((cc) => cc['id'] == courseId, orElse: () => {});
-        final teacherName = (_profileByUser[course['teacher_id']]?['full_name'] as String?) ?? '—';
-        final expired = DateTime.parse(c['expires_at'] as String).isBefore(DateTime.now());
-        final status = c['is_active'] != true ? 'inactive' : (expired ? 'expired' : 'active');
-        final discount = c['discount_type'] == 'percent' ? '${c['discount_value']}%' : '${c['discount_value']} IQD';
+        final course = _allCourses.firstWhere((cc) => cc['id'] == courseId,
+            orElse: () => {});
+        final teacherName =
+            (_profileByUser[course['teacher_id']]?['full_name'] as String?) ??
+                '—';
+        final expired =
+            DateTime.parse(c['expires_at'] as String).isBefore(DateTime.now());
+        final status = c['is_active'] != true
+            ? 'inactive'
+            : (expired ? 'expired' : 'active');
+        final discount = c['discount_type'] == 'percent'
+            ? '${c['discount_value']}%'
+            : '${c['discount_value']} IQD';
         return _AdminCard(children: [
           Row(children: [
-            Expanded(child: Text(c['code'] as String? ?? '—', style: AppFonts.mono(size: 14, weight: FontWeight.w700))),
+            Expanded(
+                child: Text(c['code'] as String? ?? '—',
+                    style: AppFonts.mono(size: 14, weight: FontWeight.w700))),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(border: Border.all(color: AppColors.teal), borderRadius: BorderRadius.circular(999)),
-              child: Text(status.toUpperCase(), style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
+              decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.teal),
+                  borderRadius: BorderRadius.circular(999)),
+              child: Text(status.toUpperCase(),
+                  style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
             ),
           ]),
           const SizedBox(height: 4),
-          Text('${course['title'] ?? '—'} · $teacherName', style: AppFonts.body(size: 13, color: AppColors.muted)),
+          Text('${course['title'] ?? '—'} · $teacherName',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
           const SizedBox(height: 4),
-          Text('$discount · ${c['used_count']}/${c['max_uses']} used', style: AppFonts.mono(size: 10.5)),
+          Text('$discount · ${c['used_count']}/${c['max_uses']} used',
+              style: AppFonts.mono(size: 10.5)),
         ]);
       },
     );
@@ -860,20 +1128,35 @@ class _AdminScreenState extends State<AdminScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         if (_errorLogs.isNotEmpty)
-          Align(alignment: AlignmentDirectional.centerEnd, child: OutlinedButton(onPressed: _clearErrorLog, child: const Text('Clear all'))),
+          Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: OutlinedButton(
+                  onPressed: _clearErrorLog, child: const Text('Clear all'))),
         const SizedBox(height: 8),
         if (_errorLogs.isEmpty)
-          Text('No errors logged. Good sign.', style: AppFonts.body(color: AppColors.muted))
+          Text('No errors logged. Good sign.',
+              style: AppFonts.body(color: AppColors.muted))
         else
           for (final e in _errorLogs) ...[
             _AdminCard(children: [
-              Text(e['message'] as String? ?? '—', style: AppFonts.body(size: 13, weight: FontWeight.w600), maxLines: 3, overflow: TextOverflow.ellipsis),
+              Text(e['message'] as String? ?? '—',
+                  style: AppFonts.body(size: 13, weight: FontWeight.w600),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis),
               const SizedBox(height: 4),
-              Text('${e['page'] ?? '—'} · ${e['user_id'] != null ? (_emailByUser[e['user_id']] ?? e['user_id']) : '—'}', style: AppFonts.mono(size: 10.5, color: AppColors.muted)),
+              Text(
+                  '${e['page'] ?? '—'} · ${e['user_id'] != null ? (_emailByUser[e['user_id']] ?? e['user_id']) : '—'}',
+                  style: AppFonts.mono(size: 10.5, color: AppColors.muted)),
               const SizedBox(height: 4),
-              Text(DateTime.parse(e['created_at'] as String).toLocal().toString(), style: AppFonts.mono(size: 10.5, color: AppColors.muted2)),
+              Text(
+                  DateTime.parse(e['created_at'] as String)
+                      .toLocal()
+                      .toString(),
+                  style: AppFonts.mono(size: 10.5, color: AppColors.muted2)),
               const SizedBox(height: 8),
-              OutlinedButton(onPressed: () => _dismissError(e['id'] as String), child: const Text('Dismiss')),
+              OutlinedButton(
+                  onPressed: () => _dismissError(e['id'] as String),
+                  child: const Text('Dismiss')),
             ]),
             const SizedBox(height: 10),
           ],
@@ -912,16 +1195,30 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ]),
         ),
-        TextField(controller: _payDetailCtrl, decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
-        if (_payError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_payError!, style: AppFonts.body(size: 12, color: AppColors.red))),
-        if (_payOk != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_payOk!, style: AppFonts.body(size: 12, color: AppColors.teal))),
+        TextField(
+            controller: _payDetailCtrl,
+            decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
+        if (_payError != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_payError!,
+                  style: AppFonts.body(size: 12, color: AppColors.red))),
+        if (_payOk != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_payOk!,
+                  style: AppFonts.body(size: 12, color: AppColors.teal))),
         const SizedBox(height: 16),
         ElevatedButton(onPressed: _saveMyPayment, child: Text(t('save'))),
       ],
     );
   }
 
-  Widget _empty(String message) => ListView(children: [Padding(padding: const EdgeInsets.all(24), child: Text(message, style: AppFonts.body(color: AppColors.muted)))]);
+  Widget _empty(String message) => ListView(children: [
+        Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(message, style: AppFonts.body(color: AppColors.muted)))
+      ]);
 }
 
 class _StatCardData {
@@ -953,7 +1250,9 @@ class _StatCard extends StatelessWidget {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(color: data.color.withOpacity(0.16), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+                color: data.color.withOpacity(0.16),
+                borderRadius: BorderRadius.circular(10)),
             child: Icon(data.icon, color: data.color, size: 20),
           ),
           const SizedBox(width: 10),
@@ -963,7 +1262,10 @@ class _StatCard extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(data.number, style: AppFonts.heading(size: 20)),
-                Text(data.label, style: AppFonts.mono(size: 9.5, color: AppColors.muted2), maxLines: 2, overflow: TextOverflow.ellipsis),
+                Text(data.label,
+                    style: AppFonts.mono(size: 9.5, color: AppColors.muted2),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),
@@ -986,7 +1288,8 @@ class _AdminCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.line),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );
   }
 }
@@ -995,7 +1298,10 @@ class _StatusChip extends StatelessWidget {
   final bool isActive;
   final String activeLabel;
   final String pendingLabel;
-  const _StatusChip({required this.isActive, required this.activeLabel, required this.pendingLabel});
+  const _StatusChip(
+      {required this.isActive,
+      required this.activeLabel,
+      required this.pendingLabel});
 
   @override
   Widget build(BuildContext context) {
@@ -1007,7 +1313,8 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         (isActive ? activeLabel : pendingLabel).toUpperCase(),
-        style: AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
+        style:
+            AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
       ),
     );
   }
@@ -1038,7 +1345,9 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (_) { if (mounted) setState(() => _loading = false); },
+        onPageFinished: (_) {
+          if (mounted) setState(() => _loading = false);
+        },
       ))
       ..loadHtmlString('''
 <!DOCTYPE html>
@@ -1059,7 +1368,8 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+      appBar:
+          AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),

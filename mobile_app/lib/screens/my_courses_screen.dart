@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../models/enrollment.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/fade_slide_in.dart';
 import 'course_detail_screen.dart';
 
 /// Port of my-courses.html. Embedded as a swipeable tab inside
@@ -36,7 +37,10 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
-      setState(() { _enrollments = []; _error = null; });
+      setState(() {
+        _enrollments = [];
+        _error = null;
+      });
       return;
     }
     try {
@@ -45,21 +49,33 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
           .select('id, course_slug, status, created_at')
           .eq('user_id', user.id)
           .order('created_at', ascending: false);
-      final enrollments = (rows as List).map((r) => Enrollment.fromJson(r as Map<String, dynamic>)).toList();
+      final enrollments = (rows as List)
+          .map((r) => Enrollment.fromJson(r as Map<String, dynamic>))
+          .toList();
 
       if (enrollments.isNotEmpty) {
         final slugs = enrollments.map((e) => e.courseSlug).toList();
         // title_ar isn't an actual column on courses (the migration for it
         // was never run against production) — fetching it explicitly 400s,
         // unlike select('*') elsewhere which just silently omits it.
-        final courseRows = await sb.from('courses').select('slug, title').inFilter('slug', slugs);
+        final courseRows = await sb
+            .from('courses')
+            .select('slug, title')
+            .inFilter('slug', slugs);
         final map = <String, Map<String, dynamic>>{};
         for (final c in (courseRows as List)) {
           map[c['slug'] as String] = c as Map<String, dynamic>;
         }
-        setState(() { _enrollments = enrollments; _coursesBySlug = map; _error = null; });
+        setState(() {
+          _enrollments = enrollments;
+          _coursesBySlug = map;
+          _error = null;
+        });
       } else {
-        setState(() { _enrollments = enrollments; _error = null; });
+        setState(() {
+          _enrollments = enrollments;
+          _error = null;
+        });
       }
     } catch (e) {
       setState(() => _error = e.toString());
@@ -75,7 +91,9 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(_error!, style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+            Text(_error!,
+                style: AppFonts.body(color: AppColors.muted),
+                textAlign: TextAlign.center),
             const SizedBox(height: 12),
             OutlinedButton(onPressed: _load, child: Text(t('retry'))),
           ],
@@ -89,7 +107,9 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(t('no_enrollments'), style: AppFonts.body(color: AppColors.muted), textAlign: TextAlign.center),
+          child: Text(t('no_enrollments'),
+              style: AppFonts.body(color: AppColors.muted),
+              textAlign: TextAlign.center),
         ),
       );
     }
@@ -103,43 +123,57 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
           final e = _enrollments![i];
           final c = _coursesBySlug[e.courseSlug];
           final title = c?['title'] as String? ?? e.courseSlug;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: AppColors.panel2,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.line),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: AppFonts.body(size: 16, weight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text('${t('enrolled_on')} ${e.createdAt.toLocal().toString().split(' ').first}',
-                          style: AppFonts.mono(size: 10.5, letterSpacing: 0.3)),
-                    ],
+          return FadeSlideIn(
+            delayMs: (i % 8) * 45,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              decoration: BoxDecoration(
+                color: AppColors.panel2,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title,
+                            style: AppFonts.body(
+                                size: 16, weight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(
+                            '${t('enrolled_on')} ${e.createdAt.toLocal().toString().split(' ').first}',
+                            style:
+                                AppFonts.mono(size: 10.5, letterSpacing: 0.3)),
+                      ],
+                    ),
                   ),
-                ),
-                OutlinedButton(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CourseDetailScreen(slug: e.courseSlug))),
-                  child: Text(e.isActive ? t('watch') : t('view')),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: e.isActive ? AppColors.teal : AppColors.teal),
-                    borderRadius: BorderRadius.circular(999),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                CourseDetailScreen(slug: e.courseSlug))),
+                    child: Text(e.isActive ? t('watch') : t('view')),
                   ),
-                  child: Text(
-                    (e.isActive ? t('status_active') : t('status_pending')).toUpperCase(),
-                    style: AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color: e.isActive ? AppColors.teal : AppColors.teal),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      (e.isActive ? t('status_active') : t('status_pending'))
+                          .toUpperCase(),
+                      style: AppFonts.mono(
+                          size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },

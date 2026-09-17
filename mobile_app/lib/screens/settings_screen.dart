@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/ambient_background.dart';
+import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
 import 'info_screens.dart';
@@ -17,7 +18,8 @@ class SettingsScreen extends StatelessWidget {
   final bool loggedIn;
   final bool isTeacher;
 
-  const SettingsScreen({super.key, required this.loggedIn, required this.isTeacher});
+  const SettingsScreen(
+      {super.key, required this.loggedIn, required this.isTeacher});
 
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
@@ -36,62 +38,80 @@ class SettingsScreen extends StatelessWidget {
             // their ZainCash / Qi Card payout details live). For everyone
             // else it renders disabled with a one-line explanation rather
             // than being a tap target that leads to a teacher-gated screen.
-            _SettingsTile(
-              icon: Icons.account_balance_wallet_outlined,
-              accent: AppColors.teal,
-              title: t('settings_payment_info'),
-              subtitle: isTeacher
-                  ? t('settings_payment_info_sub')
-                  : t('settings_payment_teacher_only'),
-              enabled: isTeacher,
-              // Reuses the teacher dashboard's existing profile view, which
-              // already edits teacher_zaincash_phone / teacher_qi_account_number
-              // / teacher_qi_qr_url — no second copy of that form.
-              onTap: () => _push(context, const TeacherScreen(openPaymentInfo: true)),
-            ),
-            const SizedBox(height: 12),
-            _SettingsTile(
-              icon: Icons.support_agent_outlined,
-              accent: AppColors.teal,
-              title: t('settings_support'),
-              subtitle: t('settings_support_sub'),
-              onTap: () => _push(context, const SupportScreen()),
-            ),
-            const SizedBox(height: 12),
-            _SettingsTile(
-              icon: AppTheme.instance.isDark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-              accent: AppColors.byline,
-              title: t('settings_appearance'),
-              subtitle: AppTheme.instance.isDark
-                  ? t('settings_appearance_dark')
-                  : t('settings_appearance_light'),
-              trailing: Switch(
-                value: AppTheme.instance.isDark,
-                activeThumbColor: AppColors.red,
-                onChanged: (_) => AppTheme.instance.toggle(),
+            FadeSlideIn(
+              delayMs: 0,
+              child: _SettingsTile(
+                icon: Icons.account_balance_wallet_outlined,
+                accent: AppColors.teal,
+                title: t('settings_payment_info'),
+                subtitle: isTeacher
+                    ? t('settings_payment_info_sub')
+                    : t('settings_payment_teacher_only'),
+                enabled: isTeacher,
+                // Reuses the teacher dashboard's existing profile view, which
+                // already edits teacher_zaincash_phone / teacher_qi_account_number
+                // / teacher_qi_qr_url — no second copy of that form.
+                onTap: () =>
+                    _push(context, const TeacherScreen(openPaymentInfo: true)),
               ),
-              onTap: () => AppTheme.instance.toggle(),
             ),
             const SizedBox(height: 12),
-            _SettingsTile(
-              icon: Icons.privacy_tip_outlined,
-              accent: AppColors.teal,
-              title: t('settings_privacy'),
-              subtitle: t('settings_privacy_sub'),
-              onTap: () => _push(context, const PrivacyScreen()),
+            FadeSlideIn(
+              delayMs: 60,
+              child: _SettingsTile(
+                icon: Icons.support_agent_outlined,
+                accent: AppColors.teal,
+                title: t('settings_support'),
+                subtitle: t('settings_support_sub'),
+                onTap: () => _push(context, const SupportScreen()),
+              ),
             ),
             const SizedBox(height: 12),
-            _SettingsTile(
-              icon: loggedIn ? Icons.logout : Icons.login,
-              accent: AppColors.red,
-              title: loggedIn ? t('log_out') : t('log_in'),
-              onTap: () async {
-                if (loggedIn) {
-                  await SupabaseService.instance.logout();
-                } else {
-                  _push(context, const AuthScreen());
-                }
-              },
+            FadeSlideIn(
+              delayMs: 120,
+              child: _SettingsTile(
+                icon: AppTheme.instance.isDark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined,
+                accent: AppColors.byline,
+                title: t('settings_appearance'),
+                subtitle: AppTheme.instance.isDark
+                    ? t('settings_appearance_dark')
+                    : t('settings_appearance_light'),
+                trailing: Switch(
+                  value: AppTheme.instance.isDark,
+                  activeThumbColor: AppColors.red,
+                  onChanged: (_) => AppTheme.instance.toggle(),
+                ),
+                onTap: () => AppTheme.instance.toggle(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeSlideIn(
+              delayMs: 180,
+              child: _SettingsTile(
+                icon: Icons.privacy_tip_outlined,
+                accent: AppColors.teal,
+                title: t('settings_privacy'),
+                subtitle: t('settings_privacy_sub'),
+                onTap: () => _push(context, const PrivacyScreen()),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeSlideIn(
+              delayMs: 240,
+              child: _SettingsTile(
+                icon: loggedIn ? Icons.logout : Icons.login,
+                accent: AppColors.red,
+                title: loggedIn ? t('log_out') : t('log_in'),
+                onTap: () async {
+                  if (loggedIn) {
+                    await SupabaseService.instance.logout();
+                  } else {
+                    _push(context, const AuthScreen());
+                  }
+                },
+              ),
             ),
           ],
         ),
@@ -147,7 +167,8 @@ class _SettingsTile extends StatelessWidget {
                   Text(title, style: AppFonts.heading(size: 19)),
                   if (subtitle != null) ...[
                     const SizedBox(height: 3),
-                    Text(subtitle!, style: AppFonts.body(size: 12, color: AppColors.muted)),
+                    Text(subtitle!,
+                        style: AppFonts.body(size: 12, color: AppColors.muted)),
                   ],
                 ],
               ),
