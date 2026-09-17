@@ -8,6 +8,7 @@ import '../widgets/bottom_nav.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
+import '../widgets/skeleton_card.dart';
 import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'my_courses_screen.dart';
@@ -213,9 +214,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       );
     }
     if (_courses == null) {
-      return Center(
-          child: Text(t('loading_courses'),
-              style: TextStyle(color: AppColors.muted)));
+      return GridView.builder(
+        padding: const EdgeInsets.all(16),
+        gridDelegate: _gridDelegate,
+        itemCount: 6,
+        itemBuilder: (context, i) =>
+            FadeSlideIn(delayMs: (i % 8) * 45, child: const SkeletonCard()),
+      );
     }
     if (_courses!.isEmpty) {
       return Center(
@@ -224,15 +229,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     }
     return GridView.builder(
       padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 380,
-        // Tall enough for a card with a cover image (thumbnail + text +
-        // price row); cards without one just have a bit of empty space
-        // above the price row, which the card's own Spacer already handles.
-        mainAxisExtent: 400,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-      ),
+      gridDelegate: _gridDelegate,
       itemCount: _courses!.length,
       itemBuilder: (context, i) {
         final course = _courses![i];
@@ -251,4 +248,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       },
     );
   }
+
+  // Tall enough for a card with a cover image (thumbnail + text + price
+  // row); cards without one just have a bit of empty space above the price
+  // row, which the card's own Spacer already handles.
+  static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
+    maxCrossAxisExtent: 380,
+    mainAxisExtent: 400,
+    crossAxisSpacing: 14,
+    mainAxisSpacing: 14,
+  );
 }

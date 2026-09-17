@@ -556,18 +556,26 @@ class _TeacherScreenState extends State<TeacherScreen> {
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(
-          leading: _view != _TView.overview
+          leading: widget.openPaymentInfo
+              // This instance was pushed just for Settings > Payment info --
+              // there's no dashboard overview to fall back into, so back
+              // means leave the screen entirely instead of switching views.
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
-                  onPressed: () => setState(() => _view =
-                      (_view == _TView.curriculum ||
-                              _view == _TView.codes ||
-                              _view == _TView.courseEdit)
-                          ? _TView.courses
-                          : _TView.overview),
+                  onPressed: () => Navigator.of(context).pop(),
                 )
-              : null,
-          title: Text(t('teacher_dashboard')),
+              : _view != _TView.overview
+                  ? IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => setState(() => _view =
+                          (_view == _TView.curriculum ||
+                                  _view == _TView.codes ||
+                                  _view == _TView.courseEdit)
+                              ? _TView.courses
+                              : _TView.overview),
+                    )
+                  : null,
+          title: Text(widget.openPaymentInfo ? t('settings_payment_info') : t('teacher_dashboard')),
         ),
         body: _buildBody(t),
       ),
