@@ -9,7 +9,6 @@ import '../models/lecture.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
-import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
 import 'video_player_screen.dart';
 
@@ -214,6 +213,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                         child: Text(_error!,
                             style: AppFonts.body(color: AppColors.muted)))
                     : _buildContent(),
+        // Price + enrol stay reachable no matter how far down the
+        // curriculum the reader has scrolled.
+        bottomNavigationBar: (_loading || _error != null || _course == null)
+            ? null
+            : _EnrollBar(
+                course: _course!,
+                status: _enrollmentStatus,
+                onEnroll: _openEnroll,
+              ),
       ),
     );
   }
@@ -227,13 +235,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final tag = course.localizedTagLabel(ar);
     final meta = course.localizedMeta(ar) ?? {};
     final isActive = _enrollmentStatus == 'active';
-    final isPending = _enrollmentStatus == 'pending';
     final freeLecture = _lectures.where((l) => l.isFree).isEmpty
         ? null
         : _lectures.firstWhere((l) => l.isFree);
+    final freeCount = _lectures.where((l) => l.isFree).length;
 
     return ListView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
       children: [
         _CourseHero(
           tag: tag,
@@ -242,59 +250,65 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           onPreview:
               freeLecture != null ? () => _watchLecture(freeLecture) : null,
         ),
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppFonts.heading(size: 30)),
-              if (teacher != null && teacher.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('${_t('by')} $teacher',
-                    style: AppFonts.mono(
-                        size: 12, color: AppColors.byline, letterSpacing: 0.3)),
-              ],
-              if (desc != null && desc.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(desc,
-                    style: AppFonts.body(size: 15, color: AppColors.muted)),
-              ],
-              if (meta.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                Wrap(
-                  spacing: 20,
-                  runSpacing: 12,
-                  children: meta.entries
-                      .map((e) => _MetaItem(label: e.key, value: '${e.value}'))
-                      .toList(),
-                ),
-              ],
-              const SizedBox(height: 24),
-              _buildPriceCard(isActive, isPending, course),
-              const SizedBox(height: 28),
-              if (_lectures.isNotEmpty)
-                _buildFeatureBullets(course, freeLecture),
-              const SizedBox(height: 28),
-              Text(
-                '${_t('curriculum').toUpperCase()} · ${_lectures.length} ${_t('lectures_count')}',
-                style: AppFonts.heading(size: 20),
-              ),
-              const SizedBox(height: 14),
-              if (_lectures.isEmpty)
-                Text(_t('no_lectures'),
-                    style: AppFonts.body(color: AppColors.muted))
-              else
-                _CurriculumCard(
-                  lectures: _orderedLectures(),
-                  isActive: isActive,
-                  completedIds: _completedLectureIds,
-                  progressByLecture: _progressByLecture,
-                  continueWatchingId: _continueWatchingId,
-                  onWatch: _watchLecture,
-                ),
-            ],
-          ),
+        const SizedBox(height: 18),
+        Text(title, style: AppFonts.body(size: 24, weight: FontWeight.w700)),
+        if (teacher != null && teacher.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Row(children: [
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: AppColors.panel2,
+              child: Text(teacher.characters.first.toUpperCase(),
+                  style: AppFonts.body(size: 12, weight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Text(teacher,
+                    style: AppFonts.body(size: 14, color: AppColors.muted))),
+          ]),
+        ],
+        if (desc != null && desc.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Text(desc, style: AppFonts.body(size: 15, color: AppColors.muted)),
+        ],
+        const SizedBox(height: 18),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _Chip(
+                icon: Icons.play_circle_outline,
+                label: '${_lectures.length} ${_t('feature_video_lectures')}'),
+            _Chip(
+                icon: Icons.all_inclusive,
+                label: _t('feature_lifetime_access')),
+            if (freeCount > 0)
+              _Chip(
+                  icon: Icons.lock_open_outlined,
+                  label: '$freeCount ${_t('feature_free_preview')}'),
+            for (final e in meta.entries) _Chip(label: '${e.key}: ${e.value}'),
+          ],
         ),
+        const SizedBox(height: 28),
+        Row(children: [
+          Text(_t('curriculum'),
+              style: AppFonts.body(size: 17, weight: FontWeight.w700)),
+          const SizedBox(width: 8),
+          Text('${_lectures.length} ${_t('lectures_count')}',
+              style: AppFonts.body(size: 13, color: AppColors.muted)),
+        ]),
+        const SizedBox(height: 12),
+        if (_lectures.isEmpty)
+          Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
+        else
+          _CurriculumCard(
+            lectures: _orderedLectures(),
+            isActive: isActive,
+            completedIds: _completedLectureIds,
+            progressByLecture: _progressByLecture,
+            continueWatchingId: _continueWatchingId,
+            onWatch: _watchLecture,
+          ),
       ],
     );
   }
@@ -311,95 +325,110 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       ..._lectures.where((l) => l.id != _continueWatchingId)
     ];
   }
+}
 
-  Widget _buildFeatureBullets(Course course, Lecture? freeLecture) {
-    final freeCount = _lectures.where((l) => l.isFree).length;
-    final items = <String>[
-      '${_lectures.length} ${_t('feature_video_lectures')}',
-      _t('feature_lifetime_access'),
-      if (freeCount > 0) '$freeCount ${_t('feature_free_preview')}',
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: items
-          .map((label) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle, size: 16, color: AppColors.teal),
-                    const SizedBox(width: 10),
-                    Expanded(
-                        child: Text(label, style: AppFonts.body(size: 13.5))),
-                  ],
-                ),
-              ))
-          .toList(),
-    );
-  }
+/// Sticky footer: price on one side, the enrol action on the other. Once
+/// the viewer is enrolled (or waiting on approval) it turns into a quiet
+/// status strip instead of disappearing, so the page still explains why
+/// there's no button.
+class _EnrollBar extends StatelessWidget {
+  final Course course;
+  final String? status;
+  final VoidCallback onEnroll;
+  const _EnrollBar(
+      {required this.course, required this.status, required this.onEnroll});
 
-  Widget _buildPriceCard(bool isActive, bool isPending, Course course) {
-    if (isActive) {
-      return GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.teal, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Text(_t('status_active').toUpperCase(),
-                    style: AppFonts.mono(
-                        size: 12,
-                        color: AppColors.teal,
-                        weight: FontWeight.w700))),
-          ],
-        ),
-      );
-    }
-    if (isPending) {
-      return GlassCard(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Icon(Icons.hourglass_top, color: AppColors.teal, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-                child: Text(_t('status_pending').toUpperCase(),
-                    style: AppFonts.mono(
-                        size: 12,
-                        color: AppColors.teal,
-                        weight: FontWeight.w700))),
-          ],
-        ),
-      );
-    }
-    return GlassCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          course.isFree
-              ? Text(_t('card_free'),
-                  style: AppFonts.heading(size: 32, color: AppColors.teal))
-              : Text(course.price ?? '', style: AppFonts.heading(size: 32)),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 52,
-            child: ElevatedButton(
-              onPressed: _openEnroll,
-              child: Text(course.isFree ? _t('enroll_free') : _t('enroll'),
-                  style: AppFonts.body(
-                      size: 15, weight: FontWeight.w700, color: Colors.white)),
-            ),
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final isActive = status == 'active';
+    final isPending = status == 'pending';
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    Widget content;
+    if (isActive || isPending) {
+      content = Row(children: [
+        Icon(isActive ? Icons.check_circle : Icons.hourglass_top,
+            color: AppColors.teal, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            isActive ? t('status_active') : t('pending_note'),
+            style: AppFonts.body(
+                size: 13.5, color: isActive ? AppColors.teal : AppColors.muted),
           ),
-        ],
+        ),
+      ]);
+    } else {
+      content = Row(children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(t('price'),
+                  style: AppFonts.body(size: 12, color: AppColors.muted)),
+              const SizedBox(height: 2),
+              course.isFree
+                  ? Text(t('card_free'),
+                      style: AppFonts.body(
+                          size: 20,
+                          weight: FontWeight.w700,
+                          color: AppColors.teal))
+                  : Text(course.price ?? '',
+                      style: AppFonts.code(size: 20, weight: FontWeight.w700)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 170,
+          child: ElevatedButton(
+            onPressed: onEnroll,
+            child: Text(course.isFree ? t('enroll_free') : t('enroll')),
+          ),
+        ),
+      ]);
+    }
+
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + bottomInset),
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        border: Border(top: BorderSide(color: AppColors.line)),
       ),
+      child: content,
     );
   }
 }
 
-/// Hero panel at the top of the course page — a stylized gradient in lieu of
-/// a real thumbnail image (no thumbnail_url column exists yet), with the
-/// course tag overlaid and, when a free lecture exists, a preview affordance.
+class _Chip extends StatelessWidget {
+  final IconData? icon;
+  final String label;
+  const _Chip({this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (icon != null) ...[
+          Icon(icon, size: 14, color: AppColors.muted),
+          const SizedBox(width: 6),
+        ],
+        Text(label, style: AppFonts.body(size: 12.5, color: AppColors.text)),
+      ]),
+    );
+  }
+}
+
+/// Rounded hero image with the course tag and, when a free lecture exists,
+/// a preview affordance over it.
 class _CourseHero extends StatelessWidget {
   final String? tag;
   final String? thumbnailUrl;
@@ -410,85 +439,88 @@ class _CourseHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (thumbnailUrl != null)
-            Image.network(
-              thumbnailUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const _HeroGradientFallback(),
-              loadingBuilder: (context, child, progress) =>
-                  progress == null ? child : const _HeroGradientFallback(),
-            )
-          else
-            const _HeroGradientFallback(),
-          if (thumbnailUrl == null)
-            Positioned(
-              right: -40,
-              top: -40,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [
-                    AppColors.red.withValues(alpha: 0.22),
-                    Colors.transparent
-                  ]),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: AspectRatio(
+        aspectRatio: 16 / 9,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (thumbnailUrl != null)
+              Image.network(
+                thumbnailUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    const _HeroGradientFallback(),
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : const _HeroGradientFallback(),
+              )
+            else
+              const _HeroGradientFallback(),
+            if (thumbnailUrl == null)
+              Positioned(
+                right: -40,
+                top: -40,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(colors: [
+                      AppColors.red.withValues(alpha: 0.22),
+                      Colors.transparent
+                    ]),
+                  ),
                 ),
               ),
-            ),
-          if (tag != null && tag!.isNotEmpty)
-            Positioned(
-              left: 16,
-              top: 16,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                    color: AppColors.bg.withValues(alpha: 0.6),
-                    borderRadius: BorderRadius.circular(999)),
-                child: Text(tag!.toUpperCase(), style: AppFonts.eyebrow()),
+            if (tag != null && tag!.isNotEmpty)
+              Positioned(
+                left: 16,
+                top: 16,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                      color: AppColors.bg.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(999)),
+                  child: Text(tag!, style: AppFonts.eyebrow(size: 11)),
+                ),
               ),
-            ),
-          if (onPreview != null)
-            Center(
-              child: GestureDetector(
-                onTap: onPreview,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: AppColors.red,
-                        boxShadow: [
-                          BoxShadow(
-                              color: AppColors.red.withValues(alpha: 0.4),
-                              blurRadius: 24,
-                              spreadRadius: 2)
-                        ],
+            if (onPreview != null)
+              Center(
+                child: GestureDetector(
+                  onTap: onPreview,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.red,
+                          boxShadow: [
+                            BoxShadow(
+                                color: AppColors.red.withValues(alpha: 0.4),
+                                blurRadius: 24,
+                                spreadRadius: 2)
+                          ],
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 32),
                       ),
-                      child: const Icon(Icons.play_arrow_rounded,
-                          color: Colors.white, size: 32),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(previewLabel!,
-                        style: AppFonts.mono(
-                            size: 11,
-                            color: AppColors.text,
-                            weight: FontWeight.w600)),
-                  ],
+                      const SizedBox(height: 10),
+                      Text(previewLabel!,
+                          style: AppFonts.body(
+                              size: 12.5,
+                              color: Colors.white,
+                              weight: FontWeight.w600)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -532,8 +564,8 @@ class _CurriculumCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.panel2,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: AppColors.line),
       ),
       child: Column(
@@ -541,6 +573,7 @@ class _CurriculumCard extends StatelessWidget {
           for (var i = 0; i < lectures.length; i++) ...[
             if (i > 0) Divider(height: 1, color: AppColors.line),
             _LectureRow(
+              index: i + 1,
               lecture: lectures[i],
               unlocked: lectures[i].isFree || isActive,
               completed: completedIds.contains(lectures[i].id),
@@ -555,29 +588,8 @@ class _CurriculumCard extends StatelessWidget {
   }
 }
 
-class _MetaItem extends StatelessWidget {
-  final String label;
-  final String value;
-  const _MetaItem({required this.label, required this.value});
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 130,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label.toUpperCase(),
-              style: AppFonts.mono(size: 9.5, letterSpacing: 0.5)),
-          const SizedBox(height: 4),
-          Text(value,
-              style: AppFonts.body(size: 12.5, weight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-}
-
 class _LectureRow extends StatelessWidget {
+  final int index;
   final Lecture lecture;
   final bool unlocked;
   final bool completed;
@@ -585,6 +597,7 @@ class _LectureRow extends StatelessWidget {
   final bool isContinueWatching;
   final VoidCallback onWatch;
   const _LectureRow({
+    required this.index,
     required this.lecture,
     required this.unlocked,
     required this.completed,
@@ -600,69 +613,89 @@ class _LectureRow extends StatelessWidget {
     final pct = progress == null
         ? null
         : (progress!['position']! / progress!['duration']!).clamp(0.0, 1.0);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isContinueWatching)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(t('continue_watching'),
-                  style: AppFonts.mono(
-                      size: 10,
-                      color: AppColors.red,
-                      weight: FontWeight.w700,
-                      letterSpacing: 0.5)),
+
+    Widget leading;
+    if (completed) {
+      leading = Icon(Icons.check_circle, size: 22, color: AppColors.teal);
+    } else if (!unlocked) {
+      leading = Icon(Icons.lock_outline, size: 20, color: AppColors.muted2);
+    } else {
+      leading = Text(index.toString().padLeft(2, '0'),
+          style: AppFonts.code(size: 13, color: AppColors.muted));
+    }
+
+    return InkWell(
+      onTap: unlocked ? onWatch : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(width: 28, child: Center(child: leading)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        lecture.localizedTitle(ar),
+                        style: AppFonts.body(
+                            size: 14.5,
+                            weight: FontWeight.w500,
+                            color: unlocked ? AppColors.text : AppColors.muted),
+                      ),
+                      if (isContinueWatching || lecture.isFree)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(
+                            isContinueWatching
+                                ? t('continue_watching')
+                                : t('free_tag'),
+                            style: AppFonts.body(
+                                size: 11.5,
+                                weight: FontWeight.w600,
+                                color: isContinueWatching
+                                    ? AppColors.red
+                                    : AppColors.teal),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (unlocked)
+                  Icon(
+                    isContinueWatching
+                        ? Icons.play_circle_fill
+                        : Icons.play_circle_outline,
+                    color: isContinueWatching ? AppColors.red : AppColors.muted,
+                    size: 24,
+                  )
+                else
+                  Text(t('locked'),
+                      style:
+                          AppFonts.body(size: 12.5, color: AppColors.muted2)),
+              ],
             ),
-          Row(
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    if (completed) ...[
-                      Icon(Icons.check_circle, size: 15, color: AppColors.teal),
-                      const SizedBox(width: 6),
-                    ],
-                    Flexible(
-                        child: Text(lecture.localizedTitle(ar),
-                            style: AppFonts.body(size: 14))),
-                    if (lecture.isFree) ...[
-                      const SizedBox(width: 8),
-                      Text(t('free_tag'),
-                          style: AppFonts.mono(
-                              size: 10,
-                              color: AppColors.teal,
-                              weight: FontWeight.w700)),
-                    ],
-                  ],
+            if (pct != null) ...[
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 38),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: pct,
+                    minHeight: 3,
+                    backgroundColor: AppColors.line,
+                    valueColor: AlwaysStoppedAnimation(AppColors.red),
+                  ),
                 ),
               ),
-              unlocked
-                  ? OutlinedButton(onPressed: onWatch, child: Text(t('watch')))
-                  : Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.lock_outline,
-                          size: 16, color: AppColors.muted2),
-                      const SizedBox(width: 4),
-                      Text(t('locked'),
-                          style:
-                              AppFonts.body(size: 13, color: AppColors.muted2)),
-                    ]),
             ],
-          ),
-          if (pct != null) ...[
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: pct,
-                minHeight: 4,
-                backgroundColor: AppColors.line,
-                valueColor: AlwaysStoppedAnimation(AppColors.red),
-              ),
-            ),
           ],
-        ],
+        ),
       ),
     );
   }

@@ -266,12 +266,19 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       );
     }
     if (_courses == null) {
-      return GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: _gridDelegate,
-        itemCount: 6,
-        itemBuilder: (context, i) =>
-            FadeSlideIn(delayMs: (i % 8) * 45, child: const SkeletonCard()),
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        children: [
+          const FadeSlideIn(
+              delayMs: 0, child: SizedBox(height: 280, child: SkeletonCard())),
+          const SizedBox(height: 24),
+          for (var i = 0; i < 4; i++) ...[
+            FadeSlideIn(
+                delayMs: 60 + i * 45,
+                child: const SizedBox(height: 96, child: SkeletonCard())),
+            const SizedBox(height: 10),
+          ],
+        ],
       );
     }
     if (_courses!.isEmpty) {
@@ -279,35 +286,74 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           child:
               Text(t('no_courses'), style: TextStyle(color: AppColors.muted)));
     }
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: _gridDelegate,
-      itemCount: _courses!.length,
-      itemBuilder: (context, i) {
-        final course = _courses![i];
-        // Cap the stagger so a long list doesn't leave the last cards
-        // waiting seconds to fade in.
-        return FadeSlideIn(
-          delayMs: (i % 8) * 45,
-          child: CourseCard(
-            course: course,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) => CourseDetailScreen(slug: course.slug)),
-            ),
-          ),
+
+    void open(Course c) => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => CourseDetailScreen(slug: c.slug)),
         );
-      },
+
+    final featured = _courses!.first;
+    final rest = _courses!.skip(1).toList();
+
+    // Featured course on top, then a compact list. Bottom padding clears
+    // the floating nav pill so the last row is never hidden behind it.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+      children: [
+        FadeSlideIn(
+          delayMs: 0,
+          child: _SectionHeader(title: t('home_featured')),
+        ),
+        const SizedBox(height: 10),
+        FadeSlideIn(
+          delayMs: 40,
+          child:
+              FeaturedCourseCard(course: featured, onTap: () => open(featured)),
+        ),
+        if (rest.isNotEmpty) ...[
+          const SizedBox(height: 26),
+          FadeSlideIn(
+            delayMs: 100,
+            child: _SectionHeader(
+                title: t('home_all_courses'), count: _courses!.length),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < rest.length; i++) ...[
+            FadeSlideIn(
+              delayMs: 140 + (i % 8) * 45,
+              child: CompactCourseCard(
+                  course: rest[i], onTap: () => open(rest[i])),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ],
     );
   }
+}
 
-  // Tall enough for a card with a cover image (thumbnail + text + price
-  // row); cards without one just have a bit of empty space above the price
-  // row, which the card's own Spacer already handles.
-  static const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-    maxCrossAxisExtent: 380,
-    mainAxisExtent: 400,
-    crossAxisSpacing: 14,
-    mainAxisSpacing: 14,
-  );
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final int? count;
+  const _SectionHeader({required this.title, this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(title, style: AppFonts.body(size: 17, weight: FontWeight.w700)),
+        if (count != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.panel2,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text('$count',
+                style: AppFonts.code(size: 11.5, color: AppColors.muted)),
+          ),
+        ],
+      ],
+    );
+  }
 }
