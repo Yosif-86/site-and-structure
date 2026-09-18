@@ -8,7 +8,8 @@ class VideoUrlResult {
   final String? url;
   final String? type; // 'hls'
   final String? error;
-  VideoUrlResult({this.url, this.type, this.error});
+  final int? statusCode;
+  VideoUrlResult({this.url, this.type, this.error, this.statusCode});
 }
 
 class OtpResult {
@@ -73,7 +74,8 @@ class ApiService {
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {
       return VideoUrlResult(
-          error: body['error'] as String? ?? 'err_video_unavailable');
+          error: body['error'] as String? ?? 'err_video_unavailable',
+          statusCode: res.statusCode);
     }
     return VideoUrlResult(
         url: body['url'] as String?, type: body['type'] as String?);

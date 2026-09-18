@@ -114,10 +114,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       return;
     }
     try {
-      final result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken)
+      var result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken)
           .timeout(const Duration(seconds: 15));
+      // An access token that expired while this screen was sitting idle (or
+      // was minted just before a session refresh elsewhere in the app)
+      // shows up here as a 401 "Invalid session" -- mirrors the retry
+      // course.html already does on the website rather than dead-ending on
+      // a raw, untranslated server error string.
+      if (result.statusCode == 401) {
+        final refreshed = await SupabaseService.instance.client.auth.refreshSession();
+        final newSession = refreshed.session;
+        if (newSession != null) {
+          result = await ApiService.getVideoUrl(widget.lectureId, newSession.accessToken)
+              .timeout(const Duration(seconds: 15));
+        }
+      }
       if (result.error != null || result.url == null) {
-        setState(() { _loading = false; _error = AppStrings.instance.t(result.error ?? 'err_video_unavailable'); });
+        if (!mounted) return;
+        setState(() { _loading = false; _error = AppStrings.instance.t('err_video_unavailable'); });
         return;
       }
 
