@@ -6,13 +6,16 @@ import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
+import '../widgets/glass_card.dart';
 import 'course_detail_screen.dart';
 
 /// Port of my-courses.html. Embedded as a swipeable tab inside
 /// CatalogueScreen's PageView (see FloatingBottomNav) rather than pushed as
 /// its own route — nothing else in the app navigates to it directly.
 class MyCoursesScreen extends StatefulWidget {
-  const MyCoursesScreen({super.key});
+  /// Empty-state CTA: jump to the Home tab (the parent owns the PageView).
+  final VoidCallback? onBrowse;
+  const MyCoursesScreen({super.key, this.onBrowse});
 
   @override
   State<MyCoursesScreen> createState() => MyCoursesScreenState();
@@ -61,7 +64,7 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
         // unlike select('*') elsewhere which just silently omits it.
         final courseRows = await sb
             .from('courses')
-            .select('slug, title')
+            .select('slug, title, thumbnail_url, teacher_name')
             .inFilter('slug', slugs);
         final map = <String, Map<String, dynamic>>{};
         for (final c in (courseRows as List)) {
@@ -110,77 +113,155 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
     if (_enrollments!.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(t('no_enrollments'),
-              style: AppFonts.body(color: AppColors.muted),
-              textAlign: TextAlign.center),
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: AppColors.panel,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Icon(Icons.school_outlined,
+                    color: AppColors.muted, size: 28),
+              ),
+              const SizedBox(height: 16),
+              Text(t('no_enrollments'),
+                  style: AppFonts.body(size: 15, color: AppColors.muted),
+                  textAlign: TextAlign.center),
+              if (widget.onBrowse != null) ...[
+                const SizedBox(height: 18),
+                OutlinedButton(
+                    onPressed: widget.onBrowse,
+                    child: Text(t('browse_catalogue'))),
+              ],
+            ],
+          ),
         ),
       );
     }
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         itemCount: _enrollments!.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           final e = _enrollments![i];
           final c = _coursesBySlug[e.courseSlug];
-          final title = c?['title'] as String? ?? e.courseSlug;
           return FadeSlideIn(
             delayMs: (i % 8) * 45,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              decoration: BoxDecoration(
-                color: AppColors.panel2,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.line),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(title,
-                            style: AppFonts.body(
-                                size: 16, weight: FontWeight.w600)),
-                        const SizedBox(height: 4),
-                        Text(
-                            '${t('enrolled_on')} ${e.createdAt.toLocal().toString().split(' ').first}',
-                            style:
-                                AppFonts.mono(size: 10.5, letterSpacing: 0.3)),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) =>
-                                CourseDetailScreen(slug: e.courseSlug))),
-                    child: Text(e.isActive ? t('watch') : t('view')),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                          color: e.isActive ? AppColors.teal : AppColors.teal),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      (e.isActive ? t('status_active') : t('status_pending'))
-                          .toUpperCase(),
-                      style: AppFonts.mono(
-                          size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
-                    ),
-                  ),
-                ],
-              ),
+            child: _EnrollmentRow(
+              title: c?['title'] as String? ?? e.courseSlug,
+              teacher: c?['teacher_name'] as String?,
+              thumbnailUrl: c?['thumbnail_url'] as String?,
+              isActive: e.isActive,
+              enrolledOn: e.createdAt,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => CourseDetailScreen(slug: e.courseSlug))),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _EnrollmentRow extends StatelessWidget {
+  final String title;
+  final String? teacher;
+  final String? thumbnailUrl;
+  final bool isActive;
+  final DateTime enrolledOn;
+  final VoidCallback onTap;
+  const _EnrollmentRow({
+    required this.title,
+    required this.teacher,
+    required this.thumbnailUrl,
+    required this.isActive,
+    required this.enrolledOn,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final ar = AppStrings.instance.isAr;
+    final statusColor = isActive ? AppColors.teal : AppColors.muted;
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.all(10),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 96,
+              height: 68,
+              child: thumbnailUrl != null
+                  ? Image.network(
+                      thumbnailUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                          ColoredBox(color: AppColors.panel2),
+                      loadingBuilder: (_, child, p) => p == null
+                          ? child
+                          : ColoredBox(color: AppColors.panel2),
+                    )
+                  : ColoredBox(
+                      color: AppColors.panel2,
+                      child: Icon(Icons.play_circle_outline,
+                          color: AppColors.muted2),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    style: AppFonts.body(size: 15, weight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+                if (teacher != null && teacher!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(teacher!,
+                      style: AppFonts.body(size: 12.5, color: AppColors.muted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                ],
+                const SizedBox(height: 6),
+                Row(children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                        color: statusColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(isActive ? t('status_active') : t('status_pending'),
+                      style: AppFonts.body(
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: statusColor)),
+                  const SizedBox(width: 8),
+                  Text(
+                    enrolledOn.toLocal().toString().split(' ').first,
+                    style: AppFonts.code(size: 11, color: AppColors.muted2),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+              color: AppColors.muted2),
+        ],
       ),
     );
   }

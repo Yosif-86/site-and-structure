@@ -163,7 +163,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 onPageChanged: (i) => setState(() => _currentPage = i),
                 children: [
                   RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
-                  MyCoursesScreen(key: _myCoursesKey),
+                  MyCoursesScreen(
+                      key: _myCoursesKey, onBrowse: () => _goToPage(0)),
                   const ProfileScreen(),
                   SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
                 ],

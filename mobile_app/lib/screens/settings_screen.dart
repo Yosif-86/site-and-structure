@@ -164,7 +164,8 @@ class _SettingsTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: AppFonts.heading(size: 19)),
+                  Text(title,
+                      style: AppFonts.body(size: 16, weight: FontWeight.w600)),
                   if (subtitle != null) ...[
                     const SizedBox(height: 3),
                     Text(subtitle!,
