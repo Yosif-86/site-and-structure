@@ -7,27 +7,38 @@ import io.flutter.plugin.common.MethodChannel
 
 /**
  * Native replacement for the broken screen_protector plugin's Android half.
- * Exposes a single method channel the Dart side (lib/services/screen_security.dart)
- * calls to toggle FLAG_SECURE, which blocks screenshots and screen recording
- * system-wide for as long as it's set — real, OS-level blocking (unlike iOS,
- * which can only detect a capture after the fact).
+ *
+ * FLAG_SECURE is set once here, permanently, for the whole app rather than
+ * toggled per-screen via the method channel (which the Dart side --
+ * lib/services/screen_security.dart -- used to call around just the video
+ * screen). That per-screen toggle had a real bug: Android captures the
+ * recents/task-switcher thumbnail essentially at the `paused` lifecycle
+ * transition, before Flutter's own app-backgrounded cover (PrivacyOverlay)
+ * can even render a frame -- so the thumbnail showed real course content
+ * instead of the branded cover. Setting FLAG_SECURE app-wide and always-on
+ * makes Android blank that thumbnail itself, unconditionally, with no
+ * Flutter-timing race possible. Trade-off: screenshots are now blocked
+ * everywhere in the app, not just on the video screen -- acceptable here
+ * since protecting the paid course content is the point.
+ *
+ * The method channel is kept (Dart's enableSecure/disableSecure calls
+ * become harmless no-ops on Android) so the iOS side -- which has no
+ * FLAG_SECURE equivalent and instead detects a capture after the fact --
+ * doesn't need its own call sites touched.
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "site_and_structure/screen_security"
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
-                "setSecure" -> {
-                    val secure = call.argument<Boolean>("secure") ?: false
-                    if (secure) {
-                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    } else {
-                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                    }
-                    result.success(null)
-                }
+                "setSecure" -> result.success(null) // no-op on Android now -- see class doc
                 else -> result.notImplemented()
             }
         }
