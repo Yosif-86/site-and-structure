@@ -20,6 +20,11 @@ import 'package:flutter/services.dart';
 /// doc comment for why). Left in place, and still called from
 /// video_player_screen.dart, purely so a future per-screen need on iOS (which
 /// has no FLAG_SECURE equivalent) doesn't require touching those call sites.
+///
+/// FLAG_SECURE only covers video — a screen recording's audio track is a
+/// separate Android API (AudioPlaybackCapture) that FLAG_SECURE doesn't
+/// touch, so it's blocked app-wide instead via
+/// android:allowAudioPlaybackCapture="false" in AndroidManifest.xml.
 class ScreenSecurity {
   static const _channel = MethodChannel('site_and_structure/screen_security');
   static void Function(String type)? _onCapture;

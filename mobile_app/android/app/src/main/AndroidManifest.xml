@@ -3,7 +3,15 @@
     <application
         android:label="site_and_structure"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowAudioPlaybackCapture="false">
+        <!-- FLAG_SECURE (set at runtime in MainActivity/ScreenSecurity while a
+             lecture is playing) only blocks the VIDEO half of a screen
+             recording; Android's AudioPlaybackCapture API (used by most
+             screen recorders since Android 10) captures this app's audio
+             output independently of that flag. This attribute opts the whole
+             app out of that API, so a screen recording of a lecture comes out
+             silent instead of video-blocked-but-audio-intact. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

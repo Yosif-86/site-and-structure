@@ -25,6 +25,13 @@ import io.flutter.plugin.common.MethodChannel
  * become harmless no-ops on Android) so the iOS side -- which has no
  * FLAG_SECURE equivalent and instead detects a capture after the fact --
  * doesn't need its own call sites touched.
+ *
+ * FLAG_SECURE only blocks the video half of a screen recording -- Android's
+ * AudioPlaybackCapture API (what most screen recorders use since Android 10
+ * to grab an app's audio output) is a separate mechanism the flag doesn't
+ * touch, so a lecture's audio was still coming through on an otherwise-blank
+ * recording. That's opted out app-wide via
+ * android:allowAudioPlaybackCapture="false" in AndroidManifest.xml.
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "site_and_structure/screen_security"
