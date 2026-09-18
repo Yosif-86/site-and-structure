@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
 import '../models/course.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/bottom_nav.dart';
@@ -122,6 +123,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           // together), so that was never a real sort key — order_index is
           // the actual, deterministic display order.
           .order('order_index', ascending: true);
+      if (!mounted) return;
       setState(() {
         _courses = (rows as List)
             .map((r) => Course.fromJson(r as Map<String, dynamic>))
@@ -129,7 +131,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         _error = null;
       });
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (!mounted) return;
+      setState(() => _error = ErrorReporter.userMessage(e, page: 'catalogue'));
     }
   }
 

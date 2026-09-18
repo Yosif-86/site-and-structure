@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../models/lecture.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/glass_card.dart';
@@ -44,18 +45,32 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     setState(() => _loading = true);
     final sb = SupabaseService.instance.client;
     try {
-      final courseRow = await sb.from('courses').select('*').eq('slug', widget.slug).eq('status', 'published').maybeSingle();
+      final courseRow = await sb
+          .from('courses')
+          .select('*')
+          .eq('slug', widget.slug)
+          .eq('status', 'published')
+          .maybeSingle();
       if (courseRow == null) {
-        setState(() { _loading = false; _error = 'not_found'; });
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'not_found';
+        });
         return;
       }
       final course = Course.fromJson(courseRow);
       // ascending must be explicit — postgrest's order() defaults it to
       // false, which was silently reversing the curriculum (Episode 2
       // before Episode 1) until this was caught by visual testing.
-      final lectureRows =
-          await sb.from('lectures').select('*').eq('course_id', course.id).order('order_index', ascending: true);
-      final lectures = (lectureRows as List).map((r) => Lecture.fromJson(r as Map<String, dynamic>)).toList();
+      final lectureRows = await sb
+          .from('lectures')
+          .select('*')
+          .eq('course_id', course.id)
+          .order('order_index', ascending: true);
+      final lectures = (lectureRows as List)
+          .map((r) => Lecture.fromJson(r as Map<String, dynamic>))
+          .toList();
 
       String? status;
       var completedIds = <String>{};
@@ -63,13 +78,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       String? continueWatchingId;
       final user = SupabaseService.instance.currentUser;
       if (user != null) {
-        final enr = await sb.from('enrollments').select('status').eq('user_id', user.id).eq('course_slug', course.slug).maybeSingle();
+        final enr = await sb
+            .from('enrollments')
+            .select('status')
+            .eq('user_id', user.id)
+            .eq('course_slug', course.slug)
+            .maybeSingle();
         status = enr?['status'] as String?;
 
         if (lectures.isNotEmpty) {
           final progressRows = await sb
               .from('lesson_progress')
-              .select('lecture_id, position_seconds, duration_seconds, completed, updated_at')
+              .select(
+                  'lecture_id, position_seconds, duration_seconds, completed, updated_at')
               .eq('user_id', user.id)
               .inFilter('lecture_id', lectures.map((l) => l.id).toList());
 
@@ -84,9 +105,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             final position = r['position_seconds'] as int? ?? 0;
             final duration = r['duration_seconds'] as int? ?? 0;
             if (position <= 0 || duration <= 0) continue;
-            progressByLecture[lectureId] = {'position': position, 'duration': duration};
-            final updatedAt = DateTime.tryParse(r['updated_at'] as String? ?? '');
-            if (updatedAt != null && (latestUpdate == null || updatedAt.isAfter(latestUpdate))) {
+            progressByLecture[lectureId] = {
+              'position': position,
+              'duration': duration
+            };
+            final updatedAt =
+                DateTime.tryParse(r['updated_at'] as String? ?? '');
+            if (updatedAt != null &&
+                (latestUpdate == null || updatedAt.isAfter(latestUpdate))) {
               latestUpdate = updatedAt;
               continueWatchingId = lectureId;
             }
@@ -94,6 +120,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _course = course;
         _lectures = lectures;
@@ -104,7 +131,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _loading = false;
       });
     } catch (e) {
-      setState(() { _loading = false; _error = e.toString(); });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = ErrorReporter.userMessage(e, page: 'course_detail');
+      });
     }
   }
 
@@ -112,7 +143,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   Future<void> _watchLecture(Lecture lecture) async {
     if (!SupabaseService.instance.isLoggedIn) {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
       if (!SupabaseService.instance.isLoggedIn || !mounted) return;
       await _load();
     }
@@ -131,7 +163,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   Future<void> _openEnroll() async {
     if (!SupabaseService.instance.isLoggedIn) {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
       if (!SupabaseService.instance.isLoggedIn || !mounted) return;
       // Logging in can reveal an enrollment that already exists under this
       // account (_enrollmentStatus was fetched while logged out, so it's
@@ -166,15 +199,20 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Directionality(
-      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      textDirection:
+          AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
         appBar: AppBar(),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error == 'not_found'
-                ? Center(child: Text(_t('course_not_found'), style: AppFonts.body(color: AppColors.muted)))
+                ? Center(
+                    child: Text(_t('course_not_found'),
+                        style: AppFonts.body(color: AppColors.muted)))
                 : _error != null
-                    ? Center(child: Text(_error!, style: AppFonts.body(color: AppColors.muted)))
+                    ? Center(
+                        child: Text(_error!,
+                            style: AppFonts.body(color: AppColors.muted)))
                     : _buildContent(),
       ),
     );
@@ -190,7 +228,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final meta = course.localizedMeta(ar) ?? {};
     final isActive = _enrollmentStatus == 'active';
     final isPending = _enrollmentStatus == 'pending';
-    final freeLecture = _lectures.where((l) => l.isFree).isEmpty ? null : _lectures.firstWhere((l) => l.isFree);
+    final freeLecture = _lectures.where((l) => l.isFree).isEmpty
+        ? null
+        : _lectures.firstWhere((l) => l.isFree);
 
     return ListView(
       padding: EdgeInsets.zero,
@@ -199,7 +239,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           tag: tag,
           thumbnailUrl: course.thumbnailUrl,
           previewLabel: freeLecture != null ? _t('preview_course') : null,
-          onPreview: freeLecture != null ? () => _watchLecture(freeLecture) : null,
+          onPreview:
+              freeLecture != null ? () => _watchLecture(freeLecture) : null,
         ),
         Padding(
           padding: const EdgeInsets.all(20),
@@ -209,24 +250,30 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               Text(title, style: AppFonts.heading(size: 30)),
               if (teacher != null && teacher.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('${_t('by')} $teacher', style: AppFonts.mono(size: 12, color: AppColors.byline, letterSpacing: 0.3)),
+                Text('${_t('by')} $teacher',
+                    style: AppFonts.mono(
+                        size: 12, color: AppColors.byline, letterSpacing: 0.3)),
               ],
               if (desc != null && desc.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(desc, style: AppFonts.body(size: 15, color: AppColors.muted)),
+                Text(desc,
+                    style: AppFonts.body(size: 15, color: AppColors.muted)),
               ],
               if (meta.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 Wrap(
                   spacing: 20,
                   runSpacing: 12,
-                  children: meta.entries.map((e) => _MetaItem(label: e.key, value: '${e.value}')).toList(),
+                  children: meta.entries
+                      .map((e) => _MetaItem(label: e.key, value: '${e.value}'))
+                      .toList(),
                 ),
               ],
               const SizedBox(height: 24),
               _buildPriceCard(isActive, isPending, course),
               const SizedBox(height: 28),
-              if (_lectures.isNotEmpty) _buildFeatureBullets(course, freeLecture),
+              if (_lectures.isNotEmpty)
+                _buildFeatureBullets(course, freeLecture),
               const SizedBox(height: 28),
               Text(
                 '${_t('curriculum').toUpperCase()} · ${_lectures.length} ${_t('lectures_count')}',
@@ -234,7 +281,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               ),
               const SizedBox(height: 14),
               if (_lectures.isEmpty)
-                Text(_t('no_lectures'), style: AppFonts.body(color: AppColors.muted))
+                Text(_t('no_lectures'),
+                    style: AppFonts.body(color: AppColors.muted))
               else
                 _CurriculumCard(
                   lectures: _orderedLectures(),
@@ -258,7 +306,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final match = _lectures.where((l) => l.id == _continueWatchingId);
     if (match.isEmpty) return _lectures;
     final continueLecture = match.first;
-    return [continueLecture, ..._lectures.where((l) => l.id != _continueWatchingId)];
+    return [
+      continueLecture,
+      ..._lectures.where((l) => l.id != _continueWatchingId)
+    ];
   }
 
   Widget _buildFeatureBullets(Course course, Lecture? freeLecture) {
@@ -277,7 +328,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                   children: [
                     Icon(Icons.check_circle, size: 16, color: AppColors.teal),
                     const SizedBox(width: 10),
-                    Expanded(child: Text(label, style: AppFonts.body(size: 13.5))),
+                    Expanded(
+                        child: Text(label, style: AppFonts.body(size: 13.5))),
                   ],
                 ),
               ))
@@ -293,7 +345,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           children: [
             Icon(Icons.check_circle, color: AppColors.teal, size: 22),
             const SizedBox(width: 12),
-            Expanded(child: Text(_t('status_active').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
+            Expanded(
+                child: Text(_t('status_active').toUpperCase(),
+                    style: AppFonts.mono(
+                        size: 12,
+                        color: AppColors.teal,
+                        weight: FontWeight.w700))),
           ],
         ),
       );
@@ -305,7 +362,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           children: [
             Icon(Icons.hourglass_top, color: AppColors.teal, size: 22),
             const SizedBox(width: 12),
-            Expanded(child: Text(_t('status_pending').toUpperCase(), style: AppFonts.mono(size: 12, color: AppColors.teal, weight: FontWeight.w700))),
+            Expanded(
+                child: Text(_t('status_pending').toUpperCase(),
+                    style: AppFonts.mono(
+                        size: 12,
+                        color: AppColors.teal,
+                        weight: FontWeight.w700))),
           ],
         ),
       );
@@ -316,14 +378,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           course.isFree
-              ? Text(_t('card_free'), style: AppFonts.heading(size: 32, color: AppColors.teal))
+              ? Text(_t('card_free'),
+                  style: AppFonts.heading(size: 32, color: AppColors.teal))
               : Text(course.price ?? '', style: AppFonts.heading(size: 32)),
           const SizedBox(height: 16),
           SizedBox(
             height: 52,
             child: ElevatedButton(
               onPressed: _openEnroll,
-              child: Text(course.isFree ? _t('enroll_free') : _t('enroll'), style: AppFonts.body(size: 15, weight: FontWeight.w700, color: Colors.white)),
+              child: Text(course.isFree ? _t('enroll_free') : _t('enroll'),
+                  style: AppFonts.body(
+                      size: 15, weight: FontWeight.w700, color: Colors.white)),
             ),
           ),
         ],
@@ -340,7 +405,8 @@ class _CourseHero extends StatelessWidget {
   final String? thumbnailUrl;
   final String? previewLabel;
   final VoidCallback? onPreview;
-  const _CourseHero({this.tag, this.thumbnailUrl, this.previewLabel, this.onPreview});
+  const _CourseHero(
+      {this.tag, this.thumbnailUrl, this.previewLabel, this.onPreview});
 
   @override
   Widget build(BuildContext context) {
@@ -353,8 +419,10 @@ class _CourseHero extends StatelessWidget {
             Image.network(
               thumbnailUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => const _HeroGradientFallback(),
-              loadingBuilder: (context, child, progress) => progress == null ? child : const _HeroGradientFallback(),
+              errorBuilder: (context, error, stackTrace) =>
+                  const _HeroGradientFallback(),
+              loadingBuilder: (context, child, progress) =>
+                  progress == null ? child : const _HeroGradientFallback(),
             )
           else
             const _HeroGradientFallback(),
@@ -367,7 +435,10 @@ class _CourseHero extends StatelessWidget {
                 height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [AppColors.red.withValues(alpha: 0.22), Colors.transparent]),
+                  gradient: RadialGradient(colors: [
+                    AppColors.red.withValues(alpha: 0.22),
+                    Colors.transparent
+                  ]),
                 ),
               ),
             ),
@@ -376,8 +447,11 @@ class _CourseHero extends StatelessWidget {
               left: 16,
               top: 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: AppColors.bg.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(999)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                    color: AppColors.bg.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(999)),
                 child: Text(tag!.toUpperCase(), style: AppFonts.eyebrow()),
               ),
             ),
@@ -394,12 +468,22 @@ class _CourseHero extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: AppColors.red,
-                        boxShadow: [BoxShadow(color: AppColors.red.withValues(alpha: 0.4), blurRadius: 24, spreadRadius: 2)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: AppColors.red.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              spreadRadius: 2)
+                        ],
                       ),
-                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 32),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          color: Colors.white, size: 32),
                     ),
                     const SizedBox(height: 10),
-                    Text(previewLabel!, style: AppFonts.mono(size: 11, color: AppColors.text, weight: FontWeight.w600)),
+                    Text(previewLabel!,
+                        style: AppFonts.mono(
+                            size: 11,
+                            color: AppColors.text,
+                            weight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -482,9 +566,11 @@ class _MetaItem extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label.toUpperCase(), style: AppFonts.mono(size: 9.5, letterSpacing: 0.5)),
+          Text(label.toUpperCase(),
+              style: AppFonts.mono(size: 9.5, letterSpacing: 0.5)),
           const SizedBox(height: 4),
-          Text(value, style: AppFonts.body(size: 12.5, weight: FontWeight.w500)),
+          Text(value,
+              style: AppFonts.body(size: 12.5, weight: FontWeight.w500)),
         ],
       ),
     );
@@ -511,7 +597,9 @@ class _LectureRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ar = AppStrings.instance.isAr;
     final t = AppStrings.instance.t;
-    final pct = progress == null ? null : (progress!['position']! / progress!['duration']!).clamp(0.0, 1.0);
+    final pct = progress == null
+        ? null
+        : (progress!['position']! / progress!['duration']!).clamp(0.0, 1.0);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
@@ -520,7 +608,12 @@ class _LectureRow extends StatelessWidget {
           if (isContinueWatching)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
-              child: Text(t('continue_watching'), style: AppFonts.mono(size: 10, color: AppColors.red, weight: FontWeight.w700, letterSpacing: 0.5)),
+              child: Text(t('continue_watching'),
+                  style: AppFonts.mono(
+                      size: 10,
+                      color: AppColors.red,
+                      weight: FontWeight.w700,
+                      letterSpacing: 0.5)),
             ),
           Row(
             children: [
@@ -531,10 +624,16 @@ class _LectureRow extends StatelessWidget {
                       Icon(Icons.check_circle, size: 15, color: AppColors.teal),
                       const SizedBox(width: 6),
                     ],
-                    Flexible(child: Text(lecture.localizedTitle(ar), style: AppFonts.body(size: 14))),
+                    Flexible(
+                        child: Text(lecture.localizedTitle(ar),
+                            style: AppFonts.body(size: 14))),
                     if (lecture.isFree) ...[
                       const SizedBox(width: 8),
-                      Text(t('free_tag'), style: AppFonts.mono(size: 10, color: AppColors.teal, weight: FontWeight.w700)),
+                      Text(t('free_tag'),
+                          style: AppFonts.mono(
+                              size: 10,
+                              color: AppColors.teal,
+                              weight: FontWeight.w700)),
                     ],
                   ],
                 ),
@@ -542,9 +641,12 @@ class _LectureRow extends StatelessWidget {
               unlocked
                   ? OutlinedButton(onPressed: onWatch, child: Text(t('watch')))
                   : Row(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(Icons.lock_outline, size: 16, color: AppColors.muted2),
+                      Icon(Icons.lock_outline,
+                          size: 16, color: AppColors.muted2),
                       const SizedBox(width: 4),
-                      Text(t('locked'), style: AppFonts.body(size: 13, color: AppColors.muted2)),
+                      Text(t('locked'),
+                          style:
+                              AppFonts.body(size: 13, color: AppColors.muted2)),
                     ]),
             ],
           ),
@@ -582,15 +684,30 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
   bool _done = false;
 
   Future<void> _submit() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser!;
     try {
-      await sb.from('enrollments').insert({'user_id': user.id, 'course_slug': widget.course.slug, 'status': 'active'});
-      setState(() { _loading = false; _done = true; });
+      await sb.from('enrollments').insert({
+        'user_id': user.id,
+        'course_slug': widget.course.slug,
+        'status': 'active'
+      });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _done = true;
+      });
       widget.onDone();
     } catch (e) {
-      setState(() { _loading = false; _error = e.toString(); });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = ErrorReporter.userMessage(e, page: 'enroll_free');
+      });
     }
   }
 
@@ -599,29 +716,41 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
     final t = AppStrings.instance.t;
     final ar = AppStrings.instance.isAr;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 24),
       child: SafeArea(
         child: _done
             ? Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
+                Icon(Icons.check_circle_outline,
+                    color: AppColors.teal, size: 44),
                 const SizedBox(height: 12),
                 Text(t('enrolled'), style: AppFonts.heading(size: 22)),
                 const SizedBox(height: 16),
-                OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(t('btn_close'))),
+                OutlinedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(t('btn_close'))),
                 const SizedBox(height: 12),
               ])
             : Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(widget.course.localizedTitle(ar), style: AppFonts.heading(size: 22)),
+                Text(widget.course.localizedTitle(ar),
+                    style: AppFonts.heading(size: 22)),
                 const SizedBox(height: 6),
-                Text(t('free_course_sub'), style: AppFonts.body(size: 13, color: AppColors.muted)),
+                Text(t('free_course_sub'),
+                    style: AppFonts.body(size: 13, color: AppColors.muted)),
                 if (_error != null) ...[
                   const SizedBox(height: 10),
-                  Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
+                  Text(_error!,
+                      style: AppFonts.body(size: 12.5, color: AppColors.red)),
                 ],
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton(onPressed: _loading ? null : _submit, child: Text(t('enroll_free'))),
+                  child: ElevatedButton(
+                      onPressed: _loading ? null : _submit,
+                      child: Text(t('enroll_free'))),
                 ),
                 const SizedBox(height: 16),
               ]),
@@ -673,7 +802,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   Future<void> _loadPaymentInfo() async {
     try {
       final sb = SupabaseService.instance.client;
-      final rows = await sb.rpc('get_course_payment_info', params: {'p_course_slug': widget.course.slug});
+      final rows = await sb.rpc('get_course_payment_info',
+          params: {'p_course_slug': widget.course.slug});
       if (rows is List && rows.isNotEmpty) {
         final row = rows.first as Map<String, dynamic>;
         setState(() {
@@ -690,21 +820,28 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   }
 
   int _parsePrice(dynamic price) {
-    final digits = RegExp(r'\d').allMatches(price?.toString() ?? '').map((m) => m.group(0)).join();
+    final digits = RegExp(r'\d')
+        .allMatches(price?.toString() ?? '')
+        .map((m) => m.group(0))
+        .join();
     return digits.isEmpty ? 0 : int.parse(digits);
   }
 
   Future<void> _applyDiscount() async {
     final t = AppStrings.instance.t;
     final code = _discountCtrl.text.trim().toUpperCase();
-    setState(() { _discountError = null; _discountOk = null; });
+    setState(() {
+      _discountError = null;
+      _discountOk = null;
+    });
     if (code.isEmpty) {
-      setState(() => _discountError = t('err_choose_payment'));
+      setState(() => _discountError = t('err_enter_discount_code'));
       return;
     }
     try {
       final sb = SupabaseService.instance.client;
-      final rows = await sb.rpc('redeem_discount_code', params: {'p_code': code, 'p_course_id': widget.course.id});
+      final rows = await sb.rpc('redeem_discount_code',
+          params: {'p_code': code, 'p_course_id': widget.course.id});
       if (rows is! List || rows.isEmpty) {
         setState(() => _discountError = t('err_invalid_discount'));
         return;
@@ -734,7 +871,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   }
 
   Future<void> _pickProof() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked != null) setState(() => _proof = picked);
   }
 
@@ -748,12 +886,18 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       setState(() => _error = t('err_upload_proof'));
       return;
     }
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser!;
     try {
-      final fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_proof!.name}';
-      await sb.storage.from('payment-proofs').upload(fileName, File(_proof!.path));
+      final fileName =
+          '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_proof!.name}';
+      await sb.storage
+          .from('payment-proofs')
+          .upload(fileName, File(_proof!.path));
       await sb.from('enrollments').insert({
         'user_id': user.id,
         'course_slug': widget.course.slug,
@@ -762,10 +906,18 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         'payment_detail': _detailCtrl.text.trim(),
         'payment_proof_path': fileName,
       });
-      setState(() { _loading = false; _done = true; });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _done = true;
+      });
       widget.onDone();
     } catch (e) {
-      setState(() { _loading = false; _error = t('err_upload_failed') + e.toString(); });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = ErrorReporter.userMessage(e, page: 'enroll_paid');
+      });
     }
   }
 
@@ -774,106 +926,165 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
     final t = AppStrings.instance.t;
     final ar = AppStrings.instance.isAr;
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 24),
       child: SafeArea(
         child: SingleChildScrollView(
           child: _done
               ? Column(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
+                  Icon(Icons.check_circle_outline,
+                      color: AppColors.teal, size: 44),
                   const SizedBox(height: 12),
                   Text(t('submitted'), style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 8),
-                  Text(t('pending_note'), textAlign: TextAlign.center, style: AppFonts.body(size: 13, color: AppColors.muted)),
+                  Text(t('pending_note'),
+                      textAlign: TextAlign.center,
+                      style: AppFonts.body(size: 13, color: AppColors.muted)),
                   const SizedBox(height: 16),
-                  OutlinedButton(onPressed: () => Navigator.of(context).pop(), child: Text(t('btn_close'))),
+                  OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(t('btn_close'))),
                   const SizedBox(height: 12),
                 ])
-              : Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: [
-                  Text(widget.course.localizedTitle(ar), style: AppFonts.heading(size: 22)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${_discountedPrice ?? widget.course.price ?? ''}${t('choose_payment_sub')}',
-                    style: AppFonts.body(size: 13, color: AppColors.muted),
-                  ),
-                  if (_payInfoLoading) ...[
-                    const SizedBox(height: 12),
-                    const SizedBox(height: 2, width: 60, child: LinearProgressIndicator()),
-                  ] else if ((_payZaincashPhone?.isNotEmpty ?? false) || (_payQiAccountNumber?.isNotEmpty ?? false) || (_payQiQrUrl?.isNotEmpty ?? false)) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.teal.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.teal.withOpacity(0.3)),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                      Text(widget.course.localizedTitle(ar),
+                          style: AppFonts.heading(size: 22)),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${_discountedPrice ?? widget.course.price ?? ''}${t('choose_payment_sub')}',
+                        style: AppFonts.body(size: 13, color: AppColors.muted),
                       ),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(t('send_payment_to'), style: AppFonts.body(size: 11.5, color: AppColors.muted)),
-                        const SizedBox(height: 4),
-                        if (_payZaincashPhone?.isNotEmpty ?? false)
-                          Text('${t('zain_cash')} — $_payZaincashPhone', style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-                        if (_payQiAccountNumber?.isNotEmpty ?? false)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Text('${t('qi_card')} — $_payQiAccountNumber', style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+                      if (_payInfoLoading) ...[
+                        const SizedBox(height: 12),
+                        const SizedBox(
+                            height: 2,
+                            width: 60,
+                            child: LinearProgressIndicator()),
+                      ] else if ((_payZaincashPhone?.isNotEmpty ?? false) ||
+                          (_payQiAccountNumber?.isNotEmpty ?? false) ||
+                          (_payQiQrUrl?.isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.teal.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.teal.withOpacity(0.3)),
                           ),
-                        if (_payQiQrUrl?.isNotEmpty ?? false)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(_payQiQrUrl!, width: 140, height: 140, fit: BoxFit.cover),
-                            ),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(t('send_payment_to'),
+                                    style: AppFonts.body(
+                                        size: 11.5, color: AppColors.muted)),
+                                const SizedBox(height: 4),
+                                if (_payZaincashPhone?.isNotEmpty ?? false)
+                                  Text('${t('zain_cash')} — $_payZaincashPhone',
+                                      style: AppFonts.body(
+                                          size: 14, weight: FontWeight.w700)),
+                                if (_payQiAccountNumber?.isNotEmpty ?? false)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                        '${t('qi_card')} — $_payQiAccountNumber',
+                                        style: AppFonts.body(
+                                            size: 14, weight: FontWeight.w700)),
+                                  ),
+                                if (_payQiQrUrl?.isNotEmpty ?? false)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(_payQiQrUrl!,
+                                          width: 140,
+                                          height: 140,
+                                          fit: BoxFit.cover),
+                                    ),
+                                  ),
+                              ]),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _discountCtrl,
+                            enabled: !_discountApplied,
+                            decoration:
+                                InputDecoration(labelText: t('discount_code')),
+                            textCapitalization: TextCapitalization.characters,
                           ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                            onPressed: _discountApplied ? null : _applyDiscount,
+                            child: Text(t('apply'))),
                       ]),
-                    ),
-                  ],
-                  const SizedBox(height: 14),
-                  Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _discountCtrl,
-                        enabled: !_discountApplied,
-                        decoration: InputDecoration(labelText: t('discount_code')),
-                        textCapitalization: TextCapitalization.characters,
+                      if (_discountError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(_discountError!,
+                              style: AppFonts.body(
+                                  size: 12, color: AppColors.red)),
+                        ),
+                      if (_discountOk != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(_discountOk!,
+                              style: AppFonts.body(
+                                  size: 12, color: AppColors.teal)),
+                        ),
+                      const SizedBox(height: 16),
+                      Row(children: [
+                        Expanded(
+                            child: _PayOption(
+                                label: t('zain_cash'),
+                                sub: t('zain_sub'),
+                                selected: _method == 'zain',
+                                onTap: () => setState(() => _method = 'zain'))),
+                        const SizedBox(width: 10),
+                        Expanded(
+                            child: _PayOption(
+                                label: t('qi_card'),
+                                sub: t('qi_sub'),
+                                selected: _method == 'qi',
+                                onTap: () => setState(() => _method = 'qi'))),
+                      ]),
+                      const SizedBox(height: 14),
+                      TextField(
+                          controller: _detailCtrl,
+                          decoration:
+                              InputDecoration(labelText: t('pay_label'))),
+                      const SizedBox(height: 14),
+                      OutlinedButton.icon(
+                        onPressed: _pickProof,
+                        icon: const Icon(Icons.image_outlined),
+                        label: Text(
+                            _proof == null
+                                ? t('payment_screenshot')
+                                : _proof!.name,
+                            overflow: TextOverflow.ellipsis),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton(onPressed: _discountApplied ? null : _applyDiscount, child: Text(t('apply'))),
-                  ]),
-                  if (_discountError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(_discountError!, style: AppFonts.body(size: 12, color: AppColors.red)),
-                    ),
-                  if (_discountOk != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(_discountOk!, style: AppFonts.body(size: 12, color: AppColors.teal)),
-                    ),
-                  const SizedBox(height: 16),
-                  Row(children: [
-                    Expanded(child: _PayOption(label: t('zain_cash'), sub: t('zain_sub'), selected: _method == 'zain', onTap: () => setState(() => _method = 'zain'))),
-                    const SizedBox(width: 10),
-                    Expanded(child: _PayOption(label: t('qi_card'), sub: t('qi_sub'), selected: _method == 'qi', onTap: () => setState(() => _method = 'qi'))),
-                  ]),
-                  const SizedBox(height: 14),
-                  TextField(controller: _detailCtrl, decoration: InputDecoration(labelText: t('pay_label'))),
-                  const SizedBox(height: 14),
-                  OutlinedButton.icon(
-                    onPressed: _pickProof,
-                    icon: const Icon(Icons.image_outlined),
-                    label: Text(_proof == null ? t('payment_screenshot') : _proof!.name, overflow: TextOverflow.ellipsis),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
-                  ],
-                  const SizedBox(height: 18),
-                  ElevatedButton(onPressed: _loading ? null : _submit, child: Text(t('confirm_payment'))),
-                  const SizedBox(height: 16),
-                ]),
+                      if (_error != null) ...[
+                        const SizedBox(height: 10),
+                        Text(_error!,
+                            style: AppFonts.body(
+                                size: 12.5, color: AppColors.red)),
+                      ],
+                      const SizedBox(height: 18),
+                      ElevatedButton(
+                          onPressed: _loading ? null : _submit,
+                          child: Text(t('confirm_payment'))),
+                      const SizedBox(height: 16),
+                    ]),
         ),
       ),
     );
@@ -885,7 +1096,11 @@ class _PayOption extends StatelessWidget {
   final String sub;
   final bool selected;
   final VoidCallback onTap;
-  const _PayOption({required this.label, required this.sub, required this.selected, required this.onTap});
+  const _PayOption(
+      {required this.label,
+      required this.sub,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {

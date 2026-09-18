@@ -435,7 +435,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         'discount_type': _dType,
         'discount_value': value,
         'max_uses': maxUses,
-        'expires_at': _dExpires!.toIso8601String(),
+        'expires_at': _dExpires!.toUtc().toIso8601String(),
         'created_by': user.id,
       });
       _dCode.clear();

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
 import '../models/enrollment.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
@@ -66,19 +67,22 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
         for (final c in (courseRows as List)) {
           map[c['slug'] as String] = c as Map<String, dynamic>;
         }
+        if (!mounted) return;
         setState(() {
           _enrollments = enrollments;
           _coursesBySlug = map;
           _error = null;
         });
       } else {
+        if (!mounted) return;
         setState(() {
           _enrollments = enrollments;
           _error = null;
         });
       }
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (!mounted) return;
+      setState(() => _error = ErrorReporter.userMessage(e, page: 'my_courses'));
     }
   }
 

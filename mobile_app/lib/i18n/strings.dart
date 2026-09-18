@@ -162,6 +162,10 @@ class AppStrings extends ChangeNotifier {
     'err_load_payment_info': 'تعذر تحميل معلومات الدفع.',
     'err_pick_image': 'اختر صورة إثبات الدفع.',
     'err_invalid_discount': 'رمز خصم غير صالح.',
+    'err_enter_discount_code': 'أدخل الكود أولاً.',
+    'err_generic': 'حدث خطأ غير متوقع. حاول مرة أخرى.',
+    'gate_not_admin': 'هذه الصفحة مخصصة للإدارة فقط.',
+    'btn_confirm': 'تأكيد',
     // Teacher dashboard
     'teacher_dashboard': 'لوحة المدرس',
     'my_courses_teacher': 'دوراتي',

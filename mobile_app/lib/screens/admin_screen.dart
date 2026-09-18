@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
@@ -346,7 +347,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final confirmed = await _confirm(
         t('confirm_reject_course') != 'confirm_reject_course'
             ? t('confirm_reject_course').replaceAll('{title}', title)
-            : 'Return "$title" to draft?');
+            : 'Return "$title" to draft?',
+        confirmLabel: t('btn_confirm'));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -374,9 +376,11 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      final token = _uuid();
+      // The token is the whole secret behind a teacher invite link, so it
+      // has to be unguessable -- a timestamp-derived id was enumerable.
+      final token = const Uuid().v4();
       final expiresAt =
-          DateTime.now().add(const Duration(days: 7)).toIso8601String();
+          DateTime.now().add(const Duration(days: 7)).toUtc().toIso8601String();
       await sb.from('teacher_invites').insert(
           {'token': token, 'created_by': user.id, 'expires_at': expiresAt});
       await _loadAll();
@@ -385,17 +389,10 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  String _uuid() {
-    // Lightweight v4-ish UUID without pulling in a new dependency beyond
-    // what's already used elsewhere in the app (package:uuid is already a
-    // dependency via supabase_service.dart's device id).
-    final rnd = DateTime.now().microsecondsSinceEpoch;
-    return 'inv-${rnd.toRadixString(16)}-${(rnd * 31).toRadixString(16)}';
-  }
-
   Future<void> _revokeInvite(String id) async {
-    final confirmed =
-        await _confirm('Revoke this invite? The link will stop working.');
+    final confirmed = await _confirm(
+        'Revoke this invite? The link will stop working.',
+        confirmLabel: AppStrings.instance.t('btn_confirm'));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -421,8 +418,9 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _clearErrorLog() async {
-    final confirmed =
-        await _confirm('Delete all error log entries? This cannot be undone.');
+    final confirmed = await _confirm(
+        'Delete all error log entries? This cannot be undone.',
+        confirmLabel: AppStrings.instance.t('btn_delete'));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -458,7 +456,7 @@ class _AdminScreenState extends State<AdminScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<bool> _confirm(String message) async {
+  Future<bool> _confirm(String message, {String? confirmLabel}) async {
     final t = AppStrings.instance.t;
     final result = await showDialog<bool>(
       context: context,
@@ -468,10 +466,10 @@ class _AdminScreenState extends State<AdminScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(t('btn_close'))),
+              child: Text(t('cancel'))),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(t('remove'))),
+              child: Text(confirmLabel ?? t('remove'))),
         ],
       ),
     );
@@ -538,7 +536,7 @@ class _AdminScreenState extends State<AdminScreen> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error ?? t('err_video_unavailable'),
+          child: Text(_error ?? t('gate_not_admin'),
               style: AppFonts.body(color: AppColors.muted),
               textAlign: TextAlign.center),
         ),
@@ -594,15 +592,20 @@ class _AdminScreenState extends State<AdminScreen> {
           .join();
       return sum + (digits.isEmpty ? 0 : int.parse(digits));
     });
+    final now = DateTime.now();
     final activeInvitesCount = _invites
         .where((i) =>
             i['used_at'] == null &&
-            DateTime.parse(i['expires_at'] as String).isAfter(DateTime.now()))
+            (DateTime.tryParse(i['expires_at'] as String? ?? '')
+                    ?.isAfter(now) ??
+                false))
         .length;
     final activeDiscountCodes = _discountCodes
         .where((c) =>
             c['is_active'] == true &&
-            DateTime.parse(c['expires_at'] as String).isAfter(DateTime.now()))
+            (DateTime.tryParse(c['expires_at'] as String? ?? '')
+                    ?.isAfter(now) ??
+                false))
         .length;
     final myPaySet = (_profileByUser[SupabaseService.instance.currentUser?.id]
                 ?['teacher_payment_detail'] as String?)
@@ -950,7 +953,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   List<Widget> _inviteRow(Map<String, dynamic> inv) {
     final usedAt = inv['used_at'];
-    final expiresAt = DateTime.parse(inv['expires_at'] as String);
+    final expiresAt = DateTime.tryParse(inv['expires_at'] as String? ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0);
     final status = usedAt != null
         ? 'used'
         : (expiresAt.isBefore(DateTime.now()) ? 'expired' : 'unused');
@@ -961,7 +965,7 @@ class _AdminScreenState extends State<AdminScreen> {
       Row(children: [
         Expanded(
             child: Text(
-                'Created ${DateTime.parse(inv['created_at'] as String).toLocal().toString().split(' ').first}',
+                'Created ${DateTime.tryParse(inv['created_at'] as String? ?? '')?.toLocal().toString().split(' ').first ?? '—'}',
                 style: AppFonts.body(size: 13, weight: FontWeight.w600))),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1090,8 +1094,9 @@ class _AdminScreenState extends State<AdminScreen> {
         final teacherName =
             (_profileByUser[course['teacher_id']]?['full_name'] as String?) ??
                 '—';
-        final expired =
-            DateTime.parse(c['expires_at'] as String).isBefore(DateTime.now());
+        final expired = DateTime.tryParse(c['expires_at'] as String? ?? '')
+                ?.isBefore(DateTime.now()) ??
+            true;
         final status = c['is_active'] != true
             ? 'inactive'
             : (expired ? 'expired' : 'active');
@@ -1149,9 +1154,10 @@ class _AdminScreenState extends State<AdminScreen> {
                   style: AppFonts.mono(size: 10.5, color: AppColors.muted)),
               const SizedBox(height: 4),
               Text(
-                  DateTime.parse(e['created_at'] as String)
-                      .toLocal()
-                      .toString(),
+                  DateTime.tryParse(e['created_at'] as String? ?? '')
+                          ?.toLocal()
+                          .toString() ??
+                      '—',
                   style: AppFonts.mono(size: 10.5, color: AppColors.muted2)),
               const SizedBox(height: 8),
               OutlinedButton(
