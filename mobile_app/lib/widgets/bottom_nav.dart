@@ -39,11 +39,14 @@ class FloatingBottomNav extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.glassBg,
+              color: AppColors.panel,
               borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.glassBorder),
+              border: Border.all(color: AppColors.line),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 18, offset: const Offset(0, 8)),
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6)),
               ],
             ),
             child: Row(
@@ -78,9 +81,7 @@ class _NavIcon extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: item.active
-                  ? LinearGradient(colors: [AppColors.red, AppColors.red.withValues(alpha: 0.75)])
-                  : null,
+              color: item.active ? AppColors.red : null,
             ),
             child: Icon(
               item.icon,

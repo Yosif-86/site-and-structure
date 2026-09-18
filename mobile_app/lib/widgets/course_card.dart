@@ -21,56 +21,105 @@ class CourseCard extends StatelessWidget {
 
     return GlassCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (course.thumbnailUrl != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: Image.network(
-                  course.thumbnailUrl!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-                  loadingBuilder: (context, child, progress) =>
-                      progress == null ? child : Container(color: AppColors.panel2),
-                ),
+          if (course.thumbnailUrl != null)
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Image.network(
+                course.thumbnailUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    ColoredBox(color: AppColors.panel2),
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : ColoredBox(color: AppColors.panel2),
               ),
             ),
-            const SizedBox(height: 12),
-          ],
-          if (tag != null && tag.isNotEmpty)
-            Text(tag.toUpperCase(), style: AppFonts.eyebrow(color: course.tagColor == 'green' ? AppColors.teal : AppColors.red)),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: AppFonts.body(size: 17, weight: FontWeight.w600),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (teacher != null && teacher.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text('${t('card_by')} $teacher', style: AppFonts.mono(size: 11, color: AppColors.byline, letterSpacing: 0.3)),
-          ],
-          if (desc != null && desc.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(desc, style: AppFonts.body(size: 13.5, color: AppColors.muted), maxLines: 3, overflow: TextOverflow.ellipsis),
-          ],
-          const Spacer(),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              course.isFree
-                  ? Text(t('card_free'), style: AppFonts.heading(size: 20, color: AppColors.teal))
-                  : Text(course.price ?? '', style: AppFonts.heading(size: 20, color: AppColors.red)),
-              Icon(ar ? Icons.arrow_back_ios : Icons.arrow_forward_ios, size: 14, color: AppColors.muted2),
-            ],
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (tag != null && tag.isNotEmpty) ...[
+                    _Tag(
+                        label: tag,
+                        color: course.tagColor == 'green'
+                            ? AppColors.teal
+                            : AppColors.red),
+                    const SizedBox(height: 8),
+                  ],
+                  Text(
+                    title,
+                    style: AppFonts.body(size: 16, weight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (teacher != null && teacher.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(teacher,
+                        style: AppFonts.body(size: 13, color: AppColors.muted)),
+                  ],
+                  if (desc != null && desc.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      desc,
+                      style: AppFonts.body(size: 13, color: AppColors.muted),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const Spacer(),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      course.isFree
+                          ? Text(t('card_free'),
+                              style: AppFonts.body(
+                                  size: 15,
+                                  weight: FontWeight.w700,
+                                  color: AppColors.teal))
+                          : Text(course.price ?? '',
+                              style: AppFonts.code(
+                                  size: 15,
+                                  weight: FontWeight.w700,
+                                  color: AppColors.red)),
+                      Icon(
+                          ar
+                              ? Icons.arrow_back_ios_new
+                              : Icons.arrow_forward_ios,
+                          size: 14,
+                          color: AppColors.muted2),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Tag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label, style: AppFonts.eyebrow(color: color, size: 10.5)),
     );
   }
 }

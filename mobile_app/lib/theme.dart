@@ -21,6 +21,12 @@ class AppColors {
   static Color glassBg = _dark.glassBg;
   static Color glassBorder = _dark.glassBorder;
 
+  /// Semantic colours. `red` is the brand accent (actions, prices); errors
+  /// must not borrow it or a warning reads like a button.
+  static Color error = const Color(0xFFE5484D);
+  static Color get success => teal;
+  static Color get accent => red;
+
   static void _apply(_Palette p) {
     bg = p.bg;
     panel = p.panel;
@@ -38,7 +44,18 @@ class AppColors {
 }
 
 class _Palette {
-  final Color bg, panel, panel2, line, red, teal, text, muted, muted2, byline, glassBg, glassBorder;
+  final Color bg,
+      panel,
+      panel2,
+      line,
+      red,
+      teal,
+      text,
+      muted,
+      muted2,
+      byline,
+      glassBg,
+      glassBorder;
   const _Palette({
     required this.bg,
     required this.panel,
@@ -118,7 +135,9 @@ class AppTheme extends ChangeNotifier {
     AppColors._apply(dark ? _dark : _light);
     notifyListeners();
     if (persist) {
-      _storage.write(key: _key, value: dark ? 'dark' : 'light').catchError((_) {});
+      _storage
+          .write(key: _key, value: dark ? 'dark' : 'light')
+          .catchError((_) {});
     }
   }
 }
@@ -145,28 +164,54 @@ class AppFonts {
     Color? color,
     FontWeight weight = FontWeight.w400,
   }) =>
-      GoogleFonts.workSans(fontSize: size, fontWeight: weight, color: color ?? AppColors.text);
+      GoogleFonts.workSans(
+          fontSize: size, fontWeight: weight, color: color ?? AppColors.text);
 
+  /// Secondary label style (captions, meta, tags). Was IBM Plex Mono with
+  /// wide tracking; now Work Sans so the UI runs on two families, not
+  /// three, and labels stop reading like terminal output. Prices and codes
+  /// that want tabular figures use [code] instead.
   static TextStyle mono({
-    double size = 11,
+    double size = 12,
     Color? color,
-    FontWeight weight = FontWeight.w600,
-    double letterSpacing = 1,
+    FontWeight weight = FontWeight.w500,
+    double letterSpacing = 0.1,
   }) =>
-      GoogleFonts.ibmPlexMono(
+      GoogleFonts.workSans(
         fontSize: size,
         fontWeight: weight,
         color: color ?? AppColors.muted2,
         letterSpacing: letterSpacing,
       );
 
-  /// Small uppercase mono tag/eyebrow style, e.g. course tags and card labels.
+  /// Tabular monospace for prices, IDs, and discount codes only.
+  static TextStyle code({
+    double size = 12,
+    Color? color,
+    FontWeight weight = FontWeight.w600,
+  }) =>
+      GoogleFonts.ibmPlexMono(
+        fontSize: size,
+        fontWeight: weight,
+        color: color ?? AppColors.text,
+        letterSpacing: 0,
+      );
+
+  /// Small uppercase category label above a title.
   static TextStyle eyebrow({Color? color, double size = 11}) =>
-      mono(size: size, color: color ?? AppColors.red, weight: FontWeight.w600, letterSpacing: 1.2);
+      GoogleFonts.workSans(
+        fontSize: size,
+        fontWeight: FontWeight.w600,
+        color: color ?? AppColors.red,
+        letterSpacing: 0.6,
+      );
 }
 
 ThemeData buildAppTheme() {
-  final base = ThemeData(useMaterial3: true, brightness: AppTheme.instance.isDark ? Brightness.dark : Brightness.light);
+  final base = ThemeData(
+      useMaterial3: true,
+      brightness:
+          AppTheme.instance.isDark ? Brightness.dark : Brightness.light);
   final workSansTextTheme = GoogleFonts.workSansTextTheme(base.textTheme)
       .apply(bodyColor: AppColors.text, displayColor: AppColors.text);
 
@@ -178,7 +223,7 @@ ThemeData buildAppTheme() {
       onPrimary: Colors.white,
       secondary: AppColors.teal,
       onSecondary: Colors.white,
-      error: AppColors.red,
+      error: AppColors.error,
       onError: Colors.white,
       surface: AppColors.panel,
       onSurface: AppColors.text,
@@ -187,21 +232,24 @@ ThemeData buildAppTheme() {
       headlineLarge: AppFonts.heading(size: 32),
       headlineMedium: AppFonts.heading(size: 24),
       headlineSmall: AppFonts.heading(size: 20),
-      titleLarge: GoogleFonts.workSans(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
-      labelSmall: AppFonts.mono(size: 10.5, color: AppColors.muted2, letterSpacing: 0.5),
+      titleLarge: GoogleFonts.workSans(
+          fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
+      labelSmall: AppFonts.mono(size: 11, color: AppColors.muted2),
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.bg,
       foregroundColor: AppColors.text,
       elevation: 0,
+      scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: AppFonts.heading(size: 19, letterSpacing: 0.2),
+      titleTextStyle: GoogleFonts.workSans(
+          fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.panel2,
+      color: AppColors.panel,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(color: AppColors.line),
       ),
     ),
@@ -209,46 +257,80 @@ ThemeData buildAppTheme() {
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.red,
         foregroundColor: Colors.white,
-        textStyle: GoogleFonts.workSans(fontSize: 13.5, fontWeight: FontWeight.w600, letterSpacing: 0.2),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        disabledBackgroundColor: AppColors.red.withValues(alpha: 0.4),
+        disabledForegroundColor: Colors.white70,
+        elevation: 0,
+        minimumSize: const Size.fromHeight(48),
+        textStyle: GoogleFonts.workSans(
+            fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.1),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control)),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.text,
-        textStyle: GoogleFonts.workSans(fontSize: 13.5, fontWeight: FontWeight.w600, letterSpacing: 0.2),
+        minimumSize: const Size(0, 44),
+        textStyle: GoogleFonts.workSans(
+            fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.1),
         side: BorderSide(color: AppColors.line),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.control)),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.red,
-        textStyle: GoogleFonts.workSans(fontSize: 13.5, fontWeight: FontWeight.w600),
+        minimumSize: const Size(0, 44),
+        textStyle:
+            GoogleFonts.workSans(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.panel,
-      labelStyle: AppFonts.mono(size: 10.5, color: AppColors.muted2, letterSpacing: 0.5),
-      floatingLabelStyle: AppFonts.mono(size: 10.5, color: AppColors.muted, letterSpacing: 0.5),
-      hintStyle: GoogleFonts.workSans(fontSize: 13.5, color: AppColors.muted2),
+      labelStyle: GoogleFonts.workSans(fontSize: 14, color: AppColors.muted),
+      floatingLabelStyle:
+          GoogleFonts.workSans(fontSize: 13, color: AppColors.muted),
+      hintStyle: GoogleFonts.workSans(fontSize: 14, color: AppColors.muted2),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         borderSide: BorderSide(color: AppColors.line),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.control),
         borderSide: BorderSide(color: AppColors.line),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: AppColors.red),
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: BorderSide(color: AppColors.red, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        borderSide: BorderSide(color: AppColors.error),
       ),
     ),
     dividerColor: AppColors.line,
+    dividerTheme:
+        DividerThemeData(color: AppColors.line, thickness: 1, space: 1),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: AppColors.panel2,
+      contentTextStyle:
+          GoogleFonts.workSans(fontSize: 14, color: AppColors.text),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.control)),
+    ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: AppColors.red),
   );
+}
+
+/// One radius scale for the whole app: controls (buttons, inputs, chips)
+/// and cards. Everything else derives from these two.
+class AppRadius {
+  static const double control = 12;
+  static const double card = 14;
 }

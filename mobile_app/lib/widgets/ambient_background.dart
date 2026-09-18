@@ -25,20 +25,12 @@ class AmbientBackground extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         Positioned.fill(child: ColoredBox(color: AppColors.bg)),
+        // One restrained wash in the brand colour, top corner only. The old
+        // three-blob red/teal/pink spread made every panel look tinted.
         Positioned(
-          top: -120,
-          right: -90,
-          child: _Blob(color: AppColors.red.withValues(alpha: 0.30), size: 300),
-        ),
-        Positioned(
-          top: 220,
-          left: -110,
-          child: _Blob(color: AppColors.teal.withValues(alpha: 0.22), size: 280),
-        ),
-        Positioned(
-          bottom: -100,
-          right: -60,
-          child: _Blob(color: AppColors.byline.withValues(alpha: 0.18), size: 260),
+          top: -160,
+          right: -120,
+          child: _Blob(color: AppColors.red.withValues(alpha: 0.10), size: 360),
         ),
         child,
       ],
