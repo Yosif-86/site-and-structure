@@ -42,6 +42,14 @@ class AppStrings extends ChangeNotifier {
     'label_phone': 'رقم الهاتف',
     'ph_phone': '07XX XXX XXXX',
     'already_account': 'لديك حساب بالفعل؟',
+    'have_invite_code': 'لديك رمز دعوة؟',
+    'label_invite_code': 'رمز الدعوة',
+    'btn_check': 'تحقق',
+    'invite_valid': 'رمز الدعوة صالح.',
+    'invite_invalid_title': 'رمز الدعوة غير صالح أو منتهي الصلاحية.',
+    'or_divider': 'أو',
+    'continue_with_google': 'المتابعة باستخدام جوجل',
+    'err_oauth_cancelled': 'تم إلغاء تسجيل الدخول.',
     'auth_forgot_title': 'إعادة تعيين كلمة المرور',
     'auth_forgot_sub':
         'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
@@ -70,6 +78,8 @@ class AppStrings extends ChangeNotifier {
     'err_otp_expired': 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.',
     'err_otp_too_many_attempts': 'محاولات كثيرة جدًا، اطلب رمزًا جديدًا.',
     'err_otp_incorrect': 'رمز التحقق غير صحيح.',
+    'login_otp_title': 'رمز الدخول',
+    'login_otp_sub': 'أرسلنا رمز تحقق إلى بريدك الإلكتروني',
     'success_account_title': 'تم إنشاء الحساب',
     'success_account_sub': 'تم تسجيلك وتسجيل دخولك بنجاح.',
     'btn_close': 'إغلاق',
@@ -204,6 +214,7 @@ class AppStrings extends ChangeNotifier {
     'current_file': 'الملف الحالي: ',
     'label_lecture_title': 'عنوان المحاضرة',
     'label_video_file': 'ملف الفيديو',
+    'uploading_video': 'جاري رفع الفيديو…',
     'label_free_lecture': 'محاضرة مجانية للتجربة',
     'label_code': 'الكود',
     'label_discount_type': 'نوع الخصم',
@@ -279,6 +290,16 @@ class AppStrings extends ChangeNotifier {
     'settings_appearance_light': 'الوضع الفاتح',
     'settings_privacy': 'الخصوصية',
     'settings_privacy_sub': 'كيف نتعامل مع بياناتك',
+    'settings_delete_account': 'حذف الحساب',
+    'settings_delete_account_sub': 'حذف حسابك وبياناتك نهائيًا',
+    'confirm_delete_account':
+        'سيتم حذف حسابك وكل بياناتك نهائيًا ولا يمكن التراجع عن ذلك. هل أنت متأكد؟',
+    'account_deleted': 'تم حذف حسابك.',
+    'err_delete_account_failed': 'فشل حذف الحساب: ',
+    'delete_payment_method': 'حذف طريقة الدفع',
+    'confirm_delete_payment_method':
+        'سيتم حذف رقم الدفع المحفوظ. هل أنت متأكد؟',
+    'payment_method_deleted': 'تم حذف طريقة الدفع.',
     // Support screen
     'support_title': 'الدعم',
     'support_intro':

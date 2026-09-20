@@ -23,6 +23,7 @@ Future<void> main() async {
     };
     await AppTheme.instance.init();
     await SupabaseService.init();
+    SupabaseService.instance.listenForOAuthCompletion();
     SupabaseService.instance.resumeSessionWatchIfLoggedIn();
     SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
     runApp(const SiteAndStructureApp());

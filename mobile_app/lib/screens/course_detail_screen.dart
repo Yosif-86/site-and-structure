@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../i18n/strings.dart';
@@ -239,6 +241,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ? null
         : _lectures.firstWhere((l) => l.isFree);
     final freeCount = _lectures.where((l) => l.isFree).length;
+    // A lecture already in progress takes over the hero from the free
+    // preview — there's no point pitching a first-lecture teaser to someone
+    // who's already partway through the course.
+    final continueMatch =
+        _lectures.where((l) => l.id == _continueWatchingId);
+    final continueLecture = continueMatch.isEmpty ? null : continueMatch.first;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
@@ -246,9 +254,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _CourseHero(
           tag: tag,
           thumbnailUrl: course.thumbnailUrl,
-          previewLabel: freeLecture != null ? _t('preview_course') : null,
-          onPreview:
-              freeLecture != null ? () => _watchLecture(freeLecture) : null,
+          previewLabel: continueLecture != null
+              ? _t('continue_watching')
+              : (freeLecture != null ? _t('preview_course') : null),
+          onPreview: continueLecture != null
+              ? () => _watchLecture(continueLecture)
+              : (freeLecture != null ? () => _watchLecture(freeLecture) : null),
         ),
         const SizedBox(height: 18),
         Text(title, style: AppFonts.body(size: 24, weight: FontWeight.w700)),
@@ -872,16 +883,34 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       return;
     }
     try {
-      final sb = SupabaseService.instance.client;
-      final rows = await sb.rpc('redeem_discount_code',
-          params: {'p_code': code, 'p_course_id': widget.course.id});
-      if (rows is! List || rows.isEmpty) {
+      // Routed through the server (not sb.rpc directly) so the daily
+      // attempts cap in api/redeem-discount-code.js actually applies --
+      // calling the RPC straight from the client would bypass it.
+      final accessToken =
+          SupabaseService.instance.client.auth.currentSession?.accessToken;
+      if (accessToken == null) {
         setState(() => _discountError = t('err_invalid_discount'));
         return;
       }
-      final row = rows.first as Map<String, dynamic>;
-      final type = row['discount_type'] as String?;
-      final value = (row['discount_value'] as num?) ?? 0;
+      final res = await http.post(
+        Uri.parse('$kApiBaseUrl/api/redeem-discount-code'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: jsonEncode(
+            {'code': code, 'courseId': widget.course.id}),
+      );
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (res.statusCode != 200 || body['ok'] != true) {
+        setState(() => _discountError =
+            res.statusCode == 429 && body['error'] is String
+                ? body['error'] as String
+                : t('err_invalid_discount'));
+        return;
+      }
+      final type = body['discountType'] as String?;
+      final value = (body['discountValue'] as num?) ?? 0;
       final priceNum = _parsePrice(widget.course.price);
       final discounted = type == 'percent'
           ? (priceNum * (1 - value / 100)).round().clamp(0, priceNum)

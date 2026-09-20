@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 import '../i18n/strings.dart';
@@ -57,6 +59,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
   XFile? _lVideoFile;
   bool _lIsFree = false;
   String? _lFormError;
+  // 0.0-1.0 while a video is uploading, null the rest of the time — drives
+  // the circular progress pill in place of the Add button.
+  double? _lUploadProgress;
 
   // Discount code form state.
   final _dCode = TextEditingController();
@@ -337,9 +342,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final user = SupabaseService.instance.currentUser!;
       final path =
           '${user.id}/${_activeCourse!['id']}/${DateTime.now().millisecondsSinceEpoch}-${_lVideoFile!.name}';
-      await sb.storage
-          .from('lecture-uploads')
-          .upload(path, File(_lVideoFile!.path));
+      setState(() => _lUploadProgress = 0);
+      await _uploadWithProgress(
+        bucket: 'lecture-uploads',
+        path: path,
+        file: File(_lVideoFile!.path),
+        onProgress: (p) {
+          if (mounted) setState(() => _lUploadProgress = p);
+        },
+      );
       final orderIndex = _activeLectures.isEmpty
           ? 0
           : (_activeLectures
@@ -359,6 +370,56 @@ class _TeacherScreenState extends State<TeacherScreen> {
       await _loadLectures();
     } catch (e) {
       setState(() => _lFormError = '${t('err_save_failed')}$e');
+    } finally {
+      if (mounted) setState(() => _lUploadProgress = null);
+    }
+  }
+
+  /// Uploads straight to Supabase Storage's REST endpoint (the same one
+  /// `SupabaseStorageFileApi.upload()` calls under the hood) instead of
+  /// going through it, because the storage_client package gives no way to
+  /// observe upload progress — a lecture video can run to hundreds of MB, so
+  /// silently sitting on the same button for a couple of minutes reads as a
+  /// hang. A StreamedRequest fed from the multipart body's own byte stream
+  /// gives real progress without adding a new HTTP dependency.
+  Future<void> _uploadWithProgress({
+    required String bucket,
+    required String path,
+    required File file,
+    required void Function(double) onProgress,
+  }) async {
+    final accessToken =
+        SupabaseService.instance.client.auth.currentSession!.accessToken;
+    final uri = Uri.parse('$kSupabaseUrl/storage/v1/object/$bucket/$path');
+
+    final multipart = http.MultipartRequest('POST', uri)
+      ..headers['apikey'] = kSupabaseAnonKey
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..headers['x-upsert'] = 'false'
+      ..fields['cacheControl'] = '3600'
+      ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final total = multipart.contentLength;
+    var sent = 0;
+    final streamed = http.StreamedRequest(multipart.method, multipart.url)
+      ..headers.addAll(multipart.headers)
+      ..contentLength = total;
+
+    multipart.finalize().listen(
+      (chunk) {
+        sent += chunk.length;
+        if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
+        streamed.sink.add(chunk);
+      },
+      onDone: () => streamed.sink.close(),
+      onError: streamed.sink.addError,
+      cancelOnError: true,
+    );
+
+    final response = await http.Client().send(streamed);
+    if (response.statusCode >= 400) {
+      final body = await response.stream.bytesToString();
+      throw Exception('upload failed (${response.statusCode}): $body');
     }
   }
 
@@ -515,6 +576,30 @@ class _TeacherScreenState extends State<TeacherScreen> {
       await _loadProfile();
       if (!mounted) return;
       setState(() => _pSavedMsg = 'Saved.');
+    } catch (e) {
+      setState(() => _pFormError = '${t('err_save_failed')}$e');
+    }
+  }
+
+  Future<void> _deletePaymentMethod() async {
+    final t = AppStrings.instance.t;
+    if (!await _confirm(t('confirm_delete_payment_method'))) return;
+    setState(() {
+      _pFormError = null;
+      _pSavedMsg = null;
+    });
+    try {
+      final sb = SupabaseService.instance.client;
+      final user = SupabaseService.instance.currentUser!;
+      await sb.from('profiles').update({
+        'teacher_zaincash_phone': null,
+        'teacher_qi_account_number': null,
+        'teacher_qi_qr_url': null,
+      }).eq('id', user.id);
+      _pQiQrFile = null;
+      await _loadProfile();
+      if (!mounted) return;
+      setState(() => _pSavedMsg = t('payment_method_deleted'));
     } catch (e) {
       setState(() => _pFormError = '${t('err_save_failed')}$e');
     }
@@ -787,7 +872,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
           Text(_lFormError!,
               style: AppFonts.body(size: 12, color: AppColors.red)),
         const SizedBox(height: 10),
-        ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
+        if (_lUploadProgress != null)
+          Center(
+              child: _UploadProgressPill(
+                  progress: _lUploadProgress!, label: t('uploading_video')))
+        else
+          ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
       ],
     );
   }
@@ -960,6 +1050,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
                       : setState(() => _view = _TView.overview),
                   child: Text(t('discard')))),
         ]),
+        if (_pZaincashPhone.text.trim().isNotEmpty ||
+            _pQiAccount.text.trim().isNotEmpty ||
+            _pQiQrUrl != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: _deletePaymentMethod,
+              style: TextButton.styleFrom(foregroundColor: AppColors.error),
+              child: Text(t('delete_payment_method')),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1093,6 +1196,65 @@ class _AdminCard extends StatelessWidget {
       ),
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: children),
+    );
+  }
+}
+
+/// Glass pill with a circular progress ring + percentage, shown in place of
+/// the Add button while a lecture video is uploading.
+class _UploadProgressPill extends StatelessWidget {
+  final double progress;
+  final String label;
+  const _UploadProgressPill({required this.progress, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (progress * 100).round();
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(999),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 22, 12),
+          decoration: BoxDecoration(
+            color: AppColors.glassBg,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppColors.glassBorder),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: CircularProgressIndicator(
+                  value: progress,
+                  strokeWidth: 3.5,
+                  backgroundColor: AppColors.line,
+                  valueColor: AlwaysStoppedAnimation(AppColors.teal),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('$pct%',
+                      style: AppFonts.heading(size: 20, color: AppColors.teal)),
+                  Text(label,
+                      style: AppFonts.body(size: 12, color: AppColors.muted)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

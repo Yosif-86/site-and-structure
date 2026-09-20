@@ -633,12 +633,31 @@
     err.classList.remove('show'); ok.classList.remove('show');
     const code = codeInput.value.trim().toUpperCase();
     if(!code){ err.textContent = t('err_enter_discount_code'); err.classList.add('show'); return; }
-    const { data, error } = await sb.rpc('redeem_discount_code', { p_code: code, p_course_id: course.id });
-    if(error || !data || data.length === 0){
+    const { data: { session } } = await sb.auth.getSession();
+    if(!session){ err.textContent = t('err_invalid_discount'); err.classList.add('show'); return; }
+    // Routed through the server (not sb.rpc directly) so the 5-attempts-per-
+    // day cap in api/redeem-discount-code.js actually applies -- calling the
+    // RPC straight from here would bypass it entirely.
+    let result;
+    try{
+      const res = await fetch('/api/redeem-discount-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ code, courseId: course.id })
+      });
+      result = await res.json();
+    } catch(e){
       err.textContent = t('err_invalid_discount'); err.classList.add('show');
       return;
     }
-    const { discount_type, discount_value } = data[0];
+    if(!result.ok){
+      err.textContent = result.error === 'Too many attempts today. Try again tomorrow.'
+        ? result.error
+        : t('err_invalid_discount');
+      err.classList.add('show');
+      return;
+    }
+    const discount_type = result.discountType, discount_value = result.discountValue;
     appliedDiscount = { code, discount_type, discount_value };
     const priceNum = parsePrice(course.price);
     discountedPrice = discount_type === 'percent'

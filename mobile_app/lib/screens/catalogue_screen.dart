@@ -146,6 +146,30 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
   }
 
+  // A soft scale + fade riding the page controller's own scroll offset — the
+  // page settling into place shrinks and dims slightly the further it is
+  // from center, reading like a gentle glass-morph between tabs rather than
+  // PageView's default flat slide.
+  Widget _swipeTransition(int index, Widget child) {
+    return AnimatedBuilder(
+      animation: _pageController,
+      builder: (context, _) {
+        double page = _currentPage.toDouble();
+        if (_pageController.hasClients && _pageController.page != null) {
+          page = _pageController.page!;
+        }
+        final delta = (page - index).clamp(-1.0, 1.0);
+        final scale = 1 - (delta.abs() * 0.08);
+        final opacity = 1 - (delta.abs() * 0.35);
+        return Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: Transform.scale(scale: scale, child: child),
+        );
+      },
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
@@ -162,11 +186,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 controller: _pageController,
                 onPageChanged: (i) => setState(() => _currentPage = i),
                 children: [
-                  RefreshIndicator(onRefresh: _load, child: _buildBody(t)),
-                  MyCoursesScreen(
-                      key: _myCoursesKey, onBrowse: () => _goToPage(0)),
-                  const ProfileScreen(),
-                  SettingsScreen(loggedIn: loggedIn, isTeacher: _isTeacher),
+                  _swipeTransition(0,
+                      RefreshIndicator(onRefresh: _load, child: _buildBody(t))),
+                  _swipeTransition(
+                      1,
+                      MyCoursesScreen(
+                          key: _myCoursesKey, onBrowse: () => _goToPage(0))),
+                  _swipeTransition(2, const ProfileScreen()),
+                  _swipeTransition(
+                      3,
+                      SettingsScreen(
+                          loggedIn: loggedIn, isTeacher: _isTeacher)),
                 ],
               ),
         bottomNavigationBar:

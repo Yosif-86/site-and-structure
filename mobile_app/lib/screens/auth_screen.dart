@@ -4,6 +4,8 @@ import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/brand_title.dart';
+import 'teacher_screen.dart';
+import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
 
 enum _AuthMode { login, signup, forgot, forgotSent }
@@ -28,6 +30,16 @@ class _AuthScreenState extends State<AuthScreen> {
   final _passCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _inviteCtrl = TextEditingController();
+
+  // Teacher invite: the app is now the only way to redeem one (the website's
+  // ?invite=<token> flow is being retired) -- "Have an invite code?" reveals
+  // this field, and checking it validates against is_teacher_invite_valid()
+  // before the rest of the form is even filled, same courtesy the website
+  // gave by pre-checking the token from the URL on page load.
+  bool _showInvite = false;
+  bool _checkingInvite = false;
+  bool? _inviteValid;
 
   @override
   void dispose() {
@@ -35,6 +47,7 @@ class _AuthScreenState extends State<AuthScreen> {
     _passCtrl.dispose();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _inviteCtrl.dispose();
     super.dispose();
   }
 
@@ -52,11 +65,21 @@ class _AuthScreenState extends State<AuthScreen> {
       _loading = true;
       _error = null;
     });
-    final err =
+    final result =
         await SupabaseService.instance.login(_emailCtrl.text, _passCtrl.text);
+    if (!mounted) return;
     setState(() => _loading = false);
-    if (err != null) {
-      setState(() => _error = _t(err));
+    if (result.error != null) {
+      setState(() => _error = _t(result.error!));
+      return;
+    }
+    if (result.needsEmailOtp) {
+      final verified = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => VerifyLoginOtpScreen(email: result.email!),
+        ),
+      );
+      if (verified == true && mounted) Navigator.of(context).pop();
       return;
     }
     if (mounted) Navigator.of(context).pop();
@@ -73,14 +96,29 @@ class _AuthScreenState extends State<AuthScreen> {
       email: _emailCtrl.text,
       password: _passCtrl.text,
     );
-    setState(() => _loading = false);
     if (err != null) {
-      setState(() => _error = _t(err));
+      setState(() {
+        _loading = false;
+        _error = _t(err);
+      });
       return;
     }
+    final inviteToken = _inviteCtrl.text.trim();
+    if (inviteToken.isNotEmpty) {
+      await SupabaseService.instance.redeemTeacherInvite(inviteToken);
+    }
+    setState(() => _loading = false);
     if (!mounted) return;
     if (!kPhoneOtpEnabled) {
-      Navigator.of(context).pop();
+      if (inviteToken.isNotEmpty) {
+        // Straight to payment setup instead of just closing -- a teacher
+        // account is no good to anyone (including its own owner) until
+        // there's somewhere to send their earnings.
+        Navigator.of(context).pushReplacement(MaterialPageRoute(
+            builder: (_) => const TeacherScreen(openPaymentInfo: true)));
+      } else {
+        Navigator.of(context).pop();
+      }
       return;
     }
     // Replaces this route (rather than pushing) so VerifyPhoneScreen's own
@@ -88,6 +126,45 @@ class _AuthScreenState extends State<AuthScreen> {
     // the signup form itself is done and shouldn't still be on the stack.
     Navigator.of(context).pushReplacement(MaterialPageRoute(
         builder: (_) => const VerifyPhoneScreen(fromSignup: true)));
+  }
+
+  Future<void> _checkInvite() async {
+    final token = _inviteCtrl.text.trim();
+    if (token.isEmpty) return;
+    setState(() {
+      _checkingInvite = true;
+      _inviteValid = null;
+    });
+    final valid = await SupabaseService.instance.checkTeacherInviteValid(token);
+    if (!mounted) return;
+    setState(() {
+      _checkingInvite = false;
+      _inviteValid = valid;
+    });
+  }
+
+  Future<void> _submitGoogle() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final result = await SupabaseService.instance.signInWithGoogle();
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (result.error != null) {
+      setState(() => _error = _t(result.error!));
+      return;
+    }
+    if (result.needsEmailOtp) {
+      final verified = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => VerifyLoginOtpScreen(email: result.email!),
+        ),
+      );
+      if (verified == true && mounted) Navigator.of(context).pop();
+      return;
+    }
+    Navigator.of(context).pop();
   }
 
   Future<void> _submitForgot() async {
@@ -177,6 +254,8 @@ class _AuthScreenState extends State<AuthScreen> {
           onPressed: _loading ? null : _submitLogin,
           child: _loading ? const _Spinner() : Text(_t('auth_login_title')),
         ),
+        _orDivider(),
+        _googleButton(),
         const SizedBox(height: 14),
         Center(
           child: TextButton(
@@ -230,6 +309,53 @@ class _AuthScreenState extends State<AuthScreen> {
             decoration: InputDecoration(
                 labelText: _t('label_password'), hintText: _t('ph_password')),
             obscureText: true),
+        const SizedBox(height: 10),
+        if (!_showInvite)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton(
+              onPressed: () => setState(() => _showInvite = true),
+              child: Text(_t('have_invite_code')),
+            ),
+          )
+        else ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inviteCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration:
+                      InputDecoration(labelText: _t('label_invite_code')),
+                  onChanged: (_) => setState(() => _inviteValid = null),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TextButton(
+                  onPressed: _checkingInvite ? null : _checkInvite,
+                  child: _checkingInvite
+                      ? const _Spinner()
+                      : Text(_t('btn_check')),
+                ),
+              ),
+            ],
+          ),
+          if (_inviteValid == true)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_t('invite_valid'),
+                  style: AppFonts.body(size: 12.5, color: AppColors.teal)),
+            ),
+          if (_inviteValid == false)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(_t('invite_invalid_title'),
+                  style: AppFonts.body(size: 12.5, color: AppColors.red)),
+            ),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 10),
           Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
@@ -239,6 +365,8 @@ class _AuthScreenState extends State<AuthScreen> {
           onPressed: _loading ? null : _submitSignup,
           child: _loading ? const _Spinner() : Text(_t('auth_signup_title')),
         ),
+        _orDivider(),
+        _googleButton(),
         const SizedBox(height: 14),
         Center(
           child: Wrap(
@@ -306,6 +434,82 @@ class _AuthScreenState extends State<AuthScreen> {
       ],
     );
   }
+
+  Widget _orDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Row(children: [
+        Expanded(child: Divider(color: AppColors.line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(_t('or_divider'),
+              style: AppFonts.body(size: 12, color: AppColors.muted)),
+        ),
+        Expanded(child: Divider(color: AppColors.line)),
+      ]),
+    );
+  }
+
+  Widget _googleButton() {
+    return OutlinedButton(
+      onPressed: _loading ? null : _submitGoogle,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const _GoogleGlyph(),
+          const SizedBox(width: 10),
+          Text(_t('continue_with_google')),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Google "G" mark, drawn rather than shipped as an image asset — four
+/// arcs in Google's brand colors is the one piece of this button Google's
+/// branding guidelines actually require, everything else (label, button
+/// shape) follows the app's own style.
+class _GoogleGlyph extends StatelessWidget {
+  const _GoogleGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 18,
+      height: 18,
+      child: CustomPaint(painter: _GoogleGlyphPainter()),
+    );
+  }
+}
+
+class _GoogleGlyphPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.width / 2;
+    final center = Offset(r, r);
+    final stroke = size.width * 0.22;
+    final rect = Rect.fromCircle(center: center, radius: r - stroke / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke;
+
+    void arc(double startDeg, double sweepDeg, Color color) {
+      paint.color = color;
+      canvas.drawArc(rect, startDeg * 3.1415926535 / 180,
+          sweepDeg * 3.1415926535 / 180, false, paint);
+    }
+
+    // Four quarter-ish arcs matching Google's mark proportions closely
+    // enough at 18px that the classic red/blue/green/yellow ring reads
+    // instantly without shipping an actual asset file.
+    arc(-90, 90, const Color(0xFF4285F4)); // blue, top-right
+    arc(0, 90, const Color(0xFF34A853)); // green, bottom-right
+    arc(90, 90, const Color(0xFFFBBC05)); // yellow, bottom-left
+    arc(180, 90, const Color(0xFFEA4335)); // red, top-left
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _Spinner extends StatelessWidget {

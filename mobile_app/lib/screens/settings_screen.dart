@@ -25,6 +25,33 @@ class SettingsScreen extends StatelessWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
+  Future<void> _confirmDeleteAccount(BuildContext context) async {
+    final t = AppStrings.instance.t;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.panel,
+        content: Text(t('confirm_delete_account'),
+            style: TextStyle(color: AppColors.text)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(t('cancel'))),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(t('settings_delete_account'),
+                style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final error = await SupabaseService.instance.deleteAccount();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t(error ?? 'account_deleted'))));
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
@@ -113,6 +140,19 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
             ),
+            if (loggedIn) ...[
+              const SizedBox(height: 12),
+              FadeSlideIn(
+                delayMs: 300,
+                child: _SettingsTile(
+                  icon: Icons.delete_outline,
+                  accent: AppColors.error,
+                  title: t('settings_delete_account'),
+                  subtitle: t('settings_delete_account_sub'),
+                  onTap: () => _confirmDeleteAccount(context),
+                ),
+              ),
+            ],
           ],
         ),
       ),

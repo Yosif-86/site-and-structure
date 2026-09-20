@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -16,7 +18,10 @@ class BottomNavItem {
   });
 }
 
-/// Floating pill-shaped bottom navigation bar (replaces the old side Drawer).
+/// Floating glass pill-shaped bottom navigation bar. The active item expands
+/// into a filled label pill (icon + text); inactive items stay icon-only, so
+/// the bar's overall width breathes with whichever tab is selected instead
+/// of every label competing for space at once.
 class FloatingBottomNav extends StatelessWidget {
   final List<BottomNavItem> items;
 
@@ -36,24 +41,28 @@ class FloatingBottomNav extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.panel,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: AppColors.line),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6)),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final item in items) _NavIcon(item: item),
-              ],
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.glassBg,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.glassBorder),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [for (final item in items) _NavPill(item: item)],
+                ),
+              ),
             ),
           ),
         ],
@@ -62,31 +71,57 @@ class FloatingBottomNav extends StatelessWidget {
   }
 }
 
-class _NavIcon extends StatelessWidget {
+class _NavPill extends StatelessWidget {
   final BottomNavItem item;
-  const _NavIcon({required this.item});
+  const _NavPill({required this.item});
 
   @override
   Widget build(BuildContext context) {
+    final dark = AppTheme.instance.isDark;
+    // The active pill fills solid so it reads at a glance against the
+    // frosted bar behind it — white-on-black in dark mode, the inverse in
+    // light mode, same swap the rest of the theme does at the palette level.
+    final activeBg = dark ? Colors.white : AppColors.text;
+    final activeFg = dark ? Colors.black : AppColors.bg;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 3),
       child: Tooltip(
         message: item.tooltip,
         child: InkWell(
           onTap: item.onTap,
           borderRadius: BorderRadius.circular(999),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            width: 48,
-            height: 48,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            height: 44,
+            padding: EdgeInsets.symmetric(horizontal: item.active ? 16 : 11),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: item.active ? AppColors.red : null,
+              borderRadius: BorderRadius.circular(999),
+              color: item.active ? activeBg : Colors.transparent,
             ),
-            child: Icon(
-              item.icon,
-              color: item.active ? Colors.white : AppColors.muted,
-              size: 22,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(item.icon,
+                    size: 20, color: item.active ? activeFg : AppColors.muted),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  child: item.active
+                      ? Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 8),
+                          child: Text(
+                            item.tooltip,
+                            style: AppFonts.body(
+                                size: 13.5,
+                                weight: FontWeight.w600,
+                                color: activeFg),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
           ),
         ),

@@ -284,6 +284,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     if (_controlsVisible) _scheduleAutoHide();
   }
 
+  void _seekBy(Duration delta) {
+    final controller = _hlsController;
+    if (controller == null) return;
+    final duration = controller.value.duration;
+    var target = controller.value.position + delta;
+    if (target < Duration.zero) target = Duration.zero;
+    if (target > duration) target = duration;
+    controller.seekTo(target);
+    setState(() {});
+    _scheduleAutoHide();
+  }
+
   void _togglePlayback() {
     final controller = _hlsController;
     if (controller == null) return;
@@ -435,7 +447,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     enabled: _prevLecture != null && widget.isUnlocked(_prevLecture!),
                     onTap: _prevLecture == null ? null : () => _playLecture(_prevLecture!),
                   ),
-                  const SizedBox(width: 28),
+                  const SizedBox(width: 18),
+                  _SideButton(
+                    icon: Icons.replay_10,
+                    enabled: true,
+                    onTap: () => _seekBy(const Duration(seconds: -10)),
+                  ),
+                  const SizedBox(width: 18),
                   // Wrapped in its own ValueListenableBuilder — this icon
                   // must reflect live controller state, not just state set
                   // by tapping this same button. Without it, pressing the
@@ -461,7 +479,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       );
                     },
                   ),
-                  const SizedBox(width: 28),
+                  const SizedBox(width: 18),
+                  _SideButton(
+                    icon: Icons.forward_10,
+                    enabled: true,
+                    onTap: () => _seekBy(const Duration(seconds: 10)),
+                  ),
+                  const SizedBox(width: 18),
                   _SideButton(
                     icon: Icons.skip_next_rounded,
                     enabled: _nextLecture != null && widget.isUnlocked(_nextLecture!),
