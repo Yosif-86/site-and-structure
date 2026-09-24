@@ -44,23 +44,52 @@ class FloatingBottomNav extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppColors.glassBg,
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(color: AppColors.glassBorder),
                   boxShadow: [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8)),
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 24,
+                        offset: const Offset(0, 10)),
                   ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [for (final item in items) _NavPill(item: item)],
+                child: Stack(
+                  children: [
+                    // A soft light-catches-the-edge sheen along the top --
+                    // the one thing that reads "glass" rather than just
+                    // "translucent panel" at a glance.
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(
+                                  alpha: AppTheme.instance.isDark ? 0.10 : 0.35),
+                              Colors.white.withValues(alpha: 0),
+                            ],
+                            stops: const [0, 0.6],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final item in items) _NavPill(item: item)
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

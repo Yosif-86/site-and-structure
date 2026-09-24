@@ -281,6 +281,109 @@ class CompactCourseCard extends StatelessWidget {
   }
 }
 
+/// Small card for Home's "Continue learning" row: a percent ring, a small
+/// thumbnail, title/teacher, and a matching progress bar underneath.
+class ContinueLearningCard extends StatelessWidget {
+  final String title;
+  final String? teacher;
+  final String? thumbnailUrl;
+  final double percent; // 0..1
+  final VoidCallback onTap;
+  const ContinueLearningCard({
+    super.key,
+    required this.title,
+    required this.teacher,
+    required this.thumbnailUrl,
+    required this.percent,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (percent * 100).round();
+    return SizedBox(
+      width: 168,
+      child: GlassCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: percent.clamp(0.02, 1.0),
+                        strokeWidth: 3.5,
+                        backgroundColor: AppColors.line,
+                        valueColor: AlwaysStoppedAnimation(AppColors.red),
+                      ),
+                      Text('$pct%',
+                          style: AppFonts.code(size: 10.5, weight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: AspectRatio(
+                      aspectRatio: 1,
+                      child: thumbnailUrl != null
+                          ? Image.network(
+                              thumbnailUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  ColoredBox(color: AppColors.panel2),
+                              loadingBuilder: (_, child, p) => p == null
+                                  ? child
+                                  : ColoredBox(color: AppColors.panel2),
+                            )
+                          : ColoredBox(
+                              color: AppColors.panel2,
+                              child: Icon(Icons.play_circle_outline,
+                                  color: AppColors.muted2, size: 18),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(title,
+                style: AppFonts.body(size: 13.5, weight: FontWeight.w600),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+            if (teacher != null && teacher!.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(teacher!,
+                  style: AppFonts.body(size: 11.5, color: AppColors.muted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ],
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: percent,
+                minHeight: 4,
+                backgroundColor: AppColors.line,
+                valueColor: AlwaysStoppedAnimation(AppColors.red),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PricePill extends StatelessWidget {
   final Course course;
   final String Function(String) t;

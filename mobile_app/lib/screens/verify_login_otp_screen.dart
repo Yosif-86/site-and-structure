@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
@@ -10,12 +9,12 @@ import '../widgets/ambient_background.dart';
 import '../widgets/glass_card.dart';
 
 /// Second factor for teacher/admin logins (see
-/// SupabaseService.login/verifyLoginEmailOtp): password already checked,
-/// a one-time code was just emailed to the account, and confirming it here
-/// is what actually establishes the session. Closely mirrors
-/// VerifyPhoneScreen's 6-box layout for a consistent feel, but for a login
-/// step rather than an onboarding one -- no phone editing, and "back" simply
-/// abandons the login attempt.
+/// SupabaseService.login/awaitEmailLoginLink): password already checked,
+/// and a sign-in link was just emailed to the account. Supabase's own
+/// "Magic link or OTP" template in this project only ever sends a link
+/// (no typed code -- that needs custom SMTP, which isn't set up), so this
+/// screen just waits for that link to be opened on this device rather than
+/// collecting a code.
 class VerifyLoginOtpScreen extends StatefulWidget {
   final String email;
   const VerifyLoginOtpScreen({super.key, required this.email});
@@ -25,15 +24,8 @@ class VerifyLoginOtpScreen extends StatefulWidget {
 }
 
 class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
-  static const _digitCount = 6;
-
-  final _digitCtrls =
-      List.generate(_digitCount, (_) => TextEditingController());
-  final _digitFocus = List.generate(_digitCount, (_) => FocusNode());
-
-  bool _verifying = false;
+  bool _waiting = true;
   String? _error;
-  String? _info;
   Timer? _cooldownTimer;
   int _cooldownSeconds = 60;
 
@@ -41,22 +33,16 @@ class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
   void initState() {
     super.initState();
     _startCooldown();
+    _awaitLink();
   }
 
   @override
   void dispose() {
     _cooldownTimer?.cancel();
-    for (final c in _digitCtrls) {
-      c.dispose();
-    }
-    for (final f in _digitFocus) {
-      f.dispose();
-    }
     super.dispose();
   }
 
   String _t(String key) => AppStrings.instance.t(key);
-  String get _code => _digitCtrls.map((c) => c.text).join();
 
   void _startCooldown() {
     _cooldownTimer?.cancel();
@@ -68,64 +54,29 @@ class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
     });
   }
 
-  Future<void> _resend() async {
-    if (_cooldownSeconds > 0) return;
-    setState(() {
-      _error = null;
-      _info = null;
-    });
-    final err = await SupabaseService.instance.resendLoginEmailOtp(widget.email);
-    if (!mounted) return;
-    if (err != null) {
-      setState(() => _error = err);
-      return;
-    }
-    for (final c in _digitCtrls) {
-      c.clear();
-    }
-    _digitFocus.first.requestFocus();
-    setState(() => _info = _t('otp_sent'));
-    _startCooldown();
-  }
-
-  Future<void> _verify() async {
-    final code = _code;
-    if (_verifying) return;
-    if (code.length < _digitCount) {
-      setState(() => _error = _t('err_invalid_code'));
-      return;
-    }
-    setState(() {
-      _verifying = true;
-      _error = null;
-      _info = null;
-    });
-    final result =
-        await SupabaseService.instance.verifyLoginEmailOtp(widget.email, code);
+  Future<void> _awaitLink() async {
+    final result = await SupabaseService.instance.awaitEmailLoginLink();
     if (!mounted) return;
     if (!result.success) {
       setState(() {
-        _verifying = false;
-        _error = _t(result.error ?? 'err_otp_incorrect');
+        _waiting = false;
+        _error = _t(result.error ?? 'err_oauth_cancelled');
       });
       return;
     }
     Navigator.of(context).pop(true);
   }
 
-  void _onDigitChanged(int i, String value) {
-    if (_error != null) setState(() => _error = null);
-    if (value.isNotEmpty && i < _digitCount - 1) {
-      _digitFocus[i + 1].requestFocus();
+  Future<void> _resend() async {
+    if (_cooldownSeconds > 0) return;
+    setState(() => _error = null);
+    final err = await SupabaseService.instance.resendLoginEmailOtp(widget.email);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() => _error = err);
+      return;
     }
-    if (_code.length == _digitCount) _verify();
-  }
-
-  void _onDigitBackspace(int i) {
-    if (_digitCtrls[i].text.isEmpty && i > 0) {
-      _digitFocus[i - 1].requestFocus();
-      _digitCtrls[i - 1].clear();
-    }
+    _startCooldown();
   }
 
   @override
@@ -181,14 +132,21 @@ class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
             textAlign: TextAlign.center,
             style: AppFonts.body(size: 13, color: AppColors.muted)),
         const SizedBox(height: 20),
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [for (var i = 0; i < _digitCount; i++) _digitBox(i)],
+        if (_waiting)
+          const Center(
+            child: SizedBox(
+              height: 22,
+              width: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(_error!,
+              textAlign: TextAlign.center,
+              style: AppFonts.body(size: 12.5, color: AppColors.red)),
+        ],
+        const SizedBox(height: 16),
         Center(
           child: TextButton(
             onPressed: _cooldownSeconds > 0 ? null : _resend,
@@ -199,57 +157,7 @@ class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
             ),
           ),
         ),
-        if (_error != null) ...[
-          const SizedBox(height: 6),
-          Text(_error!,
-              textAlign: TextAlign.center,
-              style: AppFonts.body(size: 12.5, color: AppColors.red)),
-        ],
-        if (_info != null) ...[
-          const SizedBox(height: 6),
-          Text(_info!,
-              textAlign: TextAlign.center,
-              style: AppFonts.body(size: 12.5, color: AppColors.teal)),
-        ],
-        const SizedBox(height: 18),
-        ElevatedButton(
-          onPressed: _verifying ? null : _verify,
-          child: _verifying
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
-              : Text(_t('btn_verify_code')),
-        ),
       ],
-    );
-  }
-
-  Widget _digitBox(int i) {
-    return SizedBox(
-      width: 46,
-      height: 56,
-      child: KeyboardListener(
-        focusNode: FocusNode(skipTraversal: true),
-        onKeyEvent: (event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.backspace) {
-            _onDigitBackspace(i);
-          }
-        },
-        child: TextField(
-          controller: _digitCtrls[i],
-          focusNode: _digitFocus[i],
-          textAlign: TextAlign.center,
-          maxLength: 1,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: AppFonts.heading(size: 22),
-          decoration: const InputDecoration(counterText: ''),
-          onChanged: (v) => _onDigitChanged(i, v),
-        ),
-      ),
     );
   }
 }

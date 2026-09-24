@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
@@ -36,6 +38,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   // the app, so this never flashes the block screen while still loading.
   bool? _phoneVerified;
 
+  // "Continue learning" row: courses with an active enrollment and at least
+  // one completed-but-not-all lecture. Null while loading/logged out (the
+  // section just doesn't render) vs empty (also doesn't render) -- there's
+  // no error state shown for this since it's a convenience row, not core
+  // catalogue data.
+  List<_ContinueLearningItem>? _continueLearning;
+
   // Instagram-style swipe across Home / My Courses / Settings. Profile stays
   // an ordinary tap (it pushes a full route, which doesn't fit as a
   // swipeable page here).
@@ -48,6 +57,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     super.initState();
     _load();
     _loadAdminFlag();
+    _loadContinueLearning();
     AppStrings.instance.addListener(_onLangChange);
     SupabaseService.instance.addListener(_onAuthChangeAndAdmin);
     AppTheme.instance.addListener(_onThemeChange);
@@ -99,10 +109,115 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   void _onAuthChangeAndAdmin() {
     setState(() {});
     _loadAdminFlag();
+    _loadContinueLearning();
     // The My Courses tab loads its own data once in initState and PageView
     // keeps it alive across swipes, so a login/logout that happens while
     // sitting on the Home tab would otherwise leave it showing stale data.
     _myCoursesKey.currentState?.reload();
+  }
+
+  Future<void> _loadContinueLearning() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _continueLearning = []);
+      return;
+    }
+    try {
+      final sb = SupabaseService.instance.client;
+      final enrollRows = await sb
+          .from('enrollments')
+          .select('course_slug')
+          .eq('user_id', user.id)
+          .eq('status', 'active');
+      final slugs =
+          (enrollRows as List).map((r) => r['course_slug'] as String).toList();
+      if (slugs.isEmpty) {
+        if (mounted) setState(() => _continueLearning = []);
+        return;
+      }
+
+      final courseRows = await sb
+          .from('courses')
+          .select('id, slug, title, thumbnail_url, teacher_name')
+          .inFilter('slug', slugs);
+      final courses = (courseRows as List).cast<Map<String, dynamic>>();
+      if (courses.isEmpty) {
+        if (mounted) setState(() => _continueLearning = []);
+        return;
+      }
+      final courseIds = courses.map((c) => c['id'] as String).toList();
+
+      final lectureRows = await sb
+          .from('lectures')
+          .select('id, course_id')
+          .inFilter('course_id', courseIds);
+      final lectures = (lectureRows as List).cast<Map<String, dynamic>>();
+      if (lectures.isEmpty) {
+        if (mounted) setState(() => _continueLearning = []);
+        return;
+      }
+      final lectureCourseId = {
+        for (final l in lectures) l['id'] as String: l['course_id'] as String
+      };
+
+      final progressRows = await sb
+          .from('lesson_progress')
+          .select('lecture_id, completed, updated_at')
+          .eq('user_id', user.id)
+          .inFilter('lecture_id', lectureCourseId.keys.toList());
+      final progress = (progressRows as List).cast<Map<String, dynamic>>();
+
+      final totalByCourse = <String, int>{};
+      for (final l in lectures) {
+        final cid = l['course_id'] as String;
+        totalByCourse[cid] = (totalByCourse[cid] ?? 0) + 1;
+      }
+      final completedByCourse = <String, int>{};
+      final lastActiveByCourse = <String, DateTime>{};
+      for (final p in progress) {
+        final courseId = lectureCourseId[p['lecture_id'] as String];
+        if (courseId == null) continue;
+        if (p['completed'] == true) {
+          completedByCourse[courseId] = (completedByCourse[courseId] ?? 0) + 1;
+        }
+        final updated = DateTime.tryParse(p['updated_at'] as String? ?? '');
+        if (updated != null) {
+          final prev = lastActiveByCourse[courseId];
+          if (prev == null || updated.isAfter(prev)) {
+            lastActiveByCourse[courseId] = updated;
+          }
+        }
+      }
+
+      final items = <_ContinueLearningItem>[];
+      for (final c in courses) {
+        final id = c['id'] as String;
+        final total = totalByCourse[id] ?? 0;
+        if (total == 0) continue;
+        final completed = completedByCourse[id] ?? 0;
+        final percent = completed / total;
+        // Only genuinely "in progress" courses -- 0% has nothing to resume,
+        // 100% is done, not something to continue.
+        if (percent <= 0 || percent >= 1) continue;
+        items.add(_ContinueLearningItem(
+          slug: c['slug'] as String,
+          title: c['title'] as String? ?? '',
+          teacher: c['teacher_name'] as String?,
+          thumbnailUrl: c['thumbnail_url'] as String?,
+          percent: percent,
+          lastActive: lastActiveByCourse[id],
+        ));
+      }
+      items.sort((a, b) =>
+          (b.lastActive ?? DateTime(0)).compareTo(a.lastActive ?? DateTime(0)));
+      if (mounted) {
+        setState(() => _continueLearning = items.take(8).toList());
+      }
+    } catch (_) {
+      // Best-effort -- a convenience row on Home, never worth its own error
+      // state or blocking the rest of the page.
+      if (mounted) setState(() => _continueLearning = []);
+    }
   }
 
   // AppColors' fields are mutable but plain — nothing subscribes to them on
@@ -146,10 +261,11 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         duration: const Duration(milliseconds: 280), curve: Curves.easeOut);
   }
 
-  // A soft scale + fade riding the page controller's own scroll offset — the
-  // page settling into place shrinks and dims slightly the further it is
-  // from center, reading like a gentle glass-morph between tabs rather than
-  // PageView's default flat slide.
+  // A soft scale + fade + frosted blur riding the page controller's own
+  // scroll offset. The blur peaks mid-swipe and clears again once a page
+  // settles into (or fully out of) view, so a tab change reads like the
+  // page is sliding behind a pane of frosted glass rather than PageView's
+  // default flat slide.
   Widget _swipeTransition(int index, Widget child) {
     return AnimatedBuilder(
       animation: _pageController,
@@ -158,12 +274,17 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         if (_pageController.hasClients && _pageController.page != null) {
           page = _pageController.page!;
         }
-        final delta = (page - index).clamp(-1.0, 1.0);
-        final scale = 1 - (delta.abs() * 0.08);
-        final opacity = 1 - (delta.abs() * 0.35);
+        final delta = (page - index).clamp(-1.0, 1.0).abs();
+        final scale = 1 - (delta * 0.08);
+        final opacity = (1 - (delta * 0.35)).clamp(0.0, 1.0);
+        // Triangular curve: 0 at delta=0 or 1, peaking at delta=0.5.
+        final blurSigma = (1 - (delta - 0.5).abs() * 2).clamp(0.0, 1.0) * 5;
         return Opacity(
-          opacity: opacity.clamp(0.0, 1.0),
-          child: Transform.scale(scale: scale, child: child),
+          opacity: opacity,
+          child: ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+            child: Transform.scale(scale: scale, child: child),
+          ),
         );
       },
       child: child,
@@ -187,7 +308,10 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
                 onPageChanged: (i) => setState(() => _currentPage = i),
                 children: [
                   _swipeTransition(0,
-                      RefreshIndicator(onRefresh: _load, child: _buildBody(t))),
+                      RefreshIndicator(
+                          onRefresh: () =>
+                              Future.wait([_load(), _loadContinueLearning()]),
+                          child: _buildBody(t))),
                   _swipeTransition(
                       1,
                       MyCoursesScreen(
@@ -330,6 +454,38 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       children: [
+        if (_continueLearning != null && _continueLearning!.isNotEmpty) ...[
+          FadeSlideIn(
+            delayMs: 0,
+            child: _SectionHeader(title: t('home_continue_learning')),
+          ),
+          const SizedBox(height: 10),
+          FadeSlideIn(
+            delayMs: 30,
+            child: SizedBox(
+              height: 172,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                itemCount: _continueLearning!.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final item = _continueLearning![i];
+                  return ContinueLearningCard(
+                    title: item.title,
+                    teacher: item.teacher,
+                    thumbnailUrl: item.thumbnailUrl,
+                    percent: item.percent,
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) =>
+                            CourseDetailScreen(slug: item.slug))),
+                  );
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 26),
+        ],
         FadeSlideIn(
           delayMs: 0,
           child: _SectionHeader(title: t('home_featured')),
@@ -387,4 +543,21 @@ class _SectionHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+class _ContinueLearningItem {
+  final String slug;
+  final String title;
+  final String? teacher;
+  final String? thumbnailUrl;
+  final double percent;
+  final DateTime? lastActive;
+  const _ContinueLearningItem({
+    required this.slug,
+    required this.title,
+    required this.teacher,
+    required this.thumbnailUrl,
+    required this.percent,
+    required this.lastActive,
+  });
 }

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/ambient_background.dart';
 import '../widgets/brand_title.dart';
+import '../widgets/glass_card.dart';
 import 'teacher_screen.dart';
 import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
@@ -185,27 +187,33 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const SizedBox.shrink()),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const BrandTitle(),
-                const SizedBox(height: 28),
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.panel2,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.line),
-                  ),
-                  child: _buildBody(),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const SizedBox.shrink(),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: AmbientBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const BrandTitle(),
+                    const SizedBox(height: 28),
+                    GlassCard(
+                      glass: true,
+                      borderRadius: BorderRadius.circular(20),
+                      padding: const EdgeInsets.all(24),
+                      child: _buildBody(),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
