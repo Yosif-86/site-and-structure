@@ -84,6 +84,7 @@ class _VerifyLoginOtpScreenState extends State<VerifyLoginOtpScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(title: Text(_t('login_otp_title'))),
         body: AmbientBackground(
           child: SafeArea(

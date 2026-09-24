@@ -7,7 +7,6 @@ import '../i18n/strings.dart';
 import '../services/deep_links.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
-import '../widgets/ambient_background.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_icon_button.dart';
@@ -25,7 +24,10 @@ import 'teacher_screen.dart';
 /// everyone else now that the bottom-nav Profile icon no longer routes
 /// straight into them.
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  /// Fired after the user changes their name or photo, so the shell's top
+  /// bar avatar/greeting update immediately rather than on next sign-in.
+  final VoidCallback? onProfileChanged;
+  const ProfileScreen({super.key, this.onProfileChanged});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -131,6 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .update({_isTeacher ? 'teacher_photo_url' : 'avatar_url': url}).eq(
               'id', user.id);
       await _load();
+      widget.onProfileChanged?.call();
       _toast(t('profile_saved'));
     } catch (e) {
       _toast('${t('err_avatar_upload_failed')}$e');
@@ -193,6 +196,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (saved == true) {
       await _load();
+      widget.onProfileChanged?.call();
       _toast(t('profile_saved'));
     }
   }
@@ -219,7 +223,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Directionality(
       textDirection:
           AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: AmbientBackground(child: SafeArea(child: _buildBody(t))),
+      // No backdrop of its own -- it sits on the shell's shared glass
+      // backdrop, which stays put while the tabs swipe over it.
+      child: _buildBody(t),
     );
   }
 
@@ -248,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onRefresh: _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
         children: [
           FadeSlideIn(delayMs: 0, child: _buildHeaderCard(t)),
           const SizedBox(height: 14),
@@ -336,7 +342,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppColors.panel2,
+                    color: AppColors.glassBg,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text('#$publicId',
@@ -449,7 +455,7 @@ class _AvatarButtonState extends State<_AvatarButton> {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.panel2,
+              color: AppColors.glassBg,
               border: Border.all(color: AppColors.glassBorder, width: 2),
               boxShadow: [
                 BoxShadow(
@@ -504,7 +510,7 @@ class _SocialButton extends StatelessWidget {
               height: 46,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.panel2,
+                color: AppColors.glassBg,
                 border: Border.all(color: AppColors.line),
               ),
               child: Icon(icon, color: AppColors.text, size: 20),
@@ -661,7 +667,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Container(
           decoration: BoxDecoration(
-            color: AppColors.panel,
+            color: AppColors.panel.withValues(alpha: 0.92),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
             border: Border.all(color: AppColors.glassBorder),
           ),

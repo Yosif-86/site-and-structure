@@ -4,11 +4,14 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/glass_scaffold.dart';
 
 /// Net-new teacher dashboard, ported from teacher.html: a dashboard-card
 /// landing (Overview) plus My courses / course edit / curriculum / discount
@@ -51,6 +54,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
   final _cTitle = TextEditingController();
   final _cDescription = TextEditingController();
   final _cPrice = TextEditingController(text: '0');
+  // "What you'll learn" -- one point per line, stored as courses.learning_points.
+  final _cLearning = TextEditingController();
   XFile? _cThumbFile;
   String? _cFormError;
 
@@ -90,6 +95,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.dispose();
     _cDescription.dispose();
     _cPrice.dispose();
+    _cLearning.dispose();
     _lTitle.dispose();
     _dCode.dispose();
     _dValue.dispose();
@@ -200,6 +206,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.clear();
     _cDescription.clear();
     _cPrice.text = '0';
+    _cLearning.clear();
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
@@ -210,6 +217,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.text = c['title'] as String? ?? '';
     _cDescription.text = c['description'] as String? ?? '';
     _cPrice.text = '${c['price'] ?? 0}';
+    _cLearning.text = ((c['learning_points'] as List?) ?? const [])
+        .whereType<String>()
+        .join('\n');
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
@@ -225,6 +235,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
     }
     final description = _cDescription.text.trim();
     final price = num.tryParse(_cPrice.text.trim()) ?? 0;
+    // Same caps the DB check constraint enforces (add-course-learning-points
+    // .sql): at most 12 points, each at most 200 characters.
+    final learningPoints = _cLearning.text
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .take(12)
+        .map((l) => l.length > 200 ? l.substring(0, 200) : l)
+        .toList();
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -244,6 +263,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
           'price': price,
           'is_free': price == 0,
           'thumbnail_url': thumbnailUrl,
+          // Sent when there's something to set, or something to clear (the row
+          // already has the column then) -- never otherwise, so saving still
+          // works against a database that hasn't run the migration yet.
+          if (learningPoints.isNotEmpty ||
+              ((_activeCourse!['learning_points'] as List?)?.isNotEmpty ?? false))
+            'learning_points': learningPoints,
         }).eq('id', _activeCourse!['id']);
       } else {
         final slug =
@@ -255,6 +280,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           'price': price,
           'is_free': price == 0,
           'thumbnail_url': thumbnailUrl,
+          if (learningPoints.isNotEmpty) 'learning_points': learningPoints,
           'teacher_id': user.id,
           'status': 'draft',
         });
@@ -343,6 +369,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final path =
           '${user.id}/${_activeCourse!['id']}/${DateTime.now().millisecondsSinceEpoch}-${_lVideoFile!.name}';
       setState(() => _lUploadProgress = 0);
+      // Read the runtime off the local file before uploading, so the course
+      // page can show real lecture/course durations from the first moment
+      // the lecture exists (not only after someone has watched it).
+      final durationSeconds = await _readVideoDuration(File(_lVideoFile!.path));
       await _uploadWithProgress(
         bucket: 'lecture-uploads',
         path: path,
@@ -363,6 +393,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         'is_free': _lIsFree,
         'order_index': orderIndex,
         'pending_upload_path': path,
+        if (durationSeconds != null) 'duration_seconds': durationSeconds,
       });
       _lTitle.clear();
       _lVideoFile = null;
@@ -372,6 +403,22 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _lFormError = '${t('err_save_failed')}$e');
     } finally {
       if (mounted) setState(() => _lUploadProgress = null);
+    }
+  }
+
+  /// Local video length in whole seconds, or null if it can't be read. Never
+  /// throws -- a missing duration just means the course page falls back to
+  /// the watch-data backfill, not a failed upload.
+  Future<int?> _readVideoDuration(File file) async {
+    final controller = VideoPlayerController.file(file);
+    try {
+      await controller.initialize().timeout(const Duration(seconds: 15));
+      final seconds = controller.value.duration.inSeconds;
+      return seconds > 0 ? seconds : null;
+    } catch (_) {
+      return null;
+    } finally {
+      await controller.dispose();
     }
   }
 
@@ -618,7 +665,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
         content: Text(message, style: TextStyle(color: AppColors.text)),
         actions: [
           TextButton(
@@ -639,7 +685,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final ar = AppStrings.instance.isAr;
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
+      child: GlassScaffold(
         appBar: AppBar(
           leading: widget.openPaymentInfo
               // This instance was pushed just for Settings > Payment info --
@@ -772,6 +818,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
             controller: _cDescription,
             maxLines: 4,
             decoration: InputDecoration(labelText: t('label_description'))),
+        const SizedBox(height: 12),
+        TextField(
+            controller: _cLearning,
+            minLines: 3,
+            maxLines: 8,
+            keyboardType: TextInputType.multiline,
+            decoration: InputDecoration(
+                labelText: t('what_you_learn'),
+                hintText: t('learning_points_hint'),
+                helperText: t('learning_points_helper'))),
         const SizedBox(height: 12),
         TextField(
             controller: _cPrice,
@@ -1013,7 +1069,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-                color: AppColors.panel2,
+                color: AppColors.glassBg,
                 borderRadius: BorderRadius.circular(10)),
             child: _pQiQrFile != null
                 ? ClipRRect(
@@ -1141,16 +1197,10 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: data.onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
+    return GlassCard(
+        onTap: data.onTap,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.panel2,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.line),
-        ),
+        borderRadius: BorderRadius.circular(16),
         child: Row(children: [
           Container(
             width: 40,
@@ -1176,7 +1226,6 @@ class _StatCard extends StatelessWidget {
             ),
           ),
         ]),
-      ),
     );
   }
 }
@@ -1187,13 +1236,8 @@ class _AdminCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.panel2,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.line),
-      ),
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );

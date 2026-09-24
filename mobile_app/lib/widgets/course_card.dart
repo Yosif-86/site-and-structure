@@ -2,117 +2,131 @@ import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
 import '../models/course.dart';
+import '../services/learning_service.dart';
 import '../theme.dart';
 import 'glass_card.dart';
 
-class CourseCard extends StatelessWidget {
-  final Course course;
-  final VoidCallback onTap;
-  const CourseCard({super.key, required this.course, required this.onTap});
+/// Course thumbnail with a consistent fallback, used by every card.
+class CourseThumb extends StatelessWidget {
+  final String? url;
+  final double radius;
+  final bool playOverlay;
+  const CourseThumb(
+      {super.key, required this.url, this.radius = 12, this.playOverlay = false});
 
   @override
   Widget build(BuildContext context) {
-    final ar = AppStrings.instance.isAr;
-    final t = AppStrings.instance.t;
-    final title = course.localizedTitle(ar);
-    final desc = course.localizedDescription(ar);
-    final teacher = course.localizedTeacherName(ar);
-    final tag = course.localizedTagLabel(ar);
-
-    return GlassCard(
-      onTap: onTap,
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (course.thumbnailUrl != null)
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Image.network(
-                course.thumbnailUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    ColoredBox(color: AppColors.panel2),
-                loadingBuilder: (context, child, progress) => progress == null
-                    ? child
-                    : ColoredBox(color: AppColors.panel2),
-              ),
-            ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (tag != null && tag.isNotEmpty) ...[
-                    _Tag(
-                        label: tag,
-                        color: course.tagColor == 'green'
-                            ? AppColors.teal
-                            : AppColors.red),
-                    const SizedBox(height: 8),
-                  ],
-                  Text(
-                    title,
-                    style: AppFonts.body(size: 16, weight: FontWeight.w600),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (teacher != null && teacher.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(teacher,
-                        style: AppFonts.body(size: 13, color: AppColors.muted)),
-                  ],
-                  if (desc != null && desc.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      desc,
-                      style: AppFonts.body(size: 13, color: AppColors.muted),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const Spacer(),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      course.isFree
-                          ? Text(t('card_free'),
-                              style: AppFonts.body(
-                                  size: 15,
-                                  weight: FontWeight.w700,
-                                  color: AppColors.teal))
-                          : Text(course.price ?? '',
-                              style: AppFonts.code(
-                                  size: 15,
-                                  weight: FontWeight.w700,
-                                  color: AppColors.red)),
-                      Icon(
-                          ar
-                              ? Icons.arrow_back_ios_new
-                              : Icons.arrow_forward_ios,
-                          size: 14,
-                          color: AppColors.muted2),
-                    ],
-                  ),
-                ],
-              ),
+    Widget fallback() => DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.panel2, AppColors.bg],
             ),
           ),
+          child: Center(
+            child: Icon(Icons.play_lesson_outlined,
+                color: AppColors.muted2, size: 22),
+          ),
+        );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (url != null)
+            Image.network(
+              url!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => fallback(),
+              loadingBuilder: (_, child, p) => p == null ? child : fallback(),
+            )
+          else
+            fallback(),
+          if (playOverlay)
+            Center(
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withValues(alpha: 0.35),
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.85), width: 1.5),
+                ),
+                child: const Icon(Icons.play_arrow_rounded,
+                    color: Colors.white, size: 20),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Large hero card for the first course on Home: thumbnail with a bottom
-/// gradient, title and teacher on the image, price pill in the corner.
+/// Small icon + text badge for lesson count / duration.
+class StatChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const StatChip({super.key, required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: AppColors.muted),
+          const SizedBox(width: 4),
+          Text(label,
+              style: AppFonts.body(
+                  size: 11.5, weight: FontWeight.w600, color: AppColors.muted)),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _priceText(Course course, {double size = 13}) {
+  final t = AppStrings.instance.t;
+  return course.isFree
+      ? Text(t('card_free'),
+          style: AppFonts.body(
+              size: size, weight: FontWeight.w700, color: AppColors.teal))
+      : Text(course.price ?? '',
+          style: AppFonts.code(
+              size: size, weight: FontWeight.w700, color: AppColors.red));
+}
+
+List<Widget> _statChips(Course course, CourseStats? stats) {
+  final t = AppStrings.instance.t;
+  final chips = <Widget>[];
+  if ((stats?.lectureCount ?? 0) > 0) {
+    chips.add(StatChip(
+        icon: Icons.play_lesson_outlined,
+        label: '${stats!.lectureCount} ${t('lessons_label')}'));
+  }
+  final dur = LearningService.courseDurationLabel(course, stats);
+  if (dur != null) {
+    chips.add(StatChip(icon: Icons.schedule_rounded, label: dur));
+  }
+  return chips;
+}
+
+/// Large hero card for the featured course on Home: thumbnail with a bottom
+/// gradient, title/teacher/stats on the image, price pill in the corner.
 class FeaturedCourseCard extends StatelessWidget {
   final Course course;
+  final CourseStats? stats;
   final VoidCallback onTap;
   const FeaturedCourseCard(
-      {super.key, required this.course, required this.onTap});
+      {super.key, required this.course, this.stats, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -121,74 +135,76 @@ class FeaturedCourseCard extends StatelessWidget {
     final title = course.localizedTitle(ar);
     final teacher = course.localizedTeacherName(ar);
     final tag = course.localizedTagLabel(ar);
+    final dur = LearningService.courseDurationLabel(course, stats);
+    const onImage = Color(0xFFF3EDE4);
 
     return GlassCard(
       onTap: onTap,
       padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(20),
       child: AspectRatio(
-        aspectRatio: 4 / 3,
+        aspectRatio: 16 / 10,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (course.thumbnailUrl != null)
-              Image.network(
-                course.thumbnailUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    ColoredBox(color: AppColors.panel2),
-                loadingBuilder: (_, child, p) =>
-                    p == null ? child : ColoredBox(color: AppColors.panel2),
-              )
-            else
-              ColoredBox(color: AppColors.panel2),
+            CourseThumb(url: course.thumbnailUrl, radius: 0),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  stops: [0.35, 1],
-                  colors: [Colors.transparent, Color(0xE6120F0C)],
+                  stops: [0.25, 1],
+                  colors: [Colors.transparent, Color(0xEE120F0C)],
                 ),
               ),
             ),
             PositionedDirectional(
               top: 12,
               start: 12,
-              child: _PricePill(course: course, t: t),
+              child: tag != null && tag.isNotEmpty
+                  ? GlassChip(label: tag, onImage: true)
+                  : const SizedBox.shrink(),
+            ),
+            PositionedDirectional(
+              top: 12,
+              end: 12,
+              child: GlassChip(
+                  label: course.isFree ? t('card_free') : (course.price ?? ''),
+                  color: course.isFree ? AppColors.teal : null,
+                  onImage: !course.isFree),
             ),
             Positioned(
               left: 16,
               right: 16,
-              bottom: 16,
+              bottom: 14,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (tag != null && tag.isNotEmpty) ...[
-                    Text(tag,
-                        style: AppFonts.eyebrow(
-                            color:
-                                const Color(0xFFF3EDE4).withValues(alpha: 0.8),
-                            size: 11)),
-                    const SizedBox(height: 6),
-                  ],
-                  Text(
-                    title,
-                    style: AppFonts.body(
-                        size: 20,
-                        weight: FontWeight.w700,
-                        color: const Color(0xFFF3EDE4)),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(title,
+                      style: AppFonts.body(
+                          size: 20, weight: FontWeight.w700, color: onImage),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
                   if (teacher != null && teacher.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(teacher,
                         style: AppFonts.body(
-                            size: 13,
-                            color: const Color(0xFFF3EDE4)
-                                .withValues(alpha: 0.75))),
+                            size: 13, color: onImage.withValues(alpha: 0.75))),
                   ],
+                  const SizedBox(height: 10),
+                  Wrap(spacing: 6, runSpacing: 6, children: [
+                    if ((stats?.lectureCount ?? 0) > 0)
+                      GlassChip(
+                          icon: Icons.play_lesson_outlined,
+                          label: '${stats!.lectureCount} ${t('lessons_label')}',
+                          onImage: true),
+                    if (dur != null)
+                      GlassChip(
+                          icon: Icons.schedule_rounded,
+                          label: dur,
+                          onImage: true),
+                  ]),
                 ],
               ),
             ),
@@ -199,47 +215,31 @@ class FeaturedCourseCard extends StatelessWidget {
   }
 }
 
-/// Compact list row for Home: thumbnail on the side, title, teacher, price.
-class CompactCourseCard extends StatelessWidget {
+/// List row: thumbnail with play overlay, title, teacher, lesson/duration
+/// chips, price.
+class CourseRow extends StatelessWidget {
   final Course course;
+  final CourseStats? stats;
   final VoidCallback onTap;
-  const CompactCourseCard(
-      {super.key, required this.course, required this.onTap});
+  const CourseRow(
+      {super.key, required this.course, this.stats, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final ar = AppStrings.instance.isAr;
-    final t = AppStrings.instance.t;
     final title = course.localizedTitle(ar);
     final teacher = course.localizedTeacherName(ar);
+    final chips = _statChips(course, stats);
 
     return GlassCard(
       onTap: onTap,
       padding: const EdgeInsets.all(10),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              width: 104,
-              height: 74,
-              child: course.thumbnailUrl != null
-                  ? Image.network(
-                      course.thumbnailUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          ColoredBox(color: AppColors.panel2),
-                      loadingBuilder: (_, child, p) => p == null
-                          ? child
-                          : ColoredBox(color: AppColors.panel2),
-                    )
-                  : ColoredBox(
-                      color: AppColors.panel2,
-                      child: Icon(Icons.play_circle_outline,
-                          color: AppColors.muted2),
-                    ),
-            ),
-          ),
+          SizedBox(
+              width: 108,
+              height: 82,
+              child: CourseThumb(url: course.thumbnailUrl, playOverlay: true)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -251,29 +251,24 @@ class CompactCourseCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis),
                 if (teacher != null && teacher.isNotEmpty) ...[
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 2),
                   Text(teacher,
                       style: AppFonts.body(size: 12.5, color: AppColors.muted),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
-                const SizedBox(height: 6),
-                course.isFree
-                    ? Text(t('card_free'),
-                        style: AppFonts.body(
-                            size: 13,
-                            weight: FontWeight.w700,
-                            color: AppColors.teal))
-                    : Text(course.price ?? '',
-                        style: AppFonts.code(
-                            size: 13,
-                            weight: FontWeight.w700,
-                            color: AppColors.red)),
+                const SizedBox(height: 7),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [...chips, _priceText(course)],
+                ),
               ],
             ),
           ),
-          const SizedBox(width: 6),
-          Icon(ar ? Icons.chevron_left : Icons.chevron_right,
+          const SizedBox(width: 4),
+          Icon(Icons.chevron_right,
               color: AppColors.muted2),
         ],
       ),
@@ -281,101 +276,97 @@ class CompactCourseCard extends StatelessWidget {
   }
 }
 
-/// Small card for Home's "Continue learning" row: a percent ring, a small
-/// thumbnail, title/teacher, and a matching progress bar underneath.
+/// Card for Home's horizontal "Continue learning" row: thumbnail on top with
+/// a status chip, title/teacher, a progress bar with the percentage, and a
+/// play button that resumes the course.
 class ContinueLearningCard extends StatelessWidget {
-  final String title;
-  final String? teacher;
-  final String? thumbnailUrl;
-  final double percent; // 0..1
+  final MyCourseProgress item;
   final VoidCallback onTap;
-  const ContinueLearningCard({
-    super.key,
-    required this.title,
-    required this.teacher,
-    required this.thumbnailUrl,
-    required this.percent,
-    required this.onTap,
-  });
+  const ContinueLearningCard(
+      {super.key, required this.item, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final pct = (percent * 100).round();
+    final ar = AppStrings.instance.isAr;
+    final t = AppStrings.instance.t;
+    final pct = (item.progress * 100).round();
+    final teacher = item.course.localizedTeacherName(ar);
+
     return SizedBox(
-      width: 168,
+      width: 196,
       child: GlassCard(
         onTap: onTap,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
+        borderRadius: BorderRadius.circular(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            SizedBox(
+              height: 104,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CourseThumb(url: item.course.thumbnailUrl),
+                  PositionedDirectional(
+                    bottom: 8,
+                    start: 8,
+                    child: GlassChip(label: t('status_in_progress'), onImage: true),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(item.course.localizedTitle(ar),
+                style: AppFonts.body(size: 14, weight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            if (teacher != null && teacher.isNotEmpty)
+              Text(teacher,
+                  style: AppFonts.body(size: 11.5, color: AppColors.muted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 9),
             Row(
               children: [
-                SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: Stack(
-                    alignment: Alignment.center,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      CircularProgressIndicator(
-                        value: percent.clamp(0.02, 1.0),
-                        strokeWidth: 3.5,
-                        backgroundColor: AppColors.line,
-                        valueColor: AlwaysStoppedAnimation(AppColors.red),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: LinearProgressIndicator(
+                          value: item.progress,
+                          minHeight: 5,
+                          backgroundColor: AppColors.line,
+                          valueColor: AlwaysStoppedAnimation(AppColors.red),
+                        ),
                       ),
-                      Text('$pct%',
-                          style: AppFonts.code(size: 10.5, weight: FontWeight.w700)),
+                      const SizedBox(height: 5),
+                      Text('$pct% ${t('progress_complete')}',
+                          style: AppFonts.body(
+                              size: 11, color: AppColors.muted)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: thumbnailUrl != null
-                          ? Image.network(
-                              thumbnailUrl!,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  ColoredBox(color: AppColors.panel2),
-                              loadingBuilder: (_, child, p) => p == null
-                                  ? child
-                                  : ColoredBox(color: AppColors.panel2),
-                            )
-                          : ColoredBox(
-                              color: AppColors.panel2,
-                              child: Icon(Icons.play_circle_outline,
-                                  color: AppColors.muted2, size: 18),
-                            ),
-                    ),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.red,
+                    boxShadow: [
+                      BoxShadow(
+                          color: AppColors.red.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3)),
+                    ],
                   ),
+                  child: const Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 22),
                 ),
               ],
-            ),
-            const SizedBox(height: 10),
-            Text(title,
-                style: AppFonts.body(size: 13.5, weight: FontWeight.w600),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
-            if (teacher != null && teacher!.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(teacher!,
-                  style: AppFonts.body(size: 11.5, color: AppColors.muted),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: percent,
-                minHeight: 4,
-                backgroundColor: AppColors.line,
-                valueColor: AlwaysStoppedAnimation(AppColors.red),
-              ),
             ),
           ],
         ),
@@ -384,48 +375,39 @@ class ContinueLearningCard extends StatelessWidget {
   }
 }
 
-class _PricePill extends StatelessWidget {
-  final Course course;
-  final String Function(String) t;
-  const _PricePill({required this.course, required this.t});
+/// Circular percentage ring used by the progress summary card.
+class ProgressRing extends StatelessWidget {
+  final double value; // 0..1
+  final double size;
+  final double stroke;
+  final Widget? center;
+  const ProgressRing(
+      {super.key,
+      required this.value,
+      this.size = 96,
+      this.stroke = 9,
+      this.center});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: const Color(0xFF14120F).withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(999),
-        border:
-            Border.all(color: const Color(0xFFF3EDE4).withValues(alpha: 0.18)),
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox.expand(
+            child: CircularProgressIndicator(
+              value: value.clamp(0.0, 1.0),
+              strokeWidth: stroke,
+              strokeCap: StrokeCap.round,
+              backgroundColor: AppColors.line,
+              valueColor: AlwaysStoppedAnimation(AppColors.red),
+            ),
+          ),
+          if (center != null) center!,
+        ],
       ),
-      child: course.isFree
-          ? Text(t('card_free'),
-              style: AppFonts.body(
-                  size: 12.5, weight: FontWeight.w700, color: AppColors.teal))
-          : Text(course.price ?? '',
-              style: AppFonts.code(
-                  size: 12.5,
-                  weight: FontWeight.w700,
-                  color: const Color(0xFFF3EDE4))),
-    );
-  }
-}
-
-class _Tag extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Tag({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(label, style: AppFonts.eyebrow(color: color, size: 10.5)),
     );
   }
 }

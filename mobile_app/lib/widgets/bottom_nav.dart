@@ -6,152 +6,175 @@ import '../theme.dart';
 
 class BottomNavItem {
   final IconData icon;
+  final IconData? activeIcon;
   final String tooltip;
   final VoidCallback onTap;
   final bool active;
 
   const BottomNavItem({
     required this.icon,
+    this.activeIcon,
     required this.tooltip,
     required this.onTap,
     this.active = false,
   });
 }
 
-/// Floating glass pill-shaped bottom navigation bar. The active item expands
-/// into a filled label pill (icon + text); inactive items stay icon-only, so
-/// the bar's overall width breathes with whichever tab is selected instead
-/// of every label competing for space at once.
+/// Floating frosted-glass bottom bar: every tab shows its icon and label,
+/// the active one sits on a soft tinted highlight, and a raised circular
+/// button floats in the middle for the primary action (Explore).
+///
+/// [items] must have an even count; the center button is placed between
+/// the two halves.
 class FloatingBottomNav extends StatelessWidget {
   final List<BottomNavItem> items;
+  final BottomNavItem center;
 
-  const FloatingBottomNav({super.key, required this.items});
+  const FloatingBottomNav({super.key, required this.items, required this.center})
+      : assert(items.length % 2 == 0);
 
   @override
   Widget build(BuildContext context) {
     // Deliberately avoids SafeArea+Center here: that combination inside
     // Scaffold.bottomNavigationBar collapses the Scaffold body to zero
-    // height on the web (CanvasKit) target — reproduced and isolated to
-    // that specific nesting. Row+mainAxisAlignment.center gets the same
-    // centered pill without it, and reading the bottom inset directly
-    // gets the same safe-area behavior SafeArea would have given.
+    // height on the web (CanvasKit) target -- reproduced and isolated to
+    // that specific nesting. Reading the bottom inset directly gets the same
+    // safe-area behavior SafeArea would have given.
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final dark = AppTheme.instance.isDark;
+    final half = items.length ~/ 2;
+
     return Padding(
-      padding: EdgeInsets.only(bottom: bottomInset > 12 ? bottomInset : 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.glassBg,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: AppColors.glassBorder),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.22),
-                        blurRadius: 24,
-                        offset: const Offset(0, 10)),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // A soft light-catches-the-edge sheen along the top --
-                    // the one thing that reads "glass" rather than just
-                    // "translucent panel" at a glance.
-                    Positioned.fill(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.white.withValues(
-                                  alpha: AppTheme.instance.isDark ? 0.10 : 0.35),
-                              Colors.white.withValues(alpha: 0),
-                            ],
-                            stops: const [0, 0.6],
-                          ),
-                        ),
-                      ),
+      padding: EdgeInsets.fromLTRB(
+          14, 0, 14, bottomInset > 10 ? bottomInset : 10),
+      child: SizedBox(
+        height: 88,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.bottomCenter,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(26),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: AppColors.glassBg,
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: AppColors.glassBorder),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.white.withValues(alpha: dark ? 0.09 : 0.35),
+                        Colors.white.withValues(alpha: 0),
+                      ],
+                      stops: const [0, 0.6],
                     ),
-                    Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          for (final item in items) _NavPill(item: item)
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                  child: Row(
+                    children: [
+                      for (final item in items.take(half))
+                        Expanded(child: _NavTab(item: item)),
+                      const SizedBox(width: 72),
+                      for (final item in items.skip(half))
+                        Expanded(child: _NavTab(item: item)),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            Positioned(top: 0, child: _CenterButton(item: center)),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _NavPill extends StatelessWidget {
+class _NavTab extends StatelessWidget {
   final BottomNavItem item;
-  const _NavPill({required this.item});
+  const _NavTab({required this.item});
 
   @override
   Widget build(BuildContext context) {
-    final dark = AppTheme.instance.isDark;
-    // The active pill fills solid so it reads at a glance against the
-    // frosted bar behind it — white-on-black in dark mode, the inverse in
-    // light mode, same swap the rest of the theme does at the palette level.
-    final activeBg = dark ? Colors.white : AppColors.text;
-    final activeFg = dark ? Colors.black : AppColors.bg;
+    final color = item.active ? AppColors.red : AppColors.muted;
+    return Semantics(
+      button: true,
+      selected: item.active,
+      label: item.tooltip,
+      child: InkWell(
+        onTap: item.onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: item.active
+                ? AppColors.red.withValues(alpha: 0.14)
+                : Colors.transparent,
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(item.active ? (item.activeIcon ?? item.icon) : item.icon,
+                  size: 22, color: color),
+              const SizedBox(height: 3),
+              Text(
+                item.tooltip,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.body(
+                    size: 10.5,
+                    weight: item.active ? FontWeight.w700 : FontWeight.w500,
+                    color: color),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3),
+class _CenterButton extends StatelessWidget {
+  final BottomNavItem item;
+  const _CenterButton({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: item.tooltip,
       child: Tooltip(
         message: item.tooltip,
-        child: InkWell(
+        child: GestureDetector(
           onTap: item.onTap,
-          borderRadius: BorderRadius.circular(999),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 260),
-            curve: Curves.easeOutCubic,
-            height: 44,
-            padding: EdgeInsets.symmetric(horizontal: item.active ? 16 : 11),
+          child: Container(
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: item.active ? activeBg : Colors.transparent,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(item.icon,
-                    size: 20, color: item.active ? activeFg : AppColors.muted),
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  child: item.active
-                      ? Padding(
-                          padding: const EdgeInsetsDirectional.only(start: 8),
-                          child: Text(
-                            item.tooltip,
-                            style: AppFonts.body(
-                                size: 13.5,
-                                weight: FontWeight.w600,
-                                color: activeFg),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.red, const Color(0xFF9E3A14)],
+              ),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.28), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.red.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
+            child: Icon(item.icon, color: Colors.white, size: 28),
           ),
         ),
       ),

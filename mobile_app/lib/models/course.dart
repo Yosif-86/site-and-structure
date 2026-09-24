@@ -17,6 +17,8 @@ class Course {
   final Map<String, dynamic>? metaAr;
   final String status;
   final String? thumbnailUrl;
+  // "What you'll learn" bullets (courses.learning_points, text[]).
+  final List<String> learningPoints;
 
   Course({
     required this.id,
@@ -37,6 +39,7 @@ class Course {
     this.metaAr,
     required this.status,
     this.thumbnailUrl,
+    this.learningPoints = const [],
   });
 
   factory Course.fromJson(Map<String, dynamic> json) => Course(
@@ -58,6 +61,11 @@ class Course {
         metaAr: json['meta_ar'] as Map<String, dynamic>?,
         status: json['status'] as String? ?? 'draft',
         thumbnailUrl: json['thumbnail_url'] as String?,
+        learningPoints: (json['learning_points'] as List?)
+                ?.whereType<String>()
+                .where((p) => p.trim().isNotEmpty)
+                .toList() ??
+            const [],
       );
 
   String localizedTitle(bool ar) => (ar && titleAr != null && titleAr!.isNotEmpty) ? titleAr! : title;

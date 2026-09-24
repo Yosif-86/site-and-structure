@@ -6,6 +6,8 @@ import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
+import '../widgets/glass_card.dart';
+import '../widgets/glass_scaffold.dart';
 
 /// Port of admin.html's dashboard: a landing view of clickable stat cards,
 /// each drilling into its own list/detail view with a back button — mirrors
@@ -461,7 +463,6 @@ class _AdminScreenState extends State<AdminScreen> {
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
         content: Text(message, style: TextStyle(color: AppColors.text)),
         actions: [
           TextButton(
@@ -482,7 +483,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final ar = AppStrings.instance.isAr;
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
+      child: GlassScaffold(
         appBar: AppBar(
           leading: _view != _View.dashboard
               ? IconButton(
@@ -1242,16 +1243,10 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: data.onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
+    return GlassCard(
+        onTap: data.onTap,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.panel2,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.line),
-        ),
+        borderRadius: BorderRadius.circular(16),
         child: Row(children: [
           Container(
             width: 40,
@@ -1276,7 +1271,6 @@ class _StatCard extends StatelessWidget {
             ),
           ),
         ]),
-      ),
     );
   }
 }
@@ -1287,13 +1281,8 @@ class _AdminCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GlassCard(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.panel2,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.line),
-      ),
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: children),
     );
@@ -1347,8 +1336,19 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
   @override
   void initState() {
     super.initState();
+    // The signed URL's path contains the file name the *student* chose when
+    // uploading, so it's attacker-controlled text going into HTML: escaped
+    // before interpolation, and JavaScript is off entirely (showing an image
+    // needs none) so even a missed edge case can't run script in an admin's
+    // session.
+    final safeUrl = widget.url
+        .replaceAll('&', '&amp;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
     _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setJavaScriptMode(JavaScriptMode.disabled)
       ..setBackgroundColor(Colors.black)
       ..setNavigationDelegate(NavigationDelegate(
         onPageFinished: (_) {
@@ -1365,7 +1365,7 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
   img { max-width:100%; max-height:100vh; width:auto; height:auto; object-fit:contain; }
 </style>
 </head>
-<body><img src="${widget.url}"></body>
+<body><img src="$safeUrl"></body>
 </html>
 ''');
   }

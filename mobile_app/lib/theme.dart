@@ -236,8 +236,12 @@ ThemeData buildAppTheme() {
           fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
       labelSmall: AppFonts.mono(size: 11, color: AppColors.muted2),
     ),
+    // Transparent so GlassScaffold's ambient backdrop runs unbroken under
+    // the header; screens that want a solid bar (the video player) set
+    // their own backgroundColor.
     appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.bg,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       foregroundColor: AppColors.text,
       elevation: 0,
       scrolledUnderElevation: 0,
@@ -271,6 +275,7 @@ ThemeData buildAppTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.text,
+        backgroundColor: AppColors.glassBg,
         minimumSize: const Size(0, 44),
         textStyle: GoogleFonts.workSans(
             fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.1),
@@ -290,7 +295,9 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.panel,
+      // Translucent so fields read as part of the glass panel they sit on
+      // rather than as solid blocks punched into it.
+      fillColor: AppColors.bg.withValues(alpha: 0.45),
       labelStyle: GoogleFonts.workSans(fontSize: 14, color: AppColors.muted),
       floatingLabelStyle:
           GoogleFonts.workSans(fontSize: 13, color: AppColors.muted),
@@ -325,6 +332,27 @@ ThemeData buildAppTheme() {
           borderRadius: BorderRadius.circular(AppRadius.control)),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: AppColors.red),
+    dialogTheme: DialogThemeData(
+      backgroundColor: AppColors.panel.withValues(alpha: 0.94),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: AppColors.glassBorder),
+      ),
+    ),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: AppColors.panel.withValues(alpha: 0.96),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.control),
+        side: BorderSide(color: AppColors.glassBorder),
+      ),
+    ),
   );
 }
 

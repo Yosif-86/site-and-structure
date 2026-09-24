@@ -38,7 +38,16 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        // Skipped only for debuggable builds (`flutter run` / `flutter build
+        // apk --debug`), which are never distributed -- so the app's own UI
+        // can be screenshotted and visually verified during development.
+        // Release and profile builds are never debuggable, so every build a
+        // student can actually install keeps FLAG_SECURE on.
+        val debuggable =
+            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

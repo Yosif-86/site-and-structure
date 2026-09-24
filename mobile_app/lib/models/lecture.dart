@@ -5,6 +5,7 @@ class Lecture {
   final String? titleAr;
   final bool isFree;
   final int orderIndex;
+  final int? durationSeconds;
 
   Lecture({
     required this.id,
@@ -13,6 +14,7 @@ class Lecture {
     this.titleAr,
     required this.isFree,
     required this.orderIndex,
+    this.durationSeconds,
   });
 
   factory Lecture.fromJson(Map<String, dynamic> json) => Lecture(
@@ -22,6 +24,7 @@ class Lecture {
         titleAr: json['title_ar'] as String?,
         isFree: json['is_free'] as bool? ?? false,
         orderIndex: json['order_index'] as int? ?? 0,
+        durationSeconds: json['duration_seconds'] as int?,
       );
 
   String localizedTitle(bool ar) => (ar && titleAr != null && titleAr!.isNotEmpty) ? titleAr! : title;

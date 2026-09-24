@@ -225,6 +225,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: canPop
             ? AppBar(
                 title: Text(_t('verify_phone_title')),

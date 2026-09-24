@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -646,19 +647,26 @@ class _EpisodeListButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(open ? Icons.close : Icons.playlist_play, color: Colors.white, size: 18),
-            const SizedBox(width: 4),
-            Text(AppStrings.instance.t('episodes'), style: const TextStyle(color: Colors.white, fontSize: 11)),
-          ],
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(open ? Icons.close : Icons.playlist_play, color: Colors.white, size: 18),
+                const SizedBox(width: 4),
+                Text(AppStrings.instance.t('episodes'), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -684,11 +692,15 @@ class _EpisodeList extends StatelessWidget {
     final ar = AppStrings.instance.isAr;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 220, maxHeight: 220),
-      child: Container(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.8),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white24),
+          color: Colors.black.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
         ),
         child: ListView.separated(
           shrinkWrap: true,
@@ -728,6 +740,8 @@ class _EpisodeList extends StatelessWidget {
               ),
             );
           },
+        ),
+          ),
         ),
       ),
     );

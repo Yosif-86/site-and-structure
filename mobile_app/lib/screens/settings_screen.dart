@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
-import '../widgets/ambient_background.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
@@ -30,7 +29,6 @@ class SettingsScreen extends StatelessWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.panel,
         content: Text(t('confirm_delete_account'),
             style: TextStyle(color: AppColors.text)),
         actions: [
@@ -56,11 +54,14 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
 
-    return AmbientBackground(
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+    // No backdrop of its own -- it sits on the shell's shared glass
+    // backdrop, which stays put while the tabs swipe over it.
+    return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
           children: [
+            Text(t('settings'),
+                style: AppFonts.body(size: 26, weight: FontWeight.w800)),
+            const SizedBox(height: 16),
             // Payment info only means anything for teachers (it is where
             // their ZainCash / Qi Card payout details live). For everyone
             // else it renders disabled with a one-line explanation rather
@@ -154,8 +155,6 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ],
-        ),
-      ),
     );
   }
 }
