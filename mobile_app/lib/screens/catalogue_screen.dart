@@ -391,6 +391,37 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
     var delay = 0;
     int next() => delay += 40;
 
+    // Courses and the signed-in user's progress load separately; drawing each
+    // as it arrives made the progress card and Continue learning pop in
+    // above an already-visible course list and shove it down. Hold the
+    // placeholders until both are in, then show the page in one go.
+    if (courses == null || (loggedIn && _myLearning == null)) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
+        children: [
+          FadeSlideIn(
+              delayMs: 0, child: _Greeting(name: _fullName, loggedIn: loggedIn)),
+          const SizedBox(height: 16),
+          if (loggedIn) ...[
+            const FadeSlideIn(
+                delayMs: 0,
+                child: SizedBox(height: 150, child: SkeletonCard(row: true))),
+            const SizedBox(height: 24),
+          ],
+          const FadeSlideIn(
+              delayMs: 40, child: SizedBox(height: 230, child: SkeletonCard())),
+          const SizedBox(height: 14),
+          for (var i = 0; i < 3; i++) ...[
+            FadeSlideIn(
+                delayMs: 100 + i * 45,
+                child: const SizedBox(
+                    height: 104, child: SkeletonCard(row: true))),
+            const SizedBox(height: 10),
+          ],
+        ],
+      );
+    }
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
       children: [
@@ -428,18 +459,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           ),
           const SizedBox(height: 24),
         ],
-        if (courses == null) ...[
-          const FadeSlideIn(
-              delayMs: 0, child: SizedBox(height: 230, child: SkeletonCard())),
-          const SizedBox(height: 14),
-          for (var i = 0; i < 3; i++) ...[
-            FadeSlideIn(
-                delayMs: 60 + i * 45,
-                child: const SizedBox(
-                    height: 104, child: SkeletonCard(row: true))),
-            const SizedBox(height: 10),
-          ],
-        ] else if (courses.isEmpty)
+        if (courses.isEmpty)
           GlassCard(
             padding: const EdgeInsets.all(24),
             child: Text(t('no_courses'),
