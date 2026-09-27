@@ -134,6 +134,10 @@ class SupabaseService extends ChangeNotifier {
     _sessionWatchTimer = Timer.periodic(const Duration(seconds: 20), (_) async {
       final user = currentUser;
       if (user == null) return;
+      // A recovery session never claimed a device slot, so its token can't
+      // match -- without this the user is "kicked" mid-way through typing
+      // their new password.
+      if (_inPasswordRecovery) return;
       final myToken = await _secureStorage.read(key: _sessionTokenKey);
       final row = await client
           .from('profiles')
@@ -475,6 +479,16 @@ class SupabaseService extends ChangeNotifier {
         _awaitingEmailLinkConfirmation = false;
         completer.complete(const LoginResult(error: 'Login failed.'));
       }
+    }, onError: (Object e) {
+      // A failed Google/email-link return (expired, already used). Without
+      // this the waiting screen sat until its 5-minute timeout, and the
+      // error escaped as "uncaught".
+      final completer = _oauthCompleter;
+      if (completer == null || completer.isCompleted) return;
+      _oauthCompleter = null;
+      _awaitingEmailLinkConfirmation = false;
+      _linkErrorShownByWaiter = true;
+      completer.complete(const LoginResult(error: 'err_link_expired'));
     });
   }
 
@@ -534,11 +548,101 @@ class SupabaseService extends ChangeNotifier {
   Future<String?> sendPasswordReset(String email) async {
     if (email.trim().isEmpty) return 'err_enter_email';
     try {
-      await client.auth.resetPasswordForEmail(email.trim());
+      // Back to the app, not the Site URL: supabase_flutter uses PKCE, so
+      // the reset link can only be exchanged on the device that asked for
+      // it (the code verifier lives in this app's storage). Same deep link
+      // already allow-listed for Google sign-in.
+      await client.auth
+          .resetPasswordForEmail(email.trim(), redirectTo: kGoogleRedirectUrl);
       return null;
     } on AuthException catch (e) {
       return e.message;
     }
+  }
+
+  // --- Password recovery -------------------------------------------------
+  //
+  // Opening the reset link signs the user in with a *recovery* session
+  // (AuthChangeEvent.passwordRecovery). That session skipped the device cap
+  // and the teacher/admin email step, so it's only ever used to set the new
+  // password: afterwards (or if abandoned) it's signed out and the user logs
+  // in normally, where both checks apply.
+
+  static const _recoveryPendingKey = 'password_recovery_pending';
+  bool _inPasswordRecovery = false;
+  bool _linkErrorShownByWaiter = false;
+  bool get inPasswordRecovery => _inPasswordRecovery;
+
+  /// Call once at app start, before resumeSessionWatchIfLoggedIn().
+  /// [onRecovery] shows the set-new-password screen. onAuthStateChange is a
+  /// replay stream, so a link that cold-started the app (handled inside
+  /// Supabase.initialize, before this runs) is still delivered here.
+  Future<void> listenForPasswordRecovery(
+      void Function() onRecovery, void Function() onLinkExpired) async {
+    var recoveryThisLaunch = false;
+    client.auth.onAuthStateChange.listen((state) async {
+      if (state.event != AuthChangeEvent.passwordRecovery) return;
+      recoveryThisLaunch = true;
+      _inPasswordRecovery = true;
+      await _secureStorage.write(key: _recoveryPendingKey, value: '1');
+      onRecovery();
+    }, onError: (Object e) {
+      // An expired or already-used email link (reset or sign-in) comes back
+      // as otp_expired. Say so, or the app just opens on Home and the link
+      // looks broken. Other auth errors (network etc.) stay silent here.
+      // listenForOAuthCompletion's subscription runs first (registered
+      // first); if a waiting screen already showed the error, don't repeat
+      // it in a dialog.
+      final shownByWaiter = _linkErrorShownByWaiter;
+      _linkErrorShownByWaiter = false;
+      if (shownByWaiter) return;
+      if (e is AuthException &&
+          (e.statusCode == 'otp_expired' || e.code == 'otp_expired')) {
+        onLinkExpired();
+      }
+    });
+    // Let replayed events arrive first, then clear a recovery session left
+    // over from a previous launch (app killed mid-reset) so it can never be
+    // used as a normal login.
+    await Future<void>.delayed(Duration.zero);
+    if (!recoveryThisLaunch &&
+        await _secureStorage.read(key: _recoveryPendingKey) != null) {
+      await endPasswordRecovery();
+    }
+  }
+
+  /// Sets the new password on the recovery session, then signs out
+  /// everywhere (anyone holding the old password loses their session too).
+  Future<String?> setNewPassword(String password) async {
+    if (!_inPasswordRecovery || client.auth.currentSession == null) {
+      return 'err_reset_expired';
+    }
+    if (!SignupRules.isStrongPassword(password)) return 'err_pass_weak';
+    try {
+      await client.auth.updateUser(UserAttributes(password: password));
+    } on AuthException catch (e) {
+      if (e.code == 'same_password') return 'err_same_password';
+      if (e.code == 'weak_password') return 'err_pass_weak';
+      return e.message;
+    }
+    await endPasswordRecovery(everywhere: true);
+    return null;
+  }
+
+  Future<void> endPasswordRecovery({bool everywhere = false}) async {
+    _inPasswordRecovery = false;
+    await _secureStorage.delete(key: _recoveryPendingKey);
+    stopSessionWatch();
+    await _secureStorage.delete(key: _sessionTokenKey);
+    try {
+      await client.auth.signOut(
+          scope: everywhere ? SignOutScope.global : SignOutScope.local);
+    } catch (_) {
+      // Global sign-out needs the network; the local session is cleared
+      // regardless, which is what matters on this device.
+      await client.auth.signOut(scope: SignOutScope.local);
+    }
+    notifyListeners();
   }
 
   Future<void> logout() async {

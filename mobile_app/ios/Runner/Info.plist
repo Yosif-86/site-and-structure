@@ -37,6 +37,10 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Auth links are handled by supabase_flutter; Flutter's own deep linking
+	     would also push them as (nonexistent) named routes. -->
+	<key>FlutterDeepLinkingEnabled</key>
+	<false/>
 	<key>LSApplicationQueriesSchemes</key>
 	<!-- iOS counterpart of the Android <queries> block: canLaunchUrl() on a
 	     custom scheme only returns true for schemes listed here. Added for
