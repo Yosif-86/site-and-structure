@@ -435,7 +435,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           for (var i = 0; i < 3; i++) ...[
             FadeSlideIn(
                 delayMs: 60 + i * 45,
-                child: const SizedBox(height: 104, child: SkeletonCard())),
+                child: const SizedBox(
+                    height: 104, child: SkeletonCard(row: true))),
             const SizedBox(height: 10),
           ],
         ] else if (courses.isEmpty)
