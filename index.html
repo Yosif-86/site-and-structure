@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="signup-rules.js"></script>
 <style>
   :root{
     --bg:#14120F;
@@ -376,7 +377,7 @@
       teacher_payment_required_hint: 'بصفتك مدرسًا، يجب إدخال رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما) قبل إنشاء الحساب.',
       label_zaincash_phone: 'رقم زين كاش', label_qi_account: 'رقم حساب كي كارد', label_qi_qr: 'صورة رمز QR لكي كارد',
       err_teacher_payment_required: 'أدخل رقم زين كاش، أو رقم حساب كي كارد/رمز QR.',
-      ph_password_signup: '٦ أحرف على الأقل',
+      ph_password_signup: '٨ أحرف على الأقل: حرف كبير وصغير ورقم',
       already_account: 'لديك حساب بالفعل؟',
       auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
       btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
@@ -388,7 +389,11 @@
       alert_kicked: 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
       err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
       err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
-      err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.'
+      err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
+      err_pass_weak: 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف إنجليزي كبير وحرف صغير ورقم.',
+      err_phone_format: 'أدخل رقم هاتف عراقي صحيح من ١١ رقمًا يبدأ بـ 075 أو 077 أو 078 أو 079.',
+      err_invalid_email: 'البريد الإلكتروني غير صالح.',
+      err_email_domain: 'استخدم بريدًا من مزوّد معروف مثل Gmail أو Outlook أو Yahoo أو iCloud. البريد المؤقت غير مسموح.'
     }
   };
   let currentLang = 'ar';
@@ -745,12 +750,13 @@
   async function submitSignup(){
     ['authName', 'authPhone', 'authEmail', 'authPass', 'authZaincashPhone', 'authQiAccount'].forEach(clearFieldError);
     const name = document.getElementById('authName').value.trim();
-    const phone = document.getElementById('authPhone').value.trim();
+    const rawPhone = document.getElementById('authPhone').value.trim();
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
+    const phone = SignupRules.normalizeIraqiPhone(rawPhone);
     const basicMissing = [];
     if(!name) basicMissing.push('authName');
-    if(!phone) basicMissing.push('authPhone');
+    if(!rawPhone) basicMissing.push('authPhone');
     if(!email) basicMissing.push('authEmail');
     if(!pass) basicMissing.push('authPass');
     if(basicMissing.length){
@@ -758,7 +764,10 @@
       showAuthErr(t('err_fill_fields'));
       return;
     }
-    if(pass.length < 6){ markFieldError('authPass'); showAuthErr(t('err_pass_length')); return; }
+    if(!phone){ markFieldError('authPhone'); showAuthErr(t('err_phone_format')); return; }
+    if(!SignupRules.isValidEmailShape(email)){ markFieldError('authEmail'); showAuthErr(t('err_invalid_email')); return; }
+    if(!SignupRules.isAllowedEmailDomain(email)){ markFieldError('authEmail'); showAuthErr(t('err_email_domain')); return; }
+    if(!SignupRules.isStrongPassword(pass)){ markFieldError('authPass'); showAuthErr(t('err_pass_weak')); return; }
     let zaincashPhone = null, qiAccount = null, qiQrFile = null;
     if(inviteToken){
       const zainOn = document.getElementById('authPayZaincashOn').checked;

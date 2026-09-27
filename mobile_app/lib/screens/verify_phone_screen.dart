@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../i18n/strings.dart';
 import '../services/api_service.dart';
+import '../services/signup_rules.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/ambient_background.dart';
@@ -140,8 +141,12 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   }
 
   Future<void> _saveNewPhone() async {
-    final newPhone = _phoneEditCtrl.text.trim();
-    if (newPhone.isEmpty) return;
+    if (_phoneEditCtrl.text.trim().isEmpty) return;
+    final newPhone = SignupRules.normalizeIraqiPhone(_phoneEditCtrl.text);
+    if (newPhone == null) {
+      setState(() => _error = _t('err_phone_format'));
+      return;
+    }
     final user = SupabaseService.instance.currentUser;
     if (user != null) {
       try {

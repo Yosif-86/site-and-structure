@@ -31,7 +31,7 @@ class AppStrings extends ChangeNotifier {
     'label_email': 'البريد الإلكتروني',
     'ph_email': 'you@email.com',
     'label_password': 'كلمة المرور',
-    'ph_password': '٦ أحرف على الأقل',
+    'ph_password': '٨ أحرف على الأقل: حرف كبير وصغير ورقم',
     'forgot_password': 'نسيت كلمة المرور؟',
     'no_account': 'ليس لديك حساب؟',
     'sign_up': 'إنشاء حساب',
@@ -92,6 +92,13 @@ class AppStrings extends ChangeNotifier {
         'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
     'err_fill_fields': 'املأ جميع الحقول.',
     'err_pass_length': 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
+    'err_pass_weak':
+        'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف إنجليزي كبير وحرف صغير ورقم.',
+    'err_phone_format':
+        'أدخل رقم هاتف عراقي صحيح من ١١ رقمًا يبدأ بـ 075 أو 077 أو 078 أو 079.',
+    'err_invalid_email': 'البريد الإلكتروني غير صالح.',
+    'err_email_domain':
+        'استخدم بريدًا من مزوّد معروف مثل Gmail أو Outlook أو Yahoo أو iCloud. البريد المؤقت غير مسموح.',
     'curriculum': 'المنهج',
     'no_lectures': 'لم تُرفع محاضرات بعد.',
     'free_tag': 'مجاني',

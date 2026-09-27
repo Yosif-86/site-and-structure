@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import 'signup_rules.dart';
+
 /// Same Vercel deployment the website talks to — the two API routes
 /// (check-device, get-video-url) work identically for native app requests
 /// since CORS is a browser-only restriction.
@@ -363,19 +365,23 @@ class SupabaseService extends ChangeNotifier {
         password.trim().isEmpty) {
       return 'err_fill_fields';
     }
-    if (password.trim().length < 6) return 'err_pass_length';
+    final normalizedPhone = SignupRules.normalizeIraqiPhone(phone);
+    if (normalizedPhone == null) return 'err_phone_format';
+    if (!SignupRules.isValidEmailShape(email)) return 'err_invalid_email';
+    if (!SignupRules.isAllowedEmailDomain(email)) return 'err_email_domain';
+    if (!SignupRules.isStrongPassword(password.trim())) return 'err_pass_weak';
     try {
       final res = await client.auth.signUp(
         email: email.trim(),
         password: password.trim(),
-        data: {'full_name': name.trim(), 'phone': phone.trim()},
+        data: {'full_name': name.trim(), 'phone': normalizedPhone},
       );
       final user = res.user;
       final accessToken = res.session?.accessToken;
       if (user == null || accessToken == null) return 'Sign up failed.';
 
       await client.from('profiles').insert(
-          {'id': user.id, 'full_name': name.trim(), 'phone': phone.trim()});
+          {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
 
       final allowed = await _isDeviceAllowed(accessToken);
       if (!allowed) {

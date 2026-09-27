@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="signup-rules.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 <style>
   :root{
@@ -303,13 +304,17 @@
       no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب', forgot_password: 'نسيت كلمة المرور؟',
       auth_signup_title: 'إنشاء حساب', auth_signup_sub: 'أنشئ حسابك.',
       label_fullname: 'الاسم الكامل', ph_fullname: 'اسمك', label_phone: 'رقم الهاتف', ph_phone: '07XX XXX XXXX',
-      ph_password_signup: '٦ أحرف على الأقل', already_account: 'لديك حساب بالفعل؟',
+      ph_password_signup: '٨ أحرف على الأقل: حرف كبير وصغير ورقم', already_account: 'لديك حساب بالفعل؟',
       auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
       btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
       success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
       err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
       err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
       err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
+      err_pass_weak: 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف إنجليزي كبير وحرف صغير ورقم.',
+      err_phone_format: 'أدخل رقم هاتف عراقي صحيح من ١١ رقمًا يبدأ بـ 075 أو 077 أو 078 أو 079.',
+      err_invalid_email: 'البريد الإلكتروني غير صالح.',
+      err_email_domain: 'استخدم بريدًا من مزوّد معروف مثل Gmail أو Outlook أو Yahoo أو iCloud. البريد المؤقت غير مسموح.',
       err_choose_payment: 'اختر طريقة دفع وأدخل بياناتك.', err_upload_proof: 'ارفع لقطة شاشة لعملية الدفع.',
       err_upload_failed: 'فشل رفع لقطة الشاشة: ', err_video_unavailable: 'هذا الفيديو غير متاح بعد.'
     }
@@ -545,11 +550,15 @@
 
   async function submitSignup(){
     const name = document.getElementById('authName').value.trim();
-    const phone = document.getElementById('authPhone').value.trim();
+    const rawPhone = document.getElementById('authPhone').value.trim();
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPass').value.trim();
-    if(!name || !phone || !email || !pass){ showAuthErr(t('err_fill_fields')); return; }
-    if(pass.length < 6){ showAuthErr(t('err_pass_length')); return; }
+    if(!name || !rawPhone || !email || !pass){ showAuthErr(t('err_fill_fields')); return; }
+    const phone = SignupRules.normalizeIraqiPhone(rawPhone);
+    if(!phone){ showAuthErr(t('err_phone_format')); return; }
+    if(!SignupRules.isValidEmailShape(email)){ showAuthErr(t('err_invalid_email')); return; }
+    if(!SignupRules.isAllowedEmailDomain(email)){ showAuthErr(t('err_email_domain')); return; }
+    if(!SignupRules.isStrongPassword(pass)){ showAuthErr(t('err_pass_weak')); return; }
     const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
     if(error){ showAuthErr(error.message); return; }
     if(data.user){
