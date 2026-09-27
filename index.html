@@ -3,955 +3,181 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Site & Structure — Engineering Course Platform</title>
-<script>(function(){try{var t=localStorage.getItem('ss_theme')||'dark'; document.documentElement.setAttribute('data-theme', t);}catch(e){}})();</script>
+<title>Site & Structure | منصة دورات الهندسة المدنية</title>
+<meta name="description" content="Site & Structure منصة عراقية لدورات الهندسة المدنية بالفيديو، يقدمها مهندسون ممارسون. حمّل التطبيق وابدأ التعلم.">
+<meta property="og:title" content="Site & Structure | منصة دورات الهندسة المدنية">
+<meta property="og:description" content="دورات هندسة مدنية بالفيديو يقدمها مهندسون ممارسون. حمّل التطبيق وابدأ التعلم.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#14120F">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="signup-rules.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
 <style>
-  :root{
-    --bg:#14120F;
-    --panel:#1D1A16;
-    --panel2:#26221C;
-    --grid:#14120F;
-    --line:rgba(243,237,228,0.12);
-    --red:#E8622C;
-    --yellow:#6FA8A0;
-    --green:#6FA8A0;
-    --text:#F3EDE4;
-    --muted:#AFA492;
-    --muted2:#7D7362;
-    --glass-bg:rgba(38,34,28,0.5);
-    --glass-border:rgba(243,237,228,0.16);
-    --glare:rgba(255,255,255,0.14);
-  }
-  :root[data-theme="light"]{
-    --bg:#F3EFE7;
-    --panel:#FFFFFF;
-    --panel2:#EAE3D6;
-    --grid:#F3EFE7;
-    --line:rgba(30,25,18,0.14);
-    --red:#C94E1F;
-    --yellow:#3E7D74;
-    --green:#3E7D74;
-    --text:#1E1912;
-    --muted:#5C5344;
-    --muted2:#8C8171;
-    --glass-bg:rgba(255,255,255,0.55);
-    --glass-border:rgba(255,255,255,0.7);
-    --glare:rgba(255,255,255,0.8);
-  }
-  *{box-sizing:border-box; margin:0; padding:0;}
-  html, body{overflow-x:hidden; max-width:100%;}
-  body{
-    background:var(--bg);
-    color:var(--text);
-    font-family:'Work Sans', sans-serif;
-    line-height:1.6;
-    transition:background .2s ease, color .2s ease;
-  }
-  .wrap{max-width:1040px; margin:0 auto; padding:0 24px;}
-
-  /* crop marks retired in the warm theme — kept as a no-op so the class is harmless */
-  .crop{position:relative;}
-
-  header{border-bottom:1px solid var(--line); padding:20px 0; position:sticky; top:0; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px); z-index:50;}
-  header .wrap{display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:10px;}
-  .brand{display:flex; align-items:center; gap:10px; text-decoration:none; color:inherit; min-width:0;}
-  .brand-mark{width:34px; height:34px; border-radius:8px; background:linear-gradient(145deg, var(--red), color-mix(in srgb, var(--red) 55%, black)); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono'; font-size:11px; color:#fff; flex-shrink:0;}
-  .brand-mark span{}
-  .brand-name{font-family:'Big Shoulders Display'; font-weight:800; font-size:19px; letter-spacing:0.2px; text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .brand-name small{display:block; font-family:'IBM Plex Mono'; font-size:10px; color:var(--muted2); font-weight:400; letter-spacing:1px; text-transform:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  nav{display:flex; gap:10px; align-items:center; flex-wrap:nowrap; flex-shrink:0;}
-  nav a{color:var(--muted); text-decoration:none; font-size:14px;}
-  nav a:hover{color:var(--text);}
-  .theme-toggle{
-    width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
-    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; padding:0; line-height:1; flex-shrink:0;
-  }
-  .theme-toggle:hover{background:var(--panel2);}
-  .lang-toggle{
-    height:38px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
-    cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; font-family:'IBM Plex Mono'; letter-spacing:0.5px; flex-shrink:0;
-  }
-  .lang-toggle:hover{background:var(--panel2);}
-
-  /* RTL / Arabic typography */
-  :root[dir="rtl"] body{font-family:'Cairo', 'Work Sans', sans-serif;}
-  :root[dir="rtl"] h1, :root[dir="rtl"] h2, :root[dir="rtl"] .brand-name{font-family:'Cairo', sans-serif; text-transform:none;}
-  :root[dir="rtl"] .card h3{font-family:'Cairo', sans-serif;}
-  :root[dir="rtl"] .eyebrow, :root[dir="rtl"] .section-tag, :root[dir="rtl"] .card-tag, :root[dir="rtl"] .status-badge{font-family:'Cairo', sans-serif; text-transform:none;}
-  :root[dir="rtl"] .eyebrow::before{content:'';}
-
-  .nav-links-desktop{display:none;}
-  .hamburger-btn{
-    display:flex; width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text);
-    cursor:pointer; align-items:center; justify-content:center; font-size:18px; padding:0; flex-shrink:0;
-  }
-  .hamburger-btn:hover{background:var(--panel2);}
-
-  .drawer-backdrop{display:none; position:fixed; inset:0; background:rgba(10,8,6,0.6); z-index:199;}
-  .drawer-backdrop.open{display:block;}
-  .drawer{
-    position:fixed; top:0; bottom:0; width:min(300px,82vw); z-index:200;
-    background:var(--panel); padding:20px; display:flex; flex-direction:column; gap:6px;
-    transition:transform .3s cubic-bezier(0.16,1,0.3,1); overflow-y:auto;
-  }
-  :root:not([dir="rtl"]) .drawer{left:0; transform:translateX(-100%); border-right:1px solid var(--line);}
-  :root:not([dir="rtl"]) .drawer.open{transform:translateX(0);}
-  :root[dir="rtl"] .drawer{right:0; transform:translateX(100%); border-left:1px solid var(--line);}
-  :root[dir="rtl"] .drawer.open{transform:translateX(0);}
-  .drawer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:14px; border-bottom:1px solid var(--line);}
-  .drawer-title{font-family:'Big Shoulders Display'; font-weight:800; font-size:18px; text-transform:uppercase;}
-  :root[dir="rtl"] .drawer-title{font-family:'Cairo', sans-serif; text-transform:none;}
-  .drawer-close{background:none; border:none; color:var(--red); font-size:20px; cursor:pointer; line-height:1;}
-  .drawer-links{display:flex; flex-direction:column; gap:4px;}
-  .drawer-links a{color:var(--text); text-decoration:none; font-size:15px; padding:12px 8px; border-radius:8px;}
-  .drawer-links a:hover{background:var(--panel2);}
-  .drawer-links .btn{margin-top:12px;}
-
-  @media (max-width:480px){
-    .brand-name{font-size:15px;}
-    .brand-name small{font-size:8px;}
-    .lang-toggle{padding:0 8px;}
-  }
-  .btn{
-    font-family:'Work Sans'; font-size:13px; font-weight:600; letter-spacing:0.2px;
-    padding:10px 20px; border-radius:10px; border:1px solid var(--line); background:transparent; color:var(--text); cursor:pointer;
-    transition:transform .15s ease, box-shadow .15s ease, background .15s ease;
-  }
-  .btn:hover{background:var(--panel2);}
-  .btn-accent{background:var(--red); border-color:var(--red); color:#fff;}
-  .btn-accent:hover{transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(201,78,31,0.5); background:var(--red);}
-
-  .hero{padding:80px 0 60px; border-bottom:1px solid var(--line);}
-  .eyebrow{display:inline-flex; align-items:center; gap:8px; font-family:'IBM Plex Mono'; font-size:12px; color:var(--red); letter-spacing:1.5px; text-transform:uppercase; margin-bottom:18px; background:var(--panel2); border:1px solid var(--line); padding:6px 14px; border-radius:999px;}
-  .eyebrow::before{content:'●'; font-size:8px;}
-  h1{font-family:'Big Shoulders Display'; font-weight:800; font-size:48px; line-height:1.05; max-width:680px; letter-spacing:0.01em; text-transform:uppercase;}
-  h1 em{font-style:normal; color:var(--red);}
-  .hero-sub{color:var(--muted); font-size:16px; max-width:520px; margin-top:20px;}
-  .hero-cta{display:flex; gap:12px; margin-top:32px;}
-
-  .section{padding:64px 0; border-bottom:1px solid var(--line);}
-  .section-head{display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:36px;}
-  h2{font-family:'Big Shoulders Display'; font-weight:800; font-size:28px; text-transform:uppercase;}
-  .section-tag{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2); letter-spacing:1px; text-transform:uppercase;}
-
-  .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:22px;}
-  @media (max-width:800px){ .grid{grid-template-columns:1fr;} h1{font-size:34px;} }
-
-  /* course card */
-  .card{
-    --mx:50%; --my:50%;
-    background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; padding:20px; display:flex; flex-direction:column; gap:14px; position:relative;
-    transition:transform .4s cubic-bezier(0.16,1,0.3,1), box-shadow .4s cubic-bezier(0.16,1,0.3,1);
-    backdrop-filter:blur(14px) saturate(140%); -webkit-backdrop-filter:blur(14px) saturate(140%);
-    box-shadow:0 16px 40px -24px rgba(30,25,18,0.25);
-    overflow:hidden; isolation:isolate;
-  }
-  .card:hover{transform:translateY(-8px) scale(1.012); box-shadow:0 32px 60px -20px rgba(30,25,18,0.4), 0 0 50px -6px color-mix(in srgb, var(--red) 55%, transparent);}
-  .card-thumb{width:calc(100% + 40px); margin:-20px -20px 0; aspect-ratio:16/9; object-fit:cover; display:block;}
-  .card-tag{font-family:'IBM Plex Mono'; font-size:10px; color:var(--red); letter-spacing:1px; text-transform:uppercase;}
-  .card-tag.gray{color:var(--muted2);}
-  .card-tag.green{color:var(--green);}
-  .card-byline{font-family:'IBM Plex Mono'; font-size:10.5px; color:#A8496B; margin-top:6px;}
-  .card h3{font-family:'Work Sans'; font-size:18px; font-weight:600; line-height:1.3; text-transform:none;}
-  .card p{font-size:13.5px; color:var(--muted); flex-grow:1;}
-  .titleblock{
-    border-top:1px solid var(--line); margin-top:6px; padding-top:12px;
-    display:grid; grid-template-columns:1fr 1fr; gap:8px 12px;
-    font-family:'IBM Plex Mono'; font-size:10.5px;
-  }
-  .titleblock div span{display:block; color:var(--muted2); font-size:9.5px; letter-spacing:0.5px; text-transform:uppercase; margin-bottom:2px;}
-  .titleblock div b{color:var(--text); font-weight:500;}
-  .price-row{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
-  .price{font-family:'Big Shoulders Display'; font-size:22px; font-weight:800;}
-  .price.free{color:var(--yellow);}
-  .price.red-price{color:var(--red);}
-  .badge{font-family:'IBM Plex Mono'; font-size:9.5px; padding:3px 8px; border-radius:999px; border:1px solid var(--yellow); color:var(--yellow); letter-spacing:0.5px;}
-
-  footer{padding:40px 0; text-align:center;}
-  footer p{font-family:'IBM Plex Mono'; font-size:11px; color:var(--muted2);}
-
-  /* modal (login / payment) */
-  .overlay{
-    display:none; position:fixed; inset:0; background:rgba(30,25,18,0.55); z-index:100; align-items:center; justify-content:center; padding:20px;
-  }
-  .overlay.active{display:flex;}
-  .modal{
-    --mx:50%; --my:50%;
-    background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:20px; width:100%; max-width:420px; padding:28px; position:relative;
-    backdrop-filter:blur(18px) saturate(150%); -webkit-backdrop-filter:blur(18px) saturate(150%);
-    box-shadow:0 24px 60px -20px rgba(30,25,18,0.35);
-    overflow:hidden; isolation:isolate;
-  }
-  .modal-close{position:absolute; top:14px; right:14px; background:none; border:none; color:var(--red); font-size:18px; cursor:pointer; font-family:'IBM Plex Mono';}
-  .btn-close{color:var(--red); border-color:var(--red); background:transparent;}
-  .btn-close:hover{background:color-mix(in srgb, var(--red) 12%, transparent);}
-  .modal h3{font-family:'Big Shoulders Display'; font-weight:800; font-size:22px; margin-bottom:6px; text-transform:uppercase;}
-  .modal .sub{color:var(--muted); font-size:13px; margin-bottom:22px;}
-  .field{margin-bottom:14px;}
-  .field label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); letter-spacing:0.5px; text-transform:uppercase; margin-bottom:6px;}
-  .field input{
-    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); padding:10px 12px; font-size:14px; font-family:'Work Sans';
-  }
-  .field input:focus{outline:none; border-color:var(--red);}
-  .field-invalid{border-color:var(--red) !important; box-shadow:0 0 0 1px var(--red);}
-  @keyframes field-shake{
-    10%, 90%{transform:translateX(-1px);}
-    20%, 80%{transform:translateX(2px);}
-    30%, 50%, 70%{transform:translateX(-4px);}
-    40%, 60%{transform:translateX(4px);}
-  }
-  .field-shake{animation:field-shake 0.4s;}
-  .pay-method-checks{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
-  .pay-method-check{
-    position:relative; display:flex; align-items:center; gap:10px; padding:13px 14px; border-radius:10px;
-    border:1px solid var(--line); background:var(--panel); cursor:pointer; font-size:13.5px; font-weight:500;
-    transition:border-color .15s ease, background .15s ease, transform .15s ease;
-  }
-  .pay-method-check:hover{transform:translateY(-1px);}
-  .pay-method-check input{position:absolute; opacity:0; width:0; height:0;}
-  .pay-method-check .chk-box{
-    width:18px; height:18px; flex:none; border-radius:5px; border:1.5px solid var(--muted2);
-    display:flex; align-items:center; justify-content:center; transition:border-color .15s ease, background .15s ease;
-  }
-  .pay-method-check .chk-box::after{
-    content:''; width:9px; height:5px; border-left:2px solid #fff; border-bottom:2px solid #fff;
-    transform:rotate(-45deg) translateY(-1px); opacity:0; transition:opacity .1s ease;
-  }
-  .pay-method-check:has(input:checked){border-color:var(--red); background:rgba(232,98,44,0.08);}
-  .pay-method-check:has(input:checked) .chk-box{border-color:var(--red); background:var(--red);}
-  .pay-method-check:has(input:checked) .chk-box::after{opacity:1;}
-  .pay-method-check:has(input:focus-visible){outline:2px solid var(--red); outline-offset:2px;}
-
-  .file-upload{position:relative;}
-  .file-upload input[type=file]{
-    width:100%; font-family:'Work Sans'; font-size:13px; color:var(--muted); cursor:pointer;
-  }
-  .file-upload input[type=file]::file-selector-button{
-    font-family:'Work Sans'; font-size:12.5px; font-weight:600; letter-spacing:0.2px;
-    padding:9px 16px; margin-inline-end:12px; border-radius:8px; border:1px solid var(--red);
-    background:var(--red); color:#fff; cursor:pointer; transition:transform .15s ease, box-shadow .15s ease;
-  }
-  .file-upload input[type=file]::file-selector-button:hover{
-    transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(201,78,31,0.5);
-  }
-  .pay-options{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;}
-  .pay-opt{
-    border:1px solid var(--line); border-radius:10px; padding:14px 10px; text-align:center; cursor:pointer; font-size:13px; font-weight:500;
-  }
-  .pay-opt.selected{border-color:var(--yellow); background:rgba(62,125,116,0.08);}
-  .pay-opt small{display:block; font-family:'IBM Plex Mono'; font-size:9.5px; color:var(--muted2); margin-top:4px; font-weight:400;}
-  .err{color:var(--red); font-size:12.5px; margin-top:-8px; margin-bottom:12px; display:none;}
-  .err.show{display:block;}
-  .success-box{text-align:center; padding:10px 0;}
-  .success-box .check{width:44px; height:44px; border:2px solid var(--yellow); color:var(--yellow); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; font-size:20px;}
-  .modal-full-btn{width:100%; margin-top:4px;}
-
-  /* glass glare — follows the cursor via --mx/--my set in JS */
-  .card::before, .modal::before{
-    content:''; position:absolute; inset:0; z-index:2; pointer-events:none;
-    background:radial-gradient(260px circle at var(--mx) var(--my), var(--glare), transparent 70%);
-    opacity:0; transition:opacity .8s ease; mix-blend-mode:soft-light;
-  }
-  .card:hover::before, .modal:hover::before{ opacity:1; }
-  @media (prefers-reduced-motion: reduce){
-    .card::before, .modal::before{ opacity:0 !important; }
+  .hero{padding:88px 0 76px; border-bottom:1px solid var(--line); position:relative; overflow:hidden;}
+  .hero::after{content:''; position:absolute; inset-inline-end:-160px; top:-120px; width:520px; height:520px; border-radius:50%;
+    background:radial-gradient(circle, color-mix(in srgb, var(--red) 22%, transparent), transparent 65%); pointer-events:none; z-index:-1;}
+  .hero-grid{display:grid; grid-template-columns:1.15fr .85fr; gap:48px; align-items:center;}
+  .stores{display:flex; flex-wrap:wrap; gap:12px; margin-top:32px;}
+  .hero-note{color:var(--muted2); font-size:14px; margin-top:14px;}
+  .phone{justify-self:center; width:260px; aspect-ratio:9/18.5; border-radius:36px; border:1px solid var(--glass-border);
+    background:linear-gradient(160deg, var(--panel2), var(--panel)); padding:14px; box-shadow:0 40px 80px -30px rgba(0,0,0,.55);}
+  .screen{height:100%; border-radius:26px; background:var(--bg); padding:18px 14px; display:flex; flex-direction:column; gap:12px; overflow:hidden;}
+  .s-greet{font-size:12px; color:var(--muted2);}
+  .s-title{font-weight:800; font-size:17px; line-height:1.3;}
+  .s-card{background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:14px; padding:12px; display:flex; gap:10px; align-items:center;}
+  .s-thumb{width:46px; height:46px; border-radius:10px; flex-shrink:0; background:linear-gradient(135deg, var(--red), color-mix(in srgb, var(--red) 40%, var(--teal)));}
+  .s-thumb.b{background:linear-gradient(135deg, var(--teal), color-mix(in srgb, var(--teal) 45%, black));}
+  .s-lines{flex:1; display:flex; flex-direction:column; gap:6px;}
+  .s-line{height:7px; border-radius:4px; background:var(--line);}
+  .s-line.w60{width:60%;}
+  .s-bar{height:5px; border-radius:3px; background:var(--line); overflow:hidden;}
+  .s-bar i{display:block; height:100%; width:62%; background:var(--red);}
+  .s-ring{width:64px; height:64px; border-radius:50%; flex-shrink:0;
+    background:conic-gradient(var(--red) 0 68%, var(--line) 68% 100%); display:flex; align-items:center; justify-content:center;}
+  .s-ring span{width:50px; height:50px; border-radius:50%; background:var(--bg); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px;}
+  .steps-row{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:18px; counter-reset:st;}
+  .step{counter-increment:st; position:relative; padding-top:8px;}
+  .step::before{content:counter(st); display:flex; width:40px; height:40px; border-radius:50%; background:var(--red); color:#fff;
+    font-weight:800; font-size:17px; align-items:center; justify-content:center; margin-bottom:14px;}
+  .step p{color:var(--muted); font-size:15px; margin-top:4px;}
+  .teach{display:grid; grid-template-columns:1fr auto; gap:28px; align-items:center;}
+  .teach p{color:var(--muted);}
+  @media (max-width:820px){
+    .hero{padding:56px 0 60px;}
+    .hero-grid{grid-template-columns:1fr;}
+    .phone{width:220px;}
+    .teach{grid-template-columns:1fr;}
   }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="wrap">
-    <a href="index.html" class="brand">
-      <div class="brand-mark"><span>&#9651;</span></div>
-      <div class="brand-name">SITE &amp; STRUCTURE<small data-i18n="tagline">ENGINEERING COURSE PLATFORM — PROTOTYPE</small></div>
+  <div class="wrap head">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true">&#9651;</span>
+      <span class="brand-name">Site &amp; Structure<small>منصة دورات هندسية</small></span>
     </a>
-    <nav>
-      <button class="hamburger-btn" id="hamburgerBtn" data-action="open-drawer" aria-label="Menu" title="Menu">&#9776;</button>
-      <div class="nav-links-desktop">
-        <a href="#courses" data-i18n="nav_courses">Courses</a>
-        <a href="#service" data-i18n="nav_service">Project service</a>
-        <a href="my-courses.html" id="myCoursesLink" style="display:none;" data-i18n="nav_mycourses">My courses</a>
-        <a href="teacher.html" id="teacherLink" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
-        <a href="admin.html" id="adminLink" style="display:none;" data-i18n="nav_admin">Admin</a>
-        <button class="btn" id="loginBtn" data-i18n="log_in">Log in</button>
-      </div>
-      <button class="theme-toggle" id="themeToggle" data-action="toggle-theme" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
-
+    <nav aria-label="الأقسام">
+      <a href="#features">المميزات</a>
+      <a href="#how">كيف تبدأ</a>
+      <a href="#teach">للمدرّسين</a>
     </nav>
   </div>
 </header>
 
-<div class="drawer-backdrop" id="drawerBackdrop" data-action="close-drawer"></div>
-<div class="drawer" id="drawer">
-  <div class="drawer-head">
-    <button class="drawer-close" data-action="close-drawer" aria-label="Close">&times;</button>
-    <div class="drawer-title" data-i18n="menu">Menu</div>
-  </div>
-  <div class="drawer-links">
-    <a href="#courses" data-action="close-drawer" data-i18n="nav_courses">Courses</a>
-    <a href="#service" data-action="close-drawer" data-i18n="nav_service">Project service</a>
-    <a href="my-courses.html" id="myCoursesLinkDrawer" style="display:none;" data-i18n="nav_mycourses">My courses</a>
-    <a href="teacher.html" id="teacherLinkDrawer" style="display:none;" data-i18n="nav_teacher">Teacher dashboard</a>
-    <a href="admin.html" id="adminLinkDrawer" style="display:none;" data-i18n="nav_admin">Admin</a>
-    <button class="btn btn-accent" id="loginBtnDrawer" data-i18n="log_in">Log in</button>
-  </div>
-</div>
-
-<section class="hero">
-  <div class="wrap">
-    <div class="eyebrow" data-i18n="hero_eyebrow">Rev 01 — Prototype for review</div>
-    <h1 data-i18n-html="hero_title">Built like a drawing set. <em>Taught</em> like a site walkthrough.</h1>
-    <p class="hero-sub" data-i18n="hero_sub">Three course tracks for civil engineering students — from graduation project standards to core academic subjects to AutoCAD and quantity survey. Practical, exam-ready, and grounded in real drawings.</p>
-    <div class="hero-cta">
-      <button class="btn btn-accent" data-action="scroll-to-courses" data-i18n="browse_courses">Browse courses</button>
-      <button class="btn" id="loginBtn2" data-i18n="log_in">Log in</button>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="courses">
-  <div class="wrap">
-    <div class="section-head">
+<main>
+  <section class="hero">
+    <div class="wrap hero-grid">
       <div>
-        <div class="section-tag" data-i18n="sheet_index">Sheet index</div>
-        <h2 data-i18n="course_catalogue">Course catalogue</h2>
+        <span class="eyebrow">تطبيق دورات الهندسة المدنية</span>
+        <h1>تعلّم الهندسة المدنية <em>من مهندسين في الموقع</em></h1>
+        <p class="lead">دورات فيديو عملية في التصميم الإنشائي والتنفيذ وقراءة المخططات، يقدمها مهندسون ممارسون. شاهد من هاتفك وتابع تقدمك درسًا بدرس.</p>
+        <div class="stores">
+          <a class="btn btn-accent" id="playLink" href="#" aria-disabled="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3.6 1.8c-.3.3-.5.8-.5 1.4v17.6c0 .6.2 1.1.5 1.4l.1.1 9.9-9.9v-.2L3.7 1.7l-.1.1zm13.3 13.8-3.3-3.3v-.2l3.3-3.3.1.1 3.9 2.2c1.1.6 1.1 1.7 0 2.3l-3.9 2.2h-.1zm-.1.1L13.4 12 3.6 21.8c.4.4 1 .4 1.7.1l11.5-6.2m0-7.4L5.3 2.1c-.7-.4-1.3-.3-1.7.1l9.8 9.8 3.4-3.6z"/></svg>
+            <span class="btn-lines"><small data-soon data-ready="حمّله من">قريبًا على</small>Google Play</span>
+          </a>
+          <a class="btn" id="appStoreLink" href="#" aria-disabled="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 .1-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg>
+            <span class="btn-lines"><small data-soon data-ready="حمّله من">قريبًا على</small>App Store</span>
+          </a>
+        </div>
+        <p class="hero-note">التسجيل ومشاهدة الدورات من خلال التطبيق فقط.</p>
+      </div>
+
+      <div class="phone" aria-hidden="true">
+        <div class="screen">
+          <div class="s-greet">صباح الخير</div>
+          <div class="s-title">أكمل من حيث توقفت</div>
+          <div class="s-card">
+            <div class="s-ring"><span>68%</span></div>
+            <div class="s-lines"><div class="s-line"></div><div class="s-line w60"></div></div>
+          </div>
+          <div class="s-card">
+            <div class="s-thumb"></div>
+            <div class="s-lines"><div class="s-line"></div><div class="s-bar"><i></i></div></div>
+          </div>
+          <div class="s-card">
+            <div class="s-thumb b"></div>
+            <div class="s-lines"><div class="s-line"></div><div class="s-line w60"></div></div>
+          </div>
+          <div class="s-card">
+            <div class="s-thumb"></div>
+            <div class="s-lines"><div class="s-line w60"></div><div class="s-line"></div></div>
+          </div>
+        </div>
       </div>
     </div>
+  </section>
 
-    <div class="grid" id="catalogueGrid">
-      <p style="color:var(--muted); grid-column:1/-1;" data-i18n="loading_courses">Loading courses…</p>
+  <section class="section" id="features">
+    <div class="wrap">
+      <h2>لماذا Site &amp; Structure؟</h2>
+      <p class="section-sub">كل ما تحتاجه لتتعلم مهارات الموقع والمكتب في مكان واحد.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 20h20M5 20V9l7-5 7 5v11M9 20v-6h6v6"/></svg></div>
+          <h3>محتوى من الواقع</h3>
+          <p>دروس يقدمها مهندسون يعملون في المشاريع، مبنية على ما تحتاجه فعلًا في الموقع والمكتب.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="15" height="14" rx="2"/><path d="m17 10 5-3v10l-5-3"/></svg></div>
+          <h3>فيديو بجودة عالية</h3>
+          <p>شاهد الدروس بسلاسة، مع التقديم والتأخير 10 ثوانٍ وقائمة الحلقات داخل المشغّل.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>تابع تقدمك</h3>
+          <p>يحفظ التطبيق مكانك في كل درس، ويعرض نسبة إنجازك في كل دورة لتكمل من حيث توقفت.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg></div>
+          <h3>دفع محلي سهل</h3>
+          <p>اشترك في الدورات عبر زين كاش أو كي كارد، مع دروس مجانية للمعاينة قبل الشراء.</p>
+        </div>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<section class="section" id="service">
-  <div class="wrap">
-    <div class="section-tag" data-i18n="beyond_course">Beyond the course</div>
-    <h2 style="margin-bottom:14px;" data-i18n="grad_service_title">Graduation project service</h2>
-    <p style="color:var(--muted); max-width:560px;" data-i18n="grad_service_desc">Students who complete the Graduation Project Making course and hire the instructor for a full project receive a discount on the course fee — automatically applied at checkout.</p>
-  </div>
-</section>
+  <section class="section" id="how">
+    <div class="wrap">
+      <h2>كيف تبدأ</h2>
+      <p class="section-sub">ثلاث خطوات فقط وتكون داخل أول درس.</p>
+      <div class="steps-row">
+        <div class="step"><h3>حمّل التطبيق</h3><p>من Google Play أو App Store.</p></div>
+        <div class="step"><h3>أنشئ حسابك</h3><p>بالبريد الإلكتروني أو بحساب جوجل خلال دقيقة.</p></div>
+        <div class="step"><h3>اختر دورتك</h3><p>جرّب الدروس المجانية، ثم اشترك وابدأ التعلم.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="teach">
+    <div class="wrap teach">
+      <div>
+        <h2>مهندس وتريد أن تُدرّس؟</h2>
+        <p>انضم كمدرّس وانشر دوراتك على المنصة واستلم أرباحك مباشرة. الانضمام برمز دعوة يُدخَل عند إنشاء الحساب في التطبيق.</p>
+        <p data-if-contact hidden>تواصل معنا للحصول على رمز الدعوة.</p>
+      </div>
+      <div class="stores" data-if-contact hidden>
+        <a class="btn btn-accent" data-contact="whatsapp" hidden href="#">واتساب</a>
+        <a class="btn" data-contact="email" hidden href="#">البريد الإلكتروني</a>
+      </div>
+    </div>
+  </section>
+</main>
 
 <footer>
-  <p data-i18n="footer_line">PROTOTYPE — DEMONSTRATES SITE STRUCTURE, ACCESS GATING, AND ZAIN CASH / QI CARD PAYMENT FLOW ONLY</p>
+  <div class="wrap foot">
+    <div class="foot-links">
+      <a href="/privacy.html">سياسة الخصوصية</a>
+      <a href="/terms.html">شروط الاستخدام</a>
+      <a href="/delete-account.html">حذف الحساب</a>
+    </div>
+    <small>&copy; <span id="year">2026</span> Site &amp; Structure</small>
+  </div>
 </footer>
 
-<!-- LOGIN / SIGNUP MODAL -->
-<div class="overlay" id="loginOverlay">
-  <div class="modal crop">
-    <button class="modal-close" data-action="close-modal" data-modal="loginOverlay">&times;</button>
-    <div id="authBody"></div>
-  </div>
-</div>
-
-<script>
-  const I18N = {
-    ar: {
-      tagline: 'منصة دورات هندسية — نموذج أولي',
-      nav_courses: 'الدورات', nav_service: 'خدمة المشروع', nav_mycourses: 'دوراتي', nav_teacher: 'لوحة المدرس', nav_admin: 'الإدارة',
-      log_in: 'تسجيل الدخول', log_out: 'تسجيل الخروج',
-      hero_eyebrow: 'الإصدار ٠١ — نموذج للمراجعة',
-      hero_title: 'مبني كملف مخططات، <em>ويُدرَّس</em> كجولة ميدانية.',
-      hero_sub: 'ثلاثة مسارات دراسية لطلاب الهندسة المدنية — من معايير مشروع التخرج إلى المواد الأكاديمية الأساسية والأوتوكاد وحصر الكميات. عملية، جاهزة للامتحان، ومبنية على مخططات حقيقية.',
-      browse_courses: 'تصفح الدورات',
-      menu: 'القائمة',
-      sheet_index: 'فهرس اللوحات', course_catalogue: 'فهرس الدورات',
-      loading_courses: 'جاري تحميل الدورات...', no_courses: 'لا توجد دورات منشورة بعد.',
-      beyond_course: 'ما بعد الدورة', grad_service_title: 'خدمة مشروع التخرج',
-      grad_service_desc: 'الطلاب الذين يكملون دورة إعداد مشروع التخرج ويستعينون بالمدرّس لتنفيذ مشروع كامل يحصلون على خصم من رسوم الدورة — يُطبَّق تلقائيًا عند الدفع.',
-      footer_line: 'نموذج أولي — لعرض بنية الموقع، وآلية تقييد الوصول، ومسار الدفع عبر زين كاش / كي كارد فقط',
-      card_view_course: 'عرض الدورة', card_by: 'بواسطة.', card_free: 'مجاني',
-      level_beginner: 'مبتدئ', level_intermediate: 'متوسط', level_advanced: 'متقدم',
-      meta_level: 'LEVEL', meta_stage: 'STAGE', meta_duration: 'DURATION', meta_videos: 'VIDEOS',
-      dur_hr: 'h', dur_min: 'm',
-      auth_login_title: 'تسجيل الدخول', auth_login_sub: 'الوصول إلى الدورات المسجَّل بها.',
-      label_email: 'البريد الإلكتروني', ph_email: 'you@email.com', label_password: 'كلمة المرور', ph_password: '••••••••',
-      forgot_password: 'نسيت كلمة المرور؟', no_account: 'ليس لديك حساب؟', sign_up: 'إنشاء حساب',
-      auth_signup_title: 'إنشاء حساب', auth_signup_sub: 'أنشئ حسابك.',
-      label_fullname: 'الاسم الكامل', ph_fullname: 'اسمك', label_phone: 'رقم الهاتف', ph_phone: '07XX XXX XXXX',
-      teacher_payment_required_hint: 'بصفتك مدرسًا، يجب إدخال رقم زين كاش، أو رقم حساب كي كارد/رمز QR (أو كلاهما) قبل إنشاء الحساب.',
-      label_zaincash_phone: 'رقم زين كاش', label_qi_account: 'رقم حساب كي كارد', label_qi_qr: 'صورة رمز QR لكي كارد',
-      err_teacher_payment_required: 'أدخل رقم زين كاش، أو رقم حساب كي كارد/رمز QR.',
-      ph_password_signup: '٨ أحرف على الأقل: حرف كبير وصغير ورقم',
-      already_account: 'لديك حساب بالفعل؟',
-      auth_forgot_title: 'إعادة تعيين كلمة المرور', auth_forgot_sub: 'سنرسل لك رابطًا عبر البريد الإلكتروني لتعيين كلمة مرور جديدة.',
-      btn_send_reset: 'إرسال رابط إعادة التعيين', back_to_login: 'العودة لتسجيل الدخول',
-      success_email_title: 'تحقق من بريدك الإلكتروني', success_email_sub: 'إذا كان هناك حساب مرتبط بهذا البريد، فسيصلك رابط إعادة التعيين قريبًا.',
-      success_account_title: 'تم إنشاء الحساب', success_account_sub: 'تم تسجيلك وتسجيل دخولك بنجاح.',
-      btn_close: 'إغلاق',
-      invite_invalid_title: 'رابط الدعوة غير صالح',
-      invite_invalid_sub: 'تم استخدام هذه الدعوة مسبقًا أو إلغاؤها أو انتهت صلاحيتها. اطلب رابطًا جديدًا.',
-      alert_kicked: 'تم تسجيل خروجك لأن حسابك استُخدم لتسجيل الدخول من جهاز آخر.',
-      err_enter_email: 'أدخل بريدك الإلكتروني.', err_enter_email_pass: 'أدخل بريدك الإلكتروني وكلمة المرور.',
-      err_device_limit: 'هذا الحساب مسجَّل الدخول بالفعل على جهاز واحد (الحد الأقصى المسموح). تواصل مع الدعم لتحرير الجهاز.',
-      err_fill_fields: 'املأ جميع الحقول.', err_pass_length: 'يجب ألا تقل كلمة المرور عن ٦ أحرف.',
-      err_pass_weak: 'كلمة المرور يجب أن تكون ٨ أحرف على الأقل وتحتوي على حرف إنجليزي كبير وحرف صغير ورقم.',
-      err_phone_format: 'أدخل رقم هاتف عراقي صحيح من ١١ رقمًا يبدأ بـ 075 أو 077 أو 078 أو 079.',
-      err_invalid_email: 'البريد الإلكتروني غير صالح.',
-      err_email_domain: 'استخدم بريدًا من مزوّد معروف مثل Gmail أو Outlook أو Yahoo أو iCloud. البريد المؤقت غير مسموح.'
-    }
-  };
-  let currentLang = 'ar';
-  function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.ar[key] || key); }
-
-  // Course title/description/meta/etc. are teacher-authored (any redeemed
-  // teacher invite can set them), not admin-only content, and this renders
-  // on the PUBLIC catalogue via innerHTML — without escaping, a course title
-  // like `<img src=x onerror=...>` would run script in every visitor's
-  // browser the moment the course is published. Same class of stored-XSS
-  // fix already applied in admin.html/teacher.html.
-  function escapeHtml(value){
-    return String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[ch]));
-  }
-
-  function applyLang(lang){
-    currentLang = lang;
-    document.documentElement.setAttribute('lang', lang);
-    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
-    try{ localStorage.setItem('ss_lang', lang); }catch(e){}
-    const btn = document.getElementById('langToggle');
-    if(btn) btn.textContent = lang === 'ar' ? 'EN' : 'AR';
-    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
-    document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.getAttribute('data-i18n-html')); });
-    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
-    const loginOverlay = document.getElementById('loginOverlay');
-    if(loginOverlay && loginOverlay.classList.contains('active')) renderAuth(lastAuthMode);
-    if(typeof loadCatalogue === 'function') loadCatalogue();
-    if(typeof updateAuthUI === 'function') updateAuthUI();
-  }
-  function toggleLang(){ applyLang(currentLang === 'ar' ? 'en' : 'ar'); }
-
-  const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
-  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-  // Lightweight client-side error reporting — every uncaught error and
-  // unhandled promise rejection gets logged to error_logs so admin can see
-  // what's breaking for real users without needing their browser console.
-  // Capped per page load so a repeating error can't flood the table.
-  (function(){
-    let errorLogCount = 0;
-    async function reportError(message, stack){
-      if(errorLogCount >= 20) return;
-      errorLogCount++;
-      try{
-        const { data: { session } } = await sb.auth.getSession();
-        await sb.from('error_logs').insert({
-          message: String(message || '').slice(0, 2000),
-          stack: stack ? String(stack).slice(0, 4000) : null,
-          page: location.pathname,
-          user_id: session ? session.user.id : null,
-          user_agent: navigator.userAgent.slice(0, 300)
-        });
-      }catch(e){}
-    }
-    window.addEventListener('error', (ev) => reportError(ev.message, ev.error && ev.error.stack));
-    window.addEventListener('unhandledrejection', (ev) => {
-      const reason = ev.reason;
-      reportError('Unhandled rejection: ' + (reason && reason.message ? reason.message : reason), reason && reason.stack);
-    });
-  })();
-
-  const DEVICE_KEY = 'ss_device_id';
-  const SESSION_KEY = 'ss_session_token';
-  let sessionCheckInterval = null;
-
-  function makeToken(){
-    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-      const r = Math.random()*16|0;
-      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
-    });
-  }
-
-  function getDeviceId(){
-    let id = localStorage.getItem(DEVICE_KEY);
-    if(!id){
-      id = makeToken();
-      localStorage.setItem(DEVICE_KEY, id);
-    }
-    return id;
-  }
-
-  async function checkDeviceAndClaimSession(userId, accessToken){
-    const deviceId = getDeviceId();
-    const res = await fetch('/api/check-device', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
-      body: JSON.stringify({ deviceId, deviceLabel: navigator.userAgent })
-    });
-    if(!res.ok) return false;
-    const result = await res.json();
-    if(!result.allowed) return false;
-    localStorage.setItem(SESSION_KEY, result.sessionToken);
-    startSessionWatch(userId);
-    return true;
-  }
-
-  function startSessionWatch(userId){
-    if(sessionCheckInterval) clearInterval(sessionCheckInterval);
-    sessionCheckInterval = setInterval(async () => {
-      const myToken = localStorage.getItem(SESSION_KEY);
-      const { data } = await sb.from('profiles').select('active_session_token').eq('id', userId).maybeSingle();
-      if(data && data.active_session_token !== myToken){
-        clearInterval(sessionCheckInterval);
-        sessionCheckInterval = null;
-        await sb.auth.signOut();
-        localStorage.removeItem(SESSION_KEY);
-        updateAuthUI();
-        alert(t('alert_kicked'));
-      }
-    }, 20000);
-  }
-
-  function stopSessionWatch(){
-    if(sessionCheckInterval){ clearInterval(sessionCheckInterval); sessionCheckInterval = null; }
-  }
-
-  function distanceKm(lat1, lon1, lat2, lon2){
-    const R = 6371;
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  }
-
-  const FLAG_DISTANCE_KM = 10;
-
-  async function logLoginEvent(userId, email){
-    let geo = {};
-    try{
-      const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) });
-      geo = await res.json();
-    } catch(e){ /* location lookup failed, log without it */ }
-
-    let flagged = false;
-    let distance_km = null;
-    if(geo.latitude != null && geo.longitude != null){
-      const { data: prev } = await sb.from('login_events')
-        .select('lat, lon')
-        .eq('user_id', userId)
-        .not('lat', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if(prev && prev.lat != null && prev.lon != null){
-        distance_km = Math.round(distanceKm(prev.lat, prev.lon, geo.latitude, geo.longitude));
-        flagged = distance_km > FLAG_DISTANCE_KM;
-      }
-    }
-
-    await sb.from('login_events').insert({
-      user_id: userId,
-      email: email,
-      user_agent: navigator.userAgent,
-      ip: geo.ip || null,
-      city: geo.city || null,
-      country: geo.country_name || null,
-      lat: geo.latitude != null ? geo.latitude : null,
-      lon: geo.longitude != null ? geo.longitude : null,
-      flagged: flagged,
-      distance_km: distance_km
-    });
-  }
-
-  document.addEventListener('mousemove', (e) => {
-    const el = e.target.closest('.card, .modal');
-    if(!el) return;
-    const rect = el.getBoundingClientRect();
-    el.style.setProperty('--mx', ((e.clientX - rect.left) / rect.width * 100) + '%');
-    el.style.setProperty('--my', ((e.clientY - rect.top) / rect.height * 100) + '%');
-  });
-
-  function applyTheme(t){
-    document.documentElement.setAttribute('data-theme', t);
-    try{ localStorage.setItem('ss_theme', t); }catch(e){}
-    const btn = document.getElementById('themeToggle');
-    if(btn) btn.textContent = t === 'dark' ? '☀' : '☾';
-  }
-  function toggleTheme(){
-    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-    applyTheme(cur === 'dark' ? 'light' : 'dark');
-  }
-  applyTheme(document.documentElement.getAttribute('data-theme') || 'dark');
-  applyLang(currentLang);
-
-  // Teacher invite link: admin.html generates a link shaped
-  // index.html?invite=<token>. Stashed here so submitSignup() can redeem it
-  // right after the account is created — see there for why redemption
-  // happens post-signup rather than before.
-  const inviteToken = new URLSearchParams(location.search).get('invite');
-
-  function openModal(id){ document.getElementById(id).classList.add('active'); }
-  function closeModal(id){ document.getElementById(id).classList.remove('active'); }
-
-  function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerBackdrop').classList.add('open'); }
-  function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerBackdrop').classList.remove('open'); }
-
-  document.getElementById('loginBtn').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
-  document.getElementById('loginBtn2').onclick = () => { renderAuth('login'); openModal('loginOverlay'); };
-
-  let lastAuthMode = 'login';
-  // Validate the token server-side before ever showing the signup form —
-  // found live: without this, a revoked/expired/used link still opened the
-  // exact same signup modal as a valid one, since the only real check
-  // previously happened after signup completed (redeem_teacher_invite()
-  // silently failing to grant teacher status). That's still the correct
-  // failsafe — a dead token must never block account creation — but seeing
-  // the same form either way looked like revoking had no effect.
-  if(inviteToken){
-    sb.auth.getSession().then(({ data: { session } }) => {
-      if(session) return; // already have an account — nothing to invite them into
-      return sb.rpc('is_teacher_invite_valid', { p_token: inviteToken });
-    }).then((result) => {
-      if(!result) return;
-      const valid = result.data;
-      openModal('loginOverlay');
-      if(valid){
-        renderAuth('signup');
-      } else {
-        document.getElementById('authBody').innerHTML = `
-          <div class="success-box">
-            <div class="check" style="border-color:var(--red); color:var(--red);">&#9888;</div>
-            <h3>${t('invite_invalid_title')}</h3>
-            <p class="sub">${t('invite_invalid_sub')}</p>
-            <button class="btn btn-close modal-full-btn" data-action="close-modal" data-modal="loginOverlay">${t('btn_close')}</button>
-          </div>`;
-      }
-    });
-  }
-  function renderAuth(mode){
-    lastAuthMode = mode;
-    const body = document.getElementById('authBody');
-    if(mode === 'login'){
-      body.innerHTML = `
-        <h3>${t('auth_login_title')}</h3>
-        <p class="sub">${t('auth_login_sub')}</p>
-        <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
-        <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password')}"></div>
-        <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" data-action="submit-login">${t('auth_login_title')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">
-          <a href="#" data-action="auth-mode" data-mode="forgot" style="color:var(--muted);">${t('forgot_password')}</a>
-        </p>
-        <p class="sub" style="margin-top:6px; text-align:center;">${t('no_account')} <a href="#" data-action="auth-mode" data-mode="signup" style="color:var(--yellow);">${t('sign_up')}</a></p>
-      `;
-    } else if(mode === 'signup'){
-      const teacherPaymentFields = inviteToken ? `
-        <div class="field-hint" style="margin:14px 0 10px;">${t('teacher_payment_required_hint')}</div>
-        <div class="pay-method-checks">
-          <label class="pay-method-check"><input type="checkbox" id="authPayZaincashOn"><span class="chk-box"></span>${t('zain_cash')}</label>
-          <label class="pay-method-check"><input type="checkbox" id="authPayQiOn"><span class="chk-box"></span>${t('qi_card')}</label>
-        </div>
-        <div class="field" id="authZaincashGroup" style="display:none;">
-          <label>${t('label_zaincash_phone')}</label>
-          <input type="text" id="authZaincashPhone" placeholder="07XX XXX XXXX">
-        </div>
-        <div id="authQiGroup" style="display:none;">
-          <div class="field"><label>${t('label_qi_account')}</label><input type="text" id="authQiAccount" placeholder="XXXX XXXX XXXX XXXX"></div>
-          <div class="field"><label>${t('label_qi_qr')}</label>
-            <div class="file-upload"><input type="file" id="authQiQrFile" accept="image/png,image/jpeg,image/webp"></div>
-          </div>
-        </div>
-      ` : '';
-      body.innerHTML = `
-        <h3>${t('auth_signup_title')}</h3>
-        <p class="sub">${t('auth_signup_sub')}</p>
-        <div class="field"><label>${t('label_fullname')}</label><input type="text" id="authName" placeholder="${t('ph_fullname')}"></div>
-        <div class="field"><label>${t('label_phone')}</label><input type="text" id="authPhone" placeholder="${t('ph_phone')}"></div>
-        <div class="field"><label>${t('label_email')}</label><input type="email" id="authEmail" placeholder="${t('ph_email')}"></div>
-        <div class="field"><label>${t('label_password')}</label><input type="password" id="authPass" placeholder="${t('ph_password_signup')}"></div>
-        ${teacherPaymentFields}
-        <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" data-action="submit-signup">${t('auth_signup_title')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;">${t('already_account')} <a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('auth_login_title')}</a></p>
-      `;
-      if(inviteToken){
-        const zainOn = document.getElementById('authPayZaincashOn');
-        const qiOn = document.getElementById('authPayQiOn');
-        const zainGroup = document.getElementById('authZaincashGroup');
-        const qiGroup = document.getElementById('authQiGroup');
-        zainOn.addEventListener('change', () => { zainGroup.style.display = zainOn.checked ? '' : 'none'; });
-        qiOn.addEventListener('change', () => { qiGroup.style.display = qiOn.checked ? '' : 'none'; });
-        ['authZaincashPhone', 'authQiAccount', 'authQiQrFile'].forEach(id => {
-          document.getElementById(id).addEventListener('input', () => clearFieldError(id));
-        });
-      }
-    } else if(mode === 'forgot'){
-      body.innerHTML = `
-        <h3>${t('auth_forgot_title')}</h3>
-        <p class="sub">${t('auth_forgot_sub')}</p>
-        <div class="field"><label>${t('label_email')}</label><input type="email" id="forgotEmail" placeholder="${t('ph_email')}"></div>
-        <p class="err" id="authErr"></p>
-        <button class="btn btn-accent modal-full-btn" data-action="submit-forgot">${t('btn_send_reset')}</button>
-        <p class="sub" style="margin-top:14px; text-align:center;"><a href="#" data-action="auth-mode" data-mode="login" style="color:var(--yellow);">${t('back_to_login')}</a></p>
-      `;
-    }
-  }
-
-  async function submitForgotPassword(){
-    const email = document.getElementById('forgotEmail').value.trim();
-    if(!email){ showAuthErr(t('err_enter_email')); return; }
-    const { error } = await sb.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + '/reset-password.html'
-    });
-    if(error){ showAuthErr(error.message); return; }
-    document.getElementById('authBody').innerHTML = `
-      <div class="success-box">
-        <div class="check">&#10003;</div>
-        <h3>${t('success_email_title')}</h3>
-        <p class="sub">${t('success_email_sub')}</p>
-        <button class="btn btn-close modal-full-btn" data-action="close-modal" data-modal="loginOverlay">${t('btn_close')}</button>
-      </div>`;
-  }
-
-  function showAuthErr(msg){
-    const err = document.getElementById('authErr');
-    err.textContent = msg;
-    err.classList.add('show');
-  }
-
-  function markFieldError(id){
-    const el = document.getElementById(id);
-    if(!el) return;
-    el.classList.add('field-invalid');
-    el.classList.remove('field-shake');
-    void el.offsetWidth;
-    el.classList.add('field-shake');
-  }
-  function clearFieldError(id){
-    document.getElementById(id)?.classList.remove('field-invalid', 'field-shake');
-  }
-
-  async function submitLogin(){
-    const email = document.getElementById('authEmail').value.trim();
-    const pass = document.getElementById('authPass').value.trim();
-    if(!email || !pass){ showAuthErr(t('err_enter_email_pass')); return; }
-    const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-    if(error){ showAuthErr(error.message); return; }
-    const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
-    if(!allowed){
-      await sb.auth.signOut();
-      showAuthErr(t('err_device_limit'));
-      return;
-    }
-    logLoginEvent(data.user.id, data.user.email);
-    closeModal('loginOverlay');
-    updateAuthUI();
-  }
-
-  async function submitSignup(){
-    ['authName', 'authPhone', 'authEmail', 'authPass', 'authZaincashPhone', 'authQiAccount'].forEach(clearFieldError);
-    const name = document.getElementById('authName').value.trim();
-    const rawPhone = document.getElementById('authPhone').value.trim();
-    const email = document.getElementById('authEmail').value.trim();
-    const pass = document.getElementById('authPass').value.trim();
-    const phone = SignupRules.normalizeIraqiPhone(rawPhone);
-    const basicMissing = [];
-    if(!name) basicMissing.push('authName');
-    if(!rawPhone) basicMissing.push('authPhone');
-    if(!email) basicMissing.push('authEmail');
-    if(!pass) basicMissing.push('authPass');
-    if(basicMissing.length){
-      basicMissing.forEach(markFieldError);
-      showAuthErr(t('err_fill_fields'));
-      return;
-    }
-    if(!phone){ markFieldError('authPhone'); showAuthErr(t('err_phone_format')); return; }
-    if(!SignupRules.isValidEmailShape(email)){ markFieldError('authEmail'); showAuthErr(t('err_invalid_email')); return; }
-    if(!SignupRules.isAllowedEmailDomain(email)){ markFieldError('authEmail'); showAuthErr(t('err_email_domain')); return; }
-    if(!SignupRules.isStrongPassword(pass)){ markFieldError('authPass'); showAuthErr(t('err_pass_weak')); return; }
-    let zaincashPhone = null, qiAccount = null, qiQrFile = null;
-    if(inviteToken){
-      const zainOn = document.getElementById('authPayZaincashOn').checked;
-      const qiOn = document.getElementById('authPayQiOn').checked;
-      zaincashPhone = document.getElementById('authZaincashPhone').value.trim() || null;
-      qiAccount = document.getElementById('authQiAccount').value.trim() || null;
-      qiQrFile = document.getElementById('authQiQrFile').files[0] || null;
-      if(!zainOn && !qiOn){ showAuthErr(t('err_teacher_payment_required')); return; }
-      if(zainOn && !zaincashPhone){ markFieldError('authZaincashPhone'); showAuthErr(t('err_teacher_payment_required')); return; }
-      if(qiOn && !qiAccount && !qiQrFile){ markFieldError('authQiAccount'); showAuthErr(t('err_teacher_payment_required')); return; }
-      if(!zainOn) zaincashPhone = null;
-      if(!qiOn){ qiAccount = null; qiQrFile = null; }
-    }
-    const { data, error } = await sb.auth.signUp({ email, password: pass, options:{ data:{ full_name:name, phone:phone } } });
-    if(error){ showAuthErr(error.message); return; }
-    if(data.user){
-      const { error: profileErr } = await sb.from('profiles').insert({ id:data.user.id, full_name:name, phone:phone });
-      if(profileErr){ showAuthErr(profileErr.message); return; }
-      const allowed = await checkDeviceAndClaimSession(data.user.id, data.session.access_token);
-      if(!allowed){
-        await sb.auth.signOut();
-        showAuthErr(t('err_device_limit'));
-        return;
-      }
-      logLoginEvent(data.user.id, data.user.email);
-      // Redeem after the account + session exist, not before — the RPC
-      // checks auth.uid() server-side, so it needs a real signed-in user to
-      // attribute the redemption to. A failed/expired/already-used token
-      // just means this account stays a normal student; it must never block
-      // the signup itself from succeeding.
-      if(inviteToken){
-        try{ await sb.rpc('redeem_teacher_invite', { p_token: inviteToken }); }
-        catch(e){ /* best-effort — account creation already succeeded */ }
-        try{
-          let qiQrUrl = null;
-          if(qiQrFile){
-            const path = `${data.user.id}/${Date.now()}-${qiQrFile.name}`;
-            const { error: upErr } = await sb.storage.from('payment-qr').upload(path, qiQrFile);
-            if(!upErr) qiQrUrl = sb.storage.from('payment-qr').getPublicUrl(path).data.publicUrl;
-          }
-          const payUpdate = { teacher_zaincash_phone: zaincashPhone, teacher_qi_account_number: qiAccount };
-          if(qiQrUrl) payUpdate.teacher_qi_qr_url = qiQrUrl;
-          await sb.from('profiles').update(payUpdate).eq('id', data.user.id);
-        } catch(e){ /* best-effort — teacher can still fill this in later from their profile */ }
-      }
-    }
-    document.getElementById('authBody').innerHTML = `
-      <div class="success-box">
-        <div class="check">&#10003;</div>
-        <h3>${t('success_account_title')}</h3>
-        <p class="sub">${t('success_account_sub')}</p>
-        <button class="btn btn-close modal-full-btn" data-action="close-modal" data-modal="loginOverlay">${t('btn_close')}</button>
-      </div>`;
-    updateAuthUI();
-  }
-
-  async function doLogout(){
-    stopSessionWatch();
-    localStorage.removeItem(SESSION_KEY);
-    await sb.auth.signOut();
-    updateAuthUI();
-  }
-
-  async function updateAuthUI(){
-    const { data:{ session } } = await sb.auth.getSession();
-    const loginBtn = document.getElementById('loginBtn');
-    const loginBtn2 = document.getElementById('loginBtn2');
-    const loginBtnDrawer = document.getElementById('loginBtnDrawer');
-    if(session){
-      if(!sessionCheckInterval) startSessionWatch(session.user.id);
-      [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_out'); btn.onclick = doLogout; });
-      document.getElementById('myCoursesLink').style.display = '';
-      document.getElementById('myCoursesLinkDrawer').style.display = '';
-      const { data: prof } = await sb.from('profiles').select('is_admin, is_teacher').eq('id', session.user.id).maybeSingle();
-      const showAdmin = (prof && prof.is_admin) ? '' : 'none';
-      document.getElementById('adminLink').style.display = showAdmin;
-      document.getElementById('adminLinkDrawer').style.display = showAdmin;
-      const showTeacher = (prof && prof.is_teacher) ? '' : 'none';
-      document.getElementById('teacherLink').style.display = showTeacher;
-      document.getElementById('teacherLinkDrawer').style.display = showTeacher;
-    } else {
-      const openLogin = () => { closeDrawer(); renderAuth('login'); openModal('loginOverlay'); };
-      [loginBtn, loginBtn2, loginBtnDrawer].forEach(btn => { btn.textContent = t('log_in'); btn.onclick = openLogin; });
-      document.getElementById('myCoursesLink').style.display = 'none';
-      document.getElementById('myCoursesLinkDrawer').style.display = 'none';
-      document.getElementById('adminLink').style.display = 'none';
-      document.getElementById('adminLinkDrawer').style.display = 'none';
-      document.getElementById('teacherLink').style.display = 'none';
-      document.getElementById('teacherLinkDrawer').style.display = 'none';
-    }
-  }
-
-  function formatDuration(totalSeconds){
-    const mins = Math.round(totalSeconds / 60);
-    const h = Math.floor(mins / 60), m = mins % 60;
-    if(h > 0) return `${h}${t('dur_hr')} ${m}${t('dur_min')}`;
-    return `${m}${t('dur_min')}`;
-  }
-
-  async function loadCatalogue(){
-    const { data: courses, error } = await sb.from('courses').select('*').eq('status', 'published').order('order_index');
-    const grid = document.getElementById('catalogueGrid');
-    if(error || !courses || courses.length === 0){
-      grid.innerHTML = `<p style="color:var(--muted); grid-column:1/-1;">${t('no_courses')}</p>`;
-      return;
-    }
-    const courseIds = courses.map(c => c.id);
-    const { data: lectures } = await sb.from('lectures').select('course_id, duration_seconds').in('course_id', courseIds);
-    const stats = {};
-    (lectures || []).forEach(l => {
-      const s = stats[l.course_id] || (stats[l.course_id] = { count: 0, seconds: 0 });
-      s.count++;
-      s.seconds += l.duration_seconds || 0;
-    });
-    const isAr = currentLang === 'ar';
-    grid.innerHTML = courses.map(c => {
-      const title = escapeHtml((isAr && c.title_ar) || c.title);
-      const description = escapeHtml((isAr && c.description_ar) || c.description);
-      const teacherName = escapeHtml((isAr && c.teacher_name_ar) || c.teacher_name);
-      const tagLabel = escapeHtml((isAr && c.tag_label_ar) || c.tag_label);
-      const badgeText = escapeHtml((isAr && c.badge_text_ar) || c.badge_text);
-      const meta = (isAr && c.meta_ar) || c.meta;
-      const autoRows = [];
-      if(c.stage) autoRows.push([t('meta_stage'), escapeHtml(c.stage)]);
-      if(c.level) autoRows.push([t('meta_level'), t('level_' + c.level) || c.level]);
-      const s = stats[c.id];
-      if(s && s.count > 0){
-        autoRows.push([t('meta_videos'), String(s.count)]);
-        if(s.seconds > 0) autoRows.push([t('meta_duration'), formatDuration(s.seconds)]);
-      }
-      const metaHtml = autoRows.map(([k,v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')
-        + Object.entries(meta || {}).map(([k,v]) => `<div><span>${escapeHtml(k)}</span><b>${escapeHtml(v)}</b></div>`).join('');
-      const priceHtml = c.is_free
-        ? `<span class="price free">${t('card_free')}</span>${badgeText ? `<span class="badge">${badgeText}</span>` : ''}`
-        : `<span class="price red-price">${escapeHtml(c.price)}</span>`;
-      return `
-        <div class="card crop">
-          ${c.thumbnail_url ? `<img class="card-thumb" src="${escapeHtml(c.thumbnail_url)}" alt="">` : ''}
-          <div>
-            <div class="card-tag ${c.tag_color === 'green' ? 'green' : ''}">${tagLabel}</div>
-            <h3>${title}</h3>
-            ${teacherName ? `<p class="card-byline">${t('card_by')} ${teacherName}</p>` : ''}
-            <p>${description}</p>
-          </div>
-          <div class="titleblock">${metaHtml}</div>
-          <div class="price-row">${priceHtml}</div>
-          <a class="btn modal-full-btn" href="course.html?slug=${encodeURIComponent(c.slug)}" style="text-align:center; text-decoration:none; display:block;">${t('card_view_course')}</a>
-        </div>`;
-    }).join('');
-  }
-
-  document.querySelectorAll('.overlay').forEach(ov => {
-    ov.addEventListener('click', e => { if(e.target === ov) ov.classList.remove('active'); });
-  });
-
-  // ---- Click dispatch (replaces inline onclick="" attributes) ----
-  // The Content-Security-Policy set in vercel.json deliberately has NO
-  // 'unsafe-inline' in script-src, so the browser refuses to run any
-  // onclick="" attribute. Clickable elements declare data-action (plus any
-  // data-* arguments) and this one delegated listener maps that to a function.
-  // It listens on `document` so markup rendered later via innerHTML works too.
-  const CLICK_ACTIONS = {
-    'open-drawer': () => openDrawer(),
-    'close-drawer': () => closeDrawer(),
-    'toggle-theme': () => toggleTheme(),
-    'toggle-lang': () => toggleLang(),
-    'scroll-to-courses': () => document.getElementById('courses').scrollIntoView({behavior:'smooth'}),
-    'close-modal': (el) => closeModal(el.dataset.modal),
-    'auth-mode': (el) => renderAuth(el.dataset.mode),
-    'submit-login': () => submitLogin(),
-    'submit-signup': () => submitSignup(),
-    'submit-forgot': () => submitForgotPassword()
-  };
-  document.addEventListener('click', (ev) => {
-    const el = ev.target.closest('[data-action]');
-    if(!el) return;
-    const handler = CLICK_ACTIONS[el.dataset.action];
-    if(!handler) return;
-    // These used to be <a href="#" onclick="...; return false;"> — keep
-    // suppressing the jump-to-top. Real hrefs (#courses, page links) still work.
-    if(el.tagName === 'A' && el.getAttribute('href') === '#') ev.preventDefault();
-    handler(el, ev);
-  });
-</script>
-
+<script src="site.js"></script>
 </body>
 </html>

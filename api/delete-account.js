@@ -3,6 +3,7 @@ const { allow, clientIp } = require('./_rate-limit');
 
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
+const USER_FILE_BUCKETS = ['payment-proofs', 'avatars', 'payment-qr'];
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -53,6 +54,20 @@ module.exports = async (req, res) => {
   const admin = createClient(SUPABASE_URL, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
+
+  // Storage objects aren't covered by FK cascades. Every per-user bucket
+  // stores files under a "<userId>/" folder (that's what the bucket policies
+  // check), so clearing that folder removes the user's uploads. Best-effort:
+  // a storage hiccup shouldn't block the account itself from being deleted.
+  for (const bucket of USER_FILE_BUCKETS) {
+    try {
+      const { data: files } = await admin.storage.from(bucket).list(userId, { limit: 1000 });
+      const paths = (files || []).map(f => `${userId}/${f.name}`);
+      if (paths.length) await admin.storage.from(bucket).remove(paths);
+    } catch (e) {
+      console.error(`delete-account: clearing ${bucket} failed`, e);
+    }
+  }
 
   const { error: deleteErr } = await admin.auth.admin.deleteUser(userId);
   if (deleteErr) {
