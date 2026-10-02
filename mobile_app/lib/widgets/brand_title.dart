@@ -25,7 +25,7 @@ class BrandTitle extends StatelessWidget {
             ),
           ),
           alignment: Alignment.center,
-          child: Text('S&S', style: AppFonts.mono(size: 10, color: Colors.white, weight: FontWeight.w700, letterSpacing: 0.5)),
+          child: Text('A', style: AppFonts.mono(size: 15, color: Colors.white, weight: FontWeight.w700, letterSpacing: 0.5)),
         ),
         const SizedBox(width: 10),
         Text(AppStrings.instance.t('app_name').toUpperCase(), style: AppFonts.heading(size: 17)),

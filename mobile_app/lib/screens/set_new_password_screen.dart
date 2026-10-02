@@ -121,6 +121,7 @@ class _SetNewPasswordScreenState extends State<SetNewPasswordScreen> {
         const SizedBox(height: 20),
         TextField(
           controller: _passCtrl,
+          textDirection: TextDirection.ltr,
           obscureText: _obscure,
           autofillHints: const [AutofillHints.newPassword],
           decoration: InputDecoration(
@@ -137,6 +138,7 @@ class _SetNewPasswordScreenState extends State<SetNewPasswordScreen> {
         const SizedBox(height: 14),
         TextField(
           controller: _confirmCtrl,
+          textDirection: TextDirection.ltr,
           obscureText: _obscure,
           autofillHints: const [AutofillHints.newPassword],
           decoration: InputDecoration(labelText: _t('label_confirm_password')),

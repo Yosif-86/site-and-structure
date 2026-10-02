@@ -34,6 +34,11 @@ const String kSupabaseAnonKey =
 
 const String _deviceIdKey = 'ss_device_id';
 const String _sessionTokenKey = 'ss_session_token';
+// "Remember my login" on the sign-in form. flutter_secure_storage keeps
+// these in the Android Keystore / iOS Keychain (encrypted, app-private),
+// never in plain SharedPreferences.
+const String _savedEmailKey = 'ss_saved_login_email';
+const String _savedPasswordKey = 'ss_saved_login_password';
 
 /// Result of login() / awaitEmailLoginLink(): either it's done (success),
 /// it failed (error, an i18n key or a raw message), or the password checked
@@ -128,6 +133,28 @@ class SupabaseService extends ChangeNotifier {
 
   Future<String?> getSessionToken() =>
       _secureStorage.read(key: _sessionTokenKey);
+
+  /// Saved sign-in details for the login form, or null if none are saved.
+  Future<({String email, String password})?> getSavedLogin() async {
+    try {
+      final email = await _secureStorage.read(key: _savedEmailKey);
+      final password = await _secureStorage.read(key: _savedPasswordKey);
+      if (email == null || password == null) return null;
+      return (email: email, password: password);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveLogin(String email, String password) async {
+    await _secureStorage.write(key: _savedEmailKey, value: email.trim());
+    await _secureStorage.write(key: _savedPasswordKey, value: password.trim());
+  }
+
+  Future<void> clearSavedLogin() async {
+    await _secureStorage.delete(key: _savedEmailKey);
+    await _secureStorage.delete(key: _savedPasswordKey);
+  }
 
   void _startSessionWatch() {
     _sessionWatchTimer?.cancel();
@@ -625,6 +652,8 @@ class SupabaseService extends ChangeNotifier {
       if (e.code == 'weak_password') return 'err_pass_weak';
       return e.message;
     }
+    // A saved old password would just fail on the next login.
+    await clearSavedLogin();
     await endPasswordRecovery(everywhere: true);
     return null;
   }
@@ -664,6 +693,7 @@ class SupabaseService extends ChangeNotifier {
       headers: {'Authorization': 'Bearer ${session.accessToken}'},
     );
     if (res.statusCode != 200) return 'err_delete_account_failed';
+    await clearSavedLogin();
     stopSessionWatch();
     await _secureStorage.delete(key: _sessionTokenKey);
     await client.auth.signOut();

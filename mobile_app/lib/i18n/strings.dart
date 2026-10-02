@@ -14,7 +14,7 @@ class AppStrings extends ChangeNotifier {
   String t(String key) => _map[key] ?? key;
 
   static final Map<String, String> _map = {
-    'app_name': 'Site & Structure',
+    'app_name': 'Arc Platform',
     'tagline': 'منصة دورات هندسية',
     'nav_courses': 'الدورات',
     'nav_my_courses': 'دوراتي',
@@ -34,6 +34,10 @@ class AppStrings extends ChangeNotifier {
     'ph_password': '٨ أحرف على الأقل: حرف كبير وصغير ورقم',
     'forgot_password': 'نسيت كلمة المرور؟',
     'no_account': 'ليس لديك حساب؟',
+    'remember_login': 'تذكر بيانات الدخول',
+    'auth_login_heading_sub': 'مرحبًا بعودتك إلى منصة آرك',
+    'ph_email_enter': 'أدخل بريدك الإلكتروني',
+    'ph_password_enter': 'أدخل كلمة المرور',
     'sign_up': 'إنشاء حساب',
     'auth_signup_title': 'إنشاء حساب',
     'auth_signup_sub': 'أنشئ حسابك.',

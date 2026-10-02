@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
-import '../widgets/ambient_background.dart';
-import '../widgets/brand_title.dart';
-import '../widgets/glass_card.dart';
 import 'teacher_screen.dart';
 import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
@@ -27,6 +25,7 @@ class _AuthScreenState extends State<AuthScreen> {
       widget.startInSignup ? _AuthMode.signup : _AuthMode.login;
   bool _loading = false;
   String? _error;
+  bool _rememberLogin = false;
 
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
@@ -42,6 +41,24 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _showInvite = false;
   bool _checkingInvite = false;
   bool? _inviteValid;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedLogin();
+  }
+
+  Future<void> _loadSavedLogin() async {
+    final saved = await SupabaseService.instance.getSavedLogin();
+    if (saved == null || !mounted) return;
+    // Don't overwrite anything the user already started typing.
+    if (_emailCtrl.text.isNotEmpty || _passCtrl.text.isNotEmpty) return;
+    setState(() {
+      _emailCtrl.text = saved.email;
+      if (_mode == _AuthMode.login) _passCtrl.text = saved.password;
+      _rememberLogin = true;
+    });
+  }
 
   @override
   void dispose() {
@@ -60,6 +77,10 @@ class _AuthScreenState extends State<AuthScreen> {
       _mode = mode;
       _error = null;
     });
+    if (mode == _AuthMode.login) _loadSavedLogin();
+    // A remembered login password shouldn't silently become the new
+    // account's password.
+    if (mode == _AuthMode.signup) _passCtrl.clear();
   }
 
   Future<void> _submitLogin() async {
@@ -75,6 +96,15 @@ class _AuthScreenState extends State<AuthScreen> {
       setState(() => _error = _t(result.error!));
       return;
     }
+    // Password was accepted (even if an email step follows), so it's safe
+    // to remember -- or forget it if the box was unticked.
+    if (_rememberLogin) {
+      await SupabaseService.instance
+          .saveLogin(_emailCtrl.text, _passCtrl.text);
+    } else {
+      await SupabaseService.instance.clearSavedLogin();
+    }
+    if (!mounted) return;
     if (result.needsEmailOtp) {
       final verified = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
@@ -184,37 +214,84 @@ class _AuthScreenState extends State<AuthScreen> {
     _switchMode(_AuthMode.forgotSent);
   }
 
+  // The sign-in screens are always dark (a branded entry screen with a warm
+  // glow, whatever the app theme), so they use their own fixed palette
+  // rather than AppColors, which flips with the light/dark setting.
+  static const _bg = Color(0xFF0E0C0A);
+  static const _glow = Color(0xFFE8622C);
+  static const _amber = Color(0xFFF2B544);
+  static const _fieldBg = Color(0xFF1A1714);
+  static const _fieldLine = Color(0x1FFFFFFF);
+  static const _ink = Color(0xFFF6F1EA);
+  static const _soft = Color(0xFFA79D8F);
+  static const _faint = Color(0xFF6E665B);
+  static const _danger = Color(0xFFFF7A59);
+
+  bool _obscure = true;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        title: const SizedBox.shrink(),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: AmbientBackground(
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
+    final linkLabel = _mode == _AuthMode.signup
+        ? _t('auth_login_title')
+        : _t('sign_up');
+    final showTopLink =
+        _mode == _AuthMode.login || _mode == _AuthMode.signup;
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Directionality(
+        textDirection: TextDirection.rtl,
+        child: Scaffold(
+          backgroundColor: _bg,
+          body: Stack(
+            children: [
+              const Positioned.fill(child: _WarmBackdrop()),
+              SafeArea(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const BrandTitle(),
-                    const SizedBox(height: 28),
-                    GlassCard(
-                      glass: true,
-                      borderRadius: BorderRadius.circular(20),
-                      padding: const EdgeInsets.all(24),
-                      child: _buildBody(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_back_rounded),
+                            color: _ink,
+                            onPressed: () => Navigator.of(context).maybePop(),
+                          ),
+                          const Spacer(),
+                          if (showTopLink)
+                            TextButton(
+                              onPressed: () => _switchMode(
+                                  _mode == _AuthMode.signup
+                                      ? _AuthMode.login
+                                      : _AuthMode.signup),
+                              child: Text(linkLabel,
+                                  style: AppFonts.body(
+                                          size: 14,
+                                          color: _ink,
+                                          weight: FontWeight.w600)
+                                      .copyWith(
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: _ink)),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: _buildBody(),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -234,161 +311,380 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Widget _loginForm() {
+  // ---- building blocks ----
+
+  Widget _header(String title, {String? sub}) {
+    return Column(
+      children: [
+        const _GlowLogo(),
+        const SizedBox(height: 26),
+        Text(title,
+            textAlign: TextAlign.center,
+            style: AppFonts.body(size: 24, color: _ink, weight: FontWeight.w700)),
+        if (sub != null) ...[
+          const SizedBox(height: 6),
+          Text(sub,
+              textAlign: TextAlign.center,
+              style: AppFonts.body(size: 13.5, color: _soft)),
+        ],
+        const SizedBox(height: 28),
+      ],
+    );
+  }
+
+  Widget _label(String text) => Padding(
+        padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8),
+        child: Text(text,
+            style:
+                AppFonts.body(size: 13.5, color: _ink, weight: FontWeight.w500)),
+      );
+
+  InputDecoration _decoration(String hint, {Widget? suffix}) {
+    OutlineInputBorder border(Color c, [double w = 1]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: c, width: w),
+        );
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: AppFonts.body(size: 14, color: _faint),
+      filled: true,
+      fillColor: _fieldBg,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      enabledBorder: border(_fieldLine),
+      border: border(_fieldLine),
+      focusedBorder: border(_glow.withValues(alpha: 0.8), 1.4),
+      suffixIcon: suffix,
+    );
+  }
+
+  Widget _field({
+    required String label,
+    required TextEditingController controller,
+    String hint = '',
+    bool ltr = false,
+    bool password = false,
+    TextInputType? keyboard,
+    List<String>? autofill,
+    TextCapitalization caps = TextCapitalization.none,
+    ValueChanged<String>? onChanged,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_t('auth_login_title'), style: AppFonts.heading(size: 24)),
-        const SizedBox(height: 6),
-        Text(_t('auth_login_sub'),
-            style: AppFonts.body(size: 13, color: AppColors.muted)),
-        const SizedBox(height: 20),
+        _label(label),
         TextField(
-            controller: _emailCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_email'), hintText: _t('ph_email')),
-            keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 14),
-        TextField(
-            controller: _passCtrl,
-            decoration: InputDecoration(labelText: _t('label_password')),
-            obscureText: true),
-        if (_error != null) ...[
-          const SizedBox(height: 10),
-          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
-        ],
-        const SizedBox(height: 18),
-        ElevatedButton(
-          onPressed: _loading ? null : _submitLogin,
-          child: _loading ? const _Spinner() : Text(_t('auth_login_title')),
-        ),
-        _orDivider(),
-        _googleButton(),
-        const SizedBox(height: 14),
-        Center(
-          child: TextButton(
-              onPressed: () => _switchMode(_AuthMode.forgot),
-              child: Text(_t('forgot_password'))),
-        ),
-        Center(
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            children: [
-              Text(_t('no_account'),
-                  style: AppFonts.body(color: AppColors.muted)),
-              TextButton(
-                  onPressed: () => _switchMode(_AuthMode.signup),
-                  child: Text(_t('sign_up'))),
-            ],
+          controller: controller,
+          textDirection: ltr ? TextDirection.ltr : null,
+          obscureText: password && _obscure,
+          keyboardType: keyboard,
+          autofillHints: autofill,
+          textCapitalization: caps,
+          onChanged: onChanged,
+          cursorColor: _glow,
+          style: AppFonts.body(size: 15, color: _ink),
+          decoration: _decoration(
+            hint,
+            suffix: password
+                ? IconButton(
+                    icon: Icon(
+                        _obscure
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: 20,
+                        color: _soft),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  )
+                : null,
           ),
         ),
       ],
     );
   }
 
-  Widget _signupForm() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(_t('auth_signup_title'), style: AppFonts.heading(size: 24)),
-        const SizedBox(height: 6),
-        Text(_t('auth_signup_sub'),
-            style: AppFonts.body(size: 13, color: AppColors.muted)),
-        const SizedBox(height: 20),
-        TextField(
-            controller: _nameCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_fullname'), hintText: _t('ph_fullname'))),
-        const SizedBox(height: 14),
-        TextField(
-            controller: _phoneCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_phone'), hintText: _t('ph_phone')),
-            keyboardType: TextInputType.phone),
-        const SizedBox(height: 14),
-        TextField(
+  Widget _errorText() => _error == null
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Text(_error!,
+              style: AppFonts.body(size: 13, color: _danger)),
+        );
+
+  Widget _primaryButton(String label, VoidCallback onPressed) {
+    final enabled = !_loading;
+    return Opacity(
+      opacity: enabled ? 1 : 0.7,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: const LinearGradient(
+            begin: AlignmentDirectional.centerEnd,
+            end: AlignmentDirectional.centerStart,
+            colors: [_glow, _amber],
+          ),
+          boxShadow: [
+            BoxShadow(
+                color: _glow.withValues(alpha: 0.45),
+                blurRadius: 28,
+                offset: const Offset(0, 10)),
+          ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: enabled ? onPressed : null,
+            child: SizedBox(
+              height: 54,
+              child: Center(
+                child: _loading
+                    ? const _Spinner(color: Color(0xFF2A1406))
+                    : Text(label,
+                        style: AppFonts.body(
+                            size: 16,
+                            color: const Color(0xFF2A1406),
+                            weight: FontWeight.w700)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _darkPillButton(
+      {required Widget child, required VoidCallback? onPressed}) {
+    return Material(
+      color: const Color(0xFF181512),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(999),
+        side: const BorderSide(color: _fieldLine),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: SizedBox(height: 52, child: Center(child: child)),
+      ),
+    );
+  }
+
+  Widget _googleButton() => _darkPillButton(
+        onPressed: _loading ? null : _submitGoogle,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _GoogleGlyph(),
+            const SizedBox(width: 10),
+            Text(_t('continue_with_google'),
+                style: AppFonts.body(
+                    size: 14.5, color: _ink, weight: FontWeight.w600)),
+          ],
+        ),
+      );
+
+  Widget _orDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      child: Row(children: [
+        const Expanded(child: Divider(color: _fieldLine)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(_t('or_divider'),
+              style: AppFonts.body(size: 12.5, color: _faint)),
+        ),
+        const Expanded(child: Divider(color: _fieldLine)),
+      ]),
+    );
+  }
+
+  Widget _textLink(String label, VoidCallback onTap,
+      {Color color = _soft, double size = 13.5}) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      onPressed: onTap,
+      child: Text(label, style: AppFonts.body(size: size, color: color)),
+    );
+  }
+
+  // ---- forms ----
+
+  Widget _loginForm() {
+    return AutofillGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(_t('auth_login_title'), sub: _t('auth_login_heading_sub')),
+          _field(
+            label: _t('label_email'),
             controller: _emailCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_email'), hintText: _t('ph_email')),
-            keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 14),
-        TextField(
+            hint: _t('ph_email_enter'),
+            ltr: true,
+            keyboard: TextInputType.emailAddress,
+            autofill: const [AutofillHints.email],
+          ),
+          const SizedBox(height: 18),
+          _field(
+            label: _t('label_password'),
             controller: _passCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_password'), hintText: _t('ph_password')),
-            obscureText: true),
-        const SizedBox(height: 10),
-        if (!_showInvite)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton(
-              onPressed: () => setState(() => _showInvite = true),
-              child: Text(_t('have_invite_code')),
-            ),
-          )
-        else ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _inviteCtrl,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration:
-                      InputDecoration(labelText: _t('label_invite_code')),
-                  onChanged: (_) => setState(() => _inviteValid = null),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: TextButton(
-                  onPressed: _checkingInvite ? null : _checkInvite,
-                  child: _checkingInvite
-                      ? const _Spinner()
-                      : Text(_t('btn_check')),
-                ),
-              ),
-            ],
+            hint: _t('ph_password_enter'),
+            ltr: true,
+            password: true,
+            autofill: const [AutofillHints.password],
           ),
-          if (_inviteValid == true)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(_t('invite_valid'),
-                  style: AppFonts.body(size: 12.5, color: AppColors.teal)),
-            ),
-          if (_inviteValid == false)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(_t('invite_invalid_title'),
-                  style: AppFonts.body(size: 12.5, color: AppColors.red)),
-            ),
-        ],
-        if (_error != null) ...[
           const SizedBox(height: 10),
-          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
-        ],
-        const SizedBox(height: 18),
-        ElevatedButton(
-          onPressed: _loading ? null : _submitSignup,
-          child: _loading ? const _Spinner() : Text(_t('auth_signup_title')),
-        ),
-        _orDivider(),
-        _googleButton(),
-        const SizedBox(height: 14),
-        Center(
-          child: Wrap(
-            alignment: WrapAlignment.center,
+          Row(
             children: [
-              Text(_t('already_account'),
-                  style: AppFonts.body(color: AppColors.muted)),
-              TextButton(
-                  onPressed: () => _switchMode(_AuthMode.login),
-                  child: Text(_t('auth_login_title'))),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _rememberLogin = !_rememberLogin),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Checkbox(
+                          value: _rememberLogin,
+                          onChanged: (v) =>
+                              setState(() => _rememberLogin = v ?? false),
+                          activeColor: _glow,
+                          checkColor: Colors.white,
+                          side: const BorderSide(color: _soft, width: 1.4),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5)),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(_t('remember_login'),
+                          style: AppFonts.body(size: 13.5, color: _soft)),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+              _textLink(_t('forgot_password'),
+                  () => _switchMode(_AuthMode.forgot)),
             ],
           ),
-        ),
-      ],
+          _errorText(),
+          const SizedBox(height: 22),
+          _primaryButton(_t('auth_login_title'), _submitLogin),
+          _orDivider(),
+          _googleButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _signupForm() {
+    return AutofillGroup(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(_t('auth_signup_title'), sub: _t('auth_signup_sub')),
+          _field(
+            label: _t('label_fullname'),
+            controller: _nameCtrl,
+            hint: _t('ph_fullname'),
+            autofill: const [AutofillHints.name],
+          ),
+          const SizedBox(height: 16),
+          _field(
+            label: _t('label_phone'),
+            controller: _phoneCtrl,
+            hint: _t('ph_phone'),
+            ltr: true,
+            keyboard: TextInputType.phone,
+            autofill: const [AutofillHints.telephoneNumber],
+          ),
+          const SizedBox(height: 16),
+          _field(
+            label: _t('label_email'),
+            controller: _emailCtrl,
+            hint: _t('ph_email_enter'),
+            ltr: true,
+            keyboard: TextInputType.emailAddress,
+            autofill: const [AutofillHints.email],
+          ),
+          const SizedBox(height: 16),
+          _field(
+            label: _t('label_password'),
+            controller: _passCtrl,
+            hint: _t('ph_password'),
+            ltr: true,
+            password: true,
+            autofill: const [AutofillHints.newPassword],
+          ),
+          const SizedBox(height: 8),
+          if (!_showInvite)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: _textLink(_t('have_invite_code'),
+                  () => setState(() => _showInvite = true),
+                  color: _amber),
+            )
+          else ...[
+            const SizedBox(height: 8),
+            _label(_t('label_invite_code')),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _inviteCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    textDirection: TextDirection.ltr,
+                    cursorColor: _glow,
+                    style: AppFonts.body(size: 15, color: _ink),
+                    decoration: _decoration(''),
+                    onChanged: (_) => setState(() => _inviteValid = null),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 92,
+                  child: _darkPillButton(
+                    onPressed: _checkingInvite ? null : _checkInvite,
+                    child: _checkingInvite
+                        ? const _Spinner()
+                        : Text(_t('btn_check'),
+                            style: AppFonts.body(
+                                size: 14,
+                                color: _ink,
+                                weight: FontWeight.w600)),
+                  ),
+                ),
+              ],
+            ),
+            if (_inviteValid == true)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_t('invite_valid'),
+                    style: AppFonts.body(
+                        size: 13, color: const Color(0xFF7CC4B8))),
+              ),
+            if (_inviteValid == false)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_t('invite_invalid_title'),
+                    style: AppFonts.body(size: 13, color: _danger)),
+              ),
+          ],
+          _errorText(),
+          const SizedBox(height: 22),
+          _primaryButton(_t('auth_signup_title'), _submitSignup),
+          _orDivider(),
+          _googleButton(),
+        ],
+      ),
     );
   }
 
@@ -396,30 +692,22 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(_t('auth_forgot_title'), style: AppFonts.heading(size: 24)),
-        const SizedBox(height: 6),
-        Text(_t('auth_forgot_sub'),
-            style: AppFonts.body(size: 13, color: AppColors.muted)),
-        const SizedBox(height: 20),
-        TextField(
-            controller: _emailCtrl,
-            decoration: InputDecoration(
-                labelText: _t('label_email'), hintText: _t('ph_email')),
-            keyboardType: TextInputType.emailAddress),
-        if (_error != null) ...[
-          const SizedBox(height: 10),
-          Text(_error!, style: AppFonts.body(size: 12.5, color: AppColors.red)),
-        ],
-        const SizedBox(height: 18),
-        ElevatedButton(
-          onPressed: _loading ? null : _submitForgot,
-          child: _loading ? const _Spinner() : Text(_t('btn_send_reset')),
+        _header(_t('auth_forgot_title'), sub: _t('auth_forgot_sub')),
+        _field(
+          label: _t('label_email'),
+          controller: _emailCtrl,
+          hint: _t('ph_email_enter'),
+          ltr: true,
+          keyboard: TextInputType.emailAddress,
+          autofill: const [AutofillHints.email],
         ),
+        _errorText(),
+        const SizedBox(height: 22),
+        _primaryButton(_t('btn_send_reset'), _submitForgot),
         const SizedBox(height: 14),
         Center(
-            child: TextButton(
-                onPressed: () => _switchMode(_AuthMode.login),
-                child: Text(_t('back_to_login')))),
+            child: _textLink(
+                _t('back_to_login'), () => _switchMode(_AuthMode.login))),
       ],
     );
   }
@@ -428,45 +716,124 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.check_circle_outline, color: AppColors.teal, size: 44),
-        const SizedBox(height: 16),
-        Text(_t('success_email_title'), style: AppFonts.heading(size: 22)),
+        const _GlowLogo(),
+        const SizedBox(height: 26),
+        const Icon(Icons.mark_email_read_outlined, color: _amber, size: 40),
+        const SizedBox(height: 14),
+        Text(_t('success_email_title'),
+            textAlign: TextAlign.center,
+            style: AppFonts.body(size: 22, color: _ink, weight: FontWeight.w700)),
         const SizedBox(height: 8),
         Text(_t('success_email_sub'),
             textAlign: TextAlign.center,
-            style: AppFonts.body(size: 13, color: AppColors.muted)),
-        const SizedBox(height: 18),
-        OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(_t('btn_close'))),
+            style: AppFonts.body(size: 13.5, color: _soft)),
+        const SizedBox(height: 24),
+        _primaryButton(_t('back_to_login'), () => _switchMode(_AuthMode.login)),
       ],
     );
   }
+}
 
-  Widget _orDivider() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(children: [
-        Expanded(child: Divider(color: AppColors.line)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Text(_t('or_divider'),
-              style: AppFonts.body(size: 12, color: AppColors.muted)),
+/// Warm light falling from the top of the screen into near-black, like a
+/// work lamp over a dark drafting table.
+class _WarmBackdrop extends StatelessWidget {
+  const _WarmBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0, 0.38, 0.72],
+          colors: [Color(0xFF5A2C12), Color(0xFF20130B), Color(0xFF0E0C0A)],
         ),
-        Expanded(child: Divider(color: AppColors.line)),
-      ]),
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0.6, -1.1),
+            radius: 1.1,
+            colors: [Color(0x55F2B544), Color(0x00F2B544)],
+          ),
+        ),
+      ),
     );
   }
+}
 
-  Widget _googleButton() {
-    return OutlinedButton(
-      onPressed: _loading ? null : _submitGoogle,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+/// The brand mark (A, until the final logo) on a glowing tile, with a second frosted tile stacked
+/// beneath it.
+class _GlowLogo extends StatelessWidget {
+  const _GlowLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 120,
+      height: 118,
+      child: Stack(
+        alignment: Alignment.topCenter,
         children: [
-          const _GoogleGlyph(),
-          const SizedBox(width: 10),
-          Text(_t('continue_with_google')),
+          // lower, frosted layer
+          Positioned(
+            top: 22,
+            child: Transform.rotate(
+              angle: 0.785398, // 45 degrees
+              child: Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  color: const Color(0x14FFFFFF),
+                  border: Border.all(color: const Color(0x1FFFFFFF)),
+                ),
+              ),
+            ),
+          ),
+          // top tile
+          Positioned(
+            top: 4,
+            child: Transform.rotate(
+              angle: 0.785398,
+              child: Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF3A2416), Color(0xFF1B120C)],
+                  ),
+                  border: Border.all(color: const Color(0x33FFFFFF)),
+                  boxShadow: [
+                    BoxShadow(
+                        color: const Color(0xFFE8622C).withValues(alpha: 0.35),
+                        blurRadius: 36,
+                        spreadRadius: 2),
+                  ],
+                ),
+                child: Transform.rotate(
+                  angle: -0.785398,
+                  child: Center(
+                    child: ShaderMask(
+                      blendMode: BlendMode.srcIn,
+                      shaderCallback: (r) => const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFFF2B544), Color(0xFFE8622C)],
+                      ).createShader(r),
+                      child: Text('A',
+                          style: AppFonts.heading(
+                              size: 40, color: Colors.white)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -521,10 +888,11 @@ class _GoogleGlyphPainter extends CustomPainter {
 }
 
 class _Spinner extends StatelessWidget {
-  const _Spinner();
+  final Color color;
+  const _Spinner({this.color = Colors.white});
   @override
-  Widget build(BuildContext context) => const SizedBox(
+  Widget build(BuildContext context) => SizedBox(
       height: 18,
       width: 18,
-      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+      child: CircularProgressIndicator(strokeWidth: 2, color: color));
 }
