@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/learning_service.dart';
 import '../theme.dart';
+import 'arc_icons.dart';
 import 'glass_card.dart';
 
 /// Course thumbnail with a consistent fallback, used by every card.
@@ -25,8 +26,8 @@ class CourseThumb extends StatelessWidget {
             ),
           ),
           child: Center(
-            child: Icon(Icons.play_lesson_outlined,
-                color: AppColors.muted2, size: 22),
+            child: ArcIconView(ArcIcon.lessons,
+                color: AppColors.muted2, size: 26),
           ),
         );
     return ClipRRect(
@@ -54,8 +55,8 @@ class CourseThumb extends StatelessWidget {
                   border: Border.all(
                       color: Colors.white.withValues(alpha: 0.85), width: 1.5),
                 ),
-                child: const Icon(Icons.play_arrow_rounded,
-                    color: Colors.white, size: 20),
+                child: const Center(
+                    child: ArcIconView(ArcIcon.play, color: Colors.white, size: 18)),
               ),
             ),
         ],
@@ -66,7 +67,7 @@ class CourseThumb extends StatelessWidget {
 
 /// Small icon + text badge for lesson count / duration.
 class StatChip extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final String label;
   const StatChip({super.key, required this.icon, required this.label});
 
@@ -82,7 +83,7 @@ class StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: AppColors.muted),
+          ArcIconView(icon, size: 14, color: AppColors.muted),
           const SizedBox(width: 4),
           Text(label,
               style: AppFonts.body(
@@ -109,12 +110,12 @@ List<Widget> _statChips(Course course, CourseStats? stats) {
   final chips = <Widget>[];
   if ((stats?.lectureCount ?? 0) > 0) {
     chips.add(StatChip(
-        icon: Icons.play_lesson_outlined,
+        icon: ArcIcon.lessons,
         label: '${stats!.lectureCount} ${t('lessons_label')}'));
   }
   final dur = LearningService.courseDurationLabel(course, stats);
   if (dur != null) {
-    chips.add(StatChip(icon: Icons.schedule_rounded, label: dur));
+    chips.add(StatChip(icon: ArcIcon.clock, label: dur));
   }
   return chips;
 }
@@ -196,12 +197,12 @@ class FeaturedCourseCard extends StatelessWidget {
                   Wrap(spacing: 6, runSpacing: 6, children: [
                     if ((stats?.lectureCount ?? 0) > 0)
                       GlassChip(
-                          icon: Icons.play_lesson_outlined,
+                          icon: ArcIcon.lessons,
                           label: '${stats!.lectureCount} ${t('lessons_label')}',
                           onImage: true),
                     if (dur != null)
                       GlassChip(
-                          icon: Icons.schedule_rounded,
+                          icon: ArcIcon.clock,
                           label: dur,
                           onImage: true),
                   ]),
@@ -268,8 +269,7 @@ class CourseRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.chevron_right,
-              color: AppColors.muted2),
+          ArcIconView(ArcIcon.chevron, size: 18, color: AppColors.muted2),
         ],
       ),
     );
@@ -363,8 +363,8 @@ class ContinueLearningCard extends StatelessWidget {
                           offset: const Offset(0, 3)),
                     ],
                   ),
-                  child: const Icon(Icons.play_arrow_rounded,
-                      color: Colors.white, size: 22),
+                  child: const Center(
+                      child: ArcIconView(ArcIcon.play, color: Colors.white, size: 20)),
                 ),
               ],
             ),

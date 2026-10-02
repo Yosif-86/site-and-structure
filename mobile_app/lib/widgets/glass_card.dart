@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'arc_icons.dart';
 
 /// The app's standard surface: frosted glass. A translucent tint, a hairline
 /// light border, a soft sheen along the top edge, and a backdrop blur.
@@ -107,7 +108,7 @@ class _GlassCardState extends State<GlassCard> {
 /// Glass pill used for small status/category labels over imagery or glass.
 class GlassChip extends StatelessWidget {
   final String label;
-  final IconData? icon;
+  final ArcIcon? icon;
   final Color? color;
   final bool onImage;
 
@@ -142,7 +143,7 @@ class GlassChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 13, color: fg),
+                ArcIconView(icon!, size: 14, color: fg, active: true),
                 const SizedBox(width: 5),
               ],
               Text(label,

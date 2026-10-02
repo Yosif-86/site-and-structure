@@ -1,10 +1,15 @@
+import 'dart:async';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
-import '../widgets/arc_mark.dart';
+import '../widgets/ambient_background.dart';
+import '../widgets/blueprint_logo.dart';
 import 'teacher_screen.dart';
 import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
@@ -21,7 +26,26 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> {
+class _AuthScreenState extends State<AuthScreen>
+    with TickerProviderStateMixin {
+  /// The full Blueprint Pour plays the first time the sign-in screen opens
+  /// in an app session; after that it opens already settled.
+  static bool _introPlayed = false;
+
+  late final AnimationController _intro = AnimationController(
+    vsync: this,
+    duration: Duration(
+        milliseconds: (BlueprintTimeline.end * 1000).round()),
+  );
+  late final AnimationController _idle = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 5500));
+  final _logoSlotKey = GlobalKey();
+  double _logoLift = 0; // px from the logo's slot up to screen centre
+  bool _introStarted = false;
+  final AudioPlayer _introSound = AudioPlayer();
+  final AudioPlayer _tapSound = AudioPlayer();
+
+  double get _introT => _intro.value * BlueprintTimeline.end;
   late _AuthMode _mode =
       widget.startInSignup ? _AuthMode.signup : _AuthMode.login;
   bool _loading = false;
@@ -47,6 +71,66 @@ class _AuthScreenState extends State<AuthScreen> {
   void initState() {
     super.initState();
     _loadSavedLogin();
+    _intro.addStatusListener((s) {
+      if (s == AnimationStatus.completed) _idle.repeat();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_introStarted) return;
+    _introStarted = true;
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+    if (_introPlayed || reduceMotion || _mode != _AuthMode.login) {
+      _intro.value = 1;
+      _idle.repeat();
+      return;
+    }
+    _introPlayed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measureLift());
+    _startIntro();
+  }
+
+  /// How far the logo has to travel: it starts at screen centre and lands
+  /// in its slot above the form.
+  void _measureLift() {
+    final box = _logoSlotKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || !mounted) return;
+    final slotCenter = box.localToGlobal(box.size.center(Offset.zero)).dy;
+    final target = MediaQuery.of(context).size.height * 0.44;
+    setState(() => _logoLift = target - slotCenter);
+  }
+
+  Future<void> _startIntro() async {
+    // Draw with the real typefaces from the first frame.
+    try {
+      await GoogleFonts.pendingFonts([
+        GoogleFonts.montserrat(fontWeight: FontWeight.w300),
+        GoogleFonts.ibmPlexMono(),
+      ]).timeout(const Duration(milliseconds: 1200));
+    } catch (_) {}
+    if (!mounted) return;
+    _intro.forward();
+    _playSound(_introSound, 'sounds/login_intro.wav', 0.75);
+  }
+
+  /// Sound effects follow the phone's silent mode and never interrupt the
+  /// user's music; any audio failure is ignored (sound is decoration).
+  Future<void> _playSound(AudioPlayer player, String asset, double volume) async {
+    try {
+      await player.setAudioContext(AudioContextConfig(
+        respectSilence: true,
+        focus: AudioContextConfigFocus.mixWithOthers,
+      ).build());
+      await player.play(AssetSource(asset), volume: volume);
+    } catch (_) {}
+  }
+
+  void _skipIntro() {
+    if (_intro.value >= 1) return;
+    _intro.value = 1;
+    _introSound.stop().catchError((_) {});
   }
 
   Future<void> _loadSavedLogin() async {
@@ -63,6 +147,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
+    _intro.dispose();
+    _idle.dispose();
+    _introSound.dispose();
+    _tapSound.dispose();
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _nameCtrl.dispose();
@@ -246,11 +334,13 @@ class _AuthScreenState extends State<AuthScreen> {
           backgroundColor: _bg,
           body: Stack(
             children: [
-              const Positioned.fill(child: _WarmBackdrop()),
+              const Positioned.fill(
+                  child: BlueprintBackdrop(
+                      dark: true, focus: Alignment(0, -0.4))),
               SafeArea(
                 child: Column(
                   children: [
-                    Padding(
+                    _reveal(0, Padding(
                       padding: const EdgeInsets.fromLTRB(8, 4, 16, 0),
                       child: Row(
                         children: [
@@ -277,7 +367,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                         ],
                       ),
-                    ),
+                    )),
                     Expanded(
                       child: Center(
                         child: SingleChildScrollView(
@@ -292,12 +382,92 @@ class _AuthScreenState extends State<AuthScreen> {
                   ],
                 ),
               ),
+              // Any tap while the logo is still being drawn skips to the form.
+              Positioned.fill(
+                child: AnimatedBuilder(
+                  animation: _intro,
+                  builder: (context, _) => IgnorePointer(
+                    ignoring: _introT >= BlueprintTimeline.lift,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _skipIntro,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  /// Fades and lifts a piece of the form in after the logo lands; the
+  /// [order] staggers them top to bottom.
+  Widget _reveal(int order, Widget child) {
+    return AnimatedBuilder(
+      animation: _intro,
+      child: child,
+      builder: (context, child) {
+        final start = BlueprintTimeline.lift + 0.35 + order * 0.07;
+        final raw = ((_introT - start) / 0.6).clamp(0.0, 1.0);
+        if (raw >= 1) return child!;
+        final p = Curves.easeOutCubic.transform(raw);
+        return Opacity(
+          opacity: p,
+          child: Transform.translate(
+              offset: Offset(0, 14 * (1 - p)), child: child),
+        );
+      },
+    );
+  }
+
+  static const _logoW = 230.0;
+  static const _slotW = 150.0;
+
+  /// The Blueprint Pour logo: drawn large at screen centre, then lifted and
+  /// shrunk into its slot above the form.
+  Widget _blueprintHeader() {
+    return SizedBox(
+      key: _logoSlotKey,
+      width: _slotW,
+      height: _slotW * 1.2,
+      child: OverflowBox(
+        maxWidth: _logoW,
+        maxHeight: _logoW * 1.2,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_intro, _idle]),
+          builder: (context, _) {
+            final t = _introT;
+            final lp = Curves.easeInOutCubic.transform(
+                ((t - BlueprintTimeline.lift) / BlueprintTimeline.liftDur)
+                    .clamp(0.0, 1.0));
+            return Transform.translate(
+              offset: Offset(0, _logoLift * (1 - lp)),
+              child: Transform.scale(
+                scale: 1 + (_slotW / _logoW - 1) * lp,
+                child: BlueprintLogo(
+                    t: t, shine: _shinePhase(), width: _logoW),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Idle light sweep: 1.3 s across the mark, then a 4.2 s rest.
+  double _shinePhase() {
+    if (_intro.value < 1) return -1;
+    final s = _idle.value * 5.5;
+    return s < 1.3 ? s / 1.3 : -1;
+  }
+
+  Widget _staticLogo() => AnimatedBuilder(
+        animation: _idle,
+        builder: (context, _) => BlueprintLogo(
+            t: BlueprintTimeline.end, shine: _shinePhase(), width: 120),
+      );
 
   Widget _buildBody() {
     switch (_mode) {
@@ -317,17 +487,20 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget _header(String title, {String? sub}) {
     return Column(
       children: [
-        const _GlowLogo(),
-        const SizedBox(height: 26),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: AppFonts.body(size: 24, color: _ink, weight: FontWeight.w700)),
-        if (sub != null) ...[
-          const SizedBox(height: 6),
-          Text(sub,
+        _mode == _AuthMode.login ? _blueprintHeader() : _staticLogo(),
+        const SizedBox(height: 18),
+        _reveal(1, Column(children: [
+          Text(title,
               textAlign: TextAlign.center,
-              style: AppFonts.body(size: 13.5, color: _soft)),
-        ],
+              style: AppFonts.body(
+                  size: 24, color: _ink, weight: FontWeight.w700)),
+          if (sub != null) ...[
+            const SizedBox(height: 6),
+            Text(sub,
+                textAlign: TextAlign.center,
+                style: AppFonts.body(size: 13.5, color: _soft)),
+          ],
+        ])),
         const SizedBox(height: 28),
       ],
     );
@@ -434,7 +607,12 @@ class _AuthScreenState extends State<AuthScreen> {
           type: MaterialType.transparency,
           child: InkWell(
             borderRadius: BorderRadius.circular(999),
-            onTap: enabled ? onPressed : null,
+            onTap: enabled
+                ? () {
+                    _playSound(_tapSound, 'sounds/tap.wav', 0.6);
+                    onPressed();
+                  }
+                : null,
             child: SizedBox(
               height: 54,
               child: Center(
@@ -519,25 +697,25 @@ class _AuthScreenState extends State<AuthScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _header(_t('auth_login_title'), sub: _t('auth_login_heading_sub')),
-          _field(
+          _reveal(2, _field(
             label: _t('label_email'),
             controller: _emailCtrl,
             hint: _t('ph_email_enter'),
             ltr: true,
             keyboard: TextInputType.emailAddress,
             autofill: const [AutofillHints.email],
-          ),
+          )),
           const SizedBox(height: 18),
-          _field(
+          _reveal(3, _field(
             label: _t('label_password'),
             controller: _passCtrl,
             hint: _t('ph_password_enter'),
             ltr: true,
             password: true,
             autofill: const [AutofillHints.password],
-          ),
+          )),
           const SizedBox(height: 10),
-          Row(
+          _reveal(4, Row(
             children: [
               InkWell(
                 borderRadius: BorderRadius.circular(8),
@@ -575,12 +753,12 @@ class _AuthScreenState extends State<AuthScreen> {
               _textLink(_t('forgot_password'),
                   () => _switchMode(_AuthMode.forgot)),
             ],
-          ),
+          )),
           _errorText(),
           const SizedBox(height: 22),
-          _primaryButton(_t('auth_login_title'), _submitLogin),
-          _orDivider(),
-          _googleButton(),
+          _reveal(5, _primaryButton(_t('auth_login_title'), _submitLogin)),
+          _reveal(6, _orDivider()),
+          _reveal(7, _googleButton()),
         ],
       ),
     );
@@ -717,7 +895,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _GlowLogo(),
+        _staticLogo(),
         const SizedBox(height: 26),
         const Icon(Icons.mark_email_read_outlined, color: _amber, size: 40),
         const SizedBox(height: 14),
@@ -731,66 +909,6 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 24),
         _primaryButton(_t('back_to_login'), () => _switchMode(_AuthMode.login)),
       ],
-    );
-  }
-}
-
-/// Warm light falling from the top of the screen into near-black, like a
-/// work lamp over a dark drafting table.
-class _WarmBackdrop extends StatelessWidget {
-  const _WarmBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0, 0.38, 0.72],
-          colors: [Color(0xFF5A2C12), Color(0xFF20130B), Color(0xFF0E0C0A)],
-        ),
-      ),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0.6, -1.1),
-            radius: 1.1,
-            colors: [Color(0x55F2B544), Color(0x00F2B544)],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The official mark (brand sheet V5) on its app-icon tile, drawing itself
-/// in like a snake each time the sign-in screen opens.
-class _GlowLogo extends StatelessWidget {
-  const _GlowLogo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 132,
-      height: 132,
-      decoration: BoxDecoration(
-        color: const Color(0xFF14120F),
-        borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: const Color(0xFF3A362F), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 40,
-              offset: const Offset(0, 16)),
-          BoxShadow(
-              color: const Color(0xFFE8622C).withValues(alpha: 0.22),
-              blurRadius: 48,
-              spreadRadius: 2),
-        ],
-      ),
-      alignment: Alignment.center,
-      child: const AnimatedArcMark(size: 92),
     );
   }
 }

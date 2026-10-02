@@ -484,6 +484,7 @@ class _AdminScreenState extends State<AdminScreen> {
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: GlassScaffold(
+        maxContentWidth: 1100,
         appBar: AppBar(
           leading: _view != _View.dashboard
               ? IconButton(

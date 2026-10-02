@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/glass_scaffold.dart';
 import 'auth_screen.dart';
 import 'video_player_screen.dart';
@@ -324,11 +325,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         // scannable facts about a course, so they get the most visual weight.
         FadeSlideIn(
           delayMs: 100,
-          child: Row(
+          child: IntrinsicHeight(
+           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
                 child: _StatTile(
-                  icon: Icons.play_lesson_rounded,
+                  icon: ArcIcon.lessons,
                   value: '${_lectures.length}',
                   label: _t('lessons_label'),
                   color: AppColors.red,
@@ -337,7 +340,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatTile(
-                  icon: Icons.schedule_rounded,
+                  icon: ArcIcon.clock,
                   value: durationLabel ?? '—',
                   label: _t('duration_label'),
                   color: AppColors.teal,
@@ -346,13 +349,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatTile(
-                  icon: Icons.lock_open_rounded,
+                  icon: ArcIcon.play,
                   value: '$freeCount',
                   label: _t('feature_free_preview'),
                   color: AppColors.byline,
                 ),
               ),
             ],
+           ),
           ),
         ),
         const SizedBox(height: 18),
@@ -575,22 +579,21 @@ class _EnrollPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        SizedBox(
-          width: 160,
-          child: ElevatedButton(
-            onPressed: onEnroll,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(course.isFree ? t('enroll_free') : t('enroll'),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-                const SizedBox(width: 6),
-                // chevron_right auto-mirrors in RTL -- no manual flip.
-                const Icon(Icons.chevron_right, size: 20),
-              ],
-            ),
+        // Sized to its label (the theme's buttons are full-width by default).
+        ElevatedButton(
+          onPressed: onEnroll,
+          style: ElevatedButton.styleFrom(
+              minimumSize: const Size(150, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 18)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(course.isFree ? t('enroll_free') : t('enroll'),
+                  maxLines: 1),
+              const SizedBox(width: 8),
+              const ArcIconView(ArcIcon.chevron,
+                  size: 18, color: Colors.white, stroke: 2.2),
+            ],
           ),
         ),
       ]);
@@ -604,7 +607,7 @@ class _EnrollPanel extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final String value;
   final String label;
   final Color color;
@@ -629,7 +632,8 @@ class _StatTile extends StatelessWidget {
               color: color.withValues(alpha: 0.16),
               border: Border.all(color: color.withValues(alpha: 0.35)),
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Center(
+                child: ArcIconView(icon, color: color, size: 21, active: true)),
           ),
           const SizedBox(height: 8),
           FittedBox(
@@ -640,7 +644,7 @@ class _StatTile extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(label,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
               style: AppFonts.body(size: 11, color: AppColors.muted)),
@@ -765,7 +769,7 @@ class _CourseHero extends StatelessWidget {
                 top: 14,
                 start: 14,
                 child: GlassChip(
-                    label: tag!, icon: Icons.star_rounded, onImage: true),
+                    label: tag!, icon: ArcIcon.award, onImage: true),
               ),
             if (onPlay != null)
               Center(

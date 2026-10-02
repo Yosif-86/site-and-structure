@@ -686,6 +686,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return Directionality(
       textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
       child: GlassScaffold(
+        maxContentWidth: 1100,
         appBar: AppBar(
           leading: widget.openPaymentInfo
               // This instance was pushed just for Settings > Payment info --

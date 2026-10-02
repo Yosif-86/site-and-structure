@@ -4,6 +4,7 @@ import '../i18n/strings.dart';
 import '../services/error_reporter.dart';
 import '../services/learning_service.dart';
 import '../theme.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
@@ -209,9 +210,9 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
     final (icon, text) = switch (tab) {
-      _Tab.inProgress => (Icons.school_outlined, t('no_enrollments')),
-      _Tab.completed => (Icons.emoji_events_outlined, t('empty_completed')),
-      _Tab.pending => (Icons.hourglass_empty_rounded, t('empty_pending')),
+      _Tab.inProgress => (ArcIcon.courses, t('no_enrollments')),
+      _Tab.completed => (ArcIcon.award, t('empty_completed')),
+      _Tab.pending => (ArcIcon.clock, t('empty_pending')),
     };
     return GlassCard(
       padding: const EdgeInsets.all(28),
@@ -225,7 +226,8 @@ class _EmptyState extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: AppColors.glassBorder),
             ),
-            child: Icon(icon, color: AppColors.muted, size: 28),
+            child: Center(
+                child: ArcIconView(icon, color: AppColors.muted, size: 30, active: true)),
           ),
           const SizedBox(height: 14),
           Text(text,
@@ -280,8 +282,8 @@ class _EnrollmentRow extends StatelessWidget {
                     GlassChip(label: chipLabel, color: chipColor),
                     const Spacer(),
                     if (item.isCompleted)
-                      Icon(Icons.emoji_events_outlined,
-                          color: AppColors.teal, size: 20),
+                      ArcIconView(ArcIcon.award,
+                          color: AppColors.teal, size: 22, active: true),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -323,15 +325,13 @@ class _EnrollmentRow extends StatelessWidget {
                   ]),
                   const SizedBox(height: 6),
                   _MetaLine(
-                    icon: Icons.play_lesson_outlined,
+                    icon: ArcIcon.lessons,
                     text:
                         '${item.completedLectures} / ${item.totalLectures} ${t('lessons_completed')}',
                   ),
                   if (item.lastWatched != null)
                     _MetaLine(
-                      icon: item.isCompleted
-                          ? Icons.event_available_outlined
-                          : Icons.schedule_rounded,
+                      icon: item.isCompleted ? ArcIcon.check : ArcIcon.clock,
                       text:
                           '${item.isCompleted ? t('completed_on') : t('last_watched')} ${LearningService.relativeTime(item.lastWatched!)}',
                     ),
@@ -346,7 +346,7 @@ class _EnrollmentRow extends StatelessWidget {
 }
 
 class _MetaLine extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final String text;
   const _MetaLine({required this.icon, required this.text});
 
@@ -355,7 +355,7 @@ class _MetaLine extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Row(children: [
-        Icon(icon, size: 13, color: AppColors.muted2),
+        ArcIconView(icon, size: 14, color: AppColors.muted2),
         const SizedBox(width: 5),
         Expanded(
           child: Text(text,

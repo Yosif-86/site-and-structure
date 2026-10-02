@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -87,11 +88,11 @@ const _dark = _Palette(
   glassBorder: Color(0x29F3EDE4), // rgba(243,237,228,0.16)
 );
 
-// Matches the website's :root[data-theme="light"] block.
+// Light mode: the same blueprint sheet printed on white paper.
 const _light = _Palette(
-  bg: Color(0xFFF3EFE7),
+  bg: Color(0xFFFCFBF9),
   panel: Color(0xFFFFFFFF),
-  panel2: Color(0xFFEAE3D6),
+  panel2: Color(0xFFF1ECE4),
   line: Color(0x241E1912), // rgba(30,25,18,0.14)
   red: Color(0xFFC94E1F),
   teal: Color(0xFF3E7D74),
@@ -99,8 +100,8 @@ const _light = _Palette(
   muted: Color(0xFF5C5344),
   muted2: Color(0xFF8C8171),
   byline: Color(0xFFA8496B),
-  glassBg: Color(0x8CFFFFFF), // rgba(255,255,255,0.55)
-  glassBorder: Color(0xB3FFFFFF), // rgba(255,255,255,0.7)
+  glassBg: Color(0xB8FFFFFF), // rgba(255,255,255,0.72)
+  glassBorder: Color(0x1F1E1912), // ink hairline: white-on-white needs an edge
 );
 
 /// Light/dark toggle, mirroring the website's applyTheme()/toggleTheme() —
@@ -145,6 +146,9 @@ class AppTheme extends ChangeNotifier {
 /// Font helpers matching the website's stack:
 /// Big Shoulders Display (headings), Work Sans (body), IBM Plex Mono (labels/tags/prices).
 class AppFonts {
+  /// Arabic glyphs fall through to the bundled brand face (Alexandria).
+  static const arabic = ['ArcArabic'];
+
   static TextStyle heading({
     double size = 24,
     Color? color,
@@ -157,7 +161,7 @@ class AppFonts {
         color: color ?? AppColors.text,
         letterSpacing: letterSpacing,
         height: 1.05,
-      );
+      ).copyWith(fontFamilyFallback: arabic);
 
   static TextStyle body({
     double size = 14,
@@ -165,7 +169,7 @@ class AppFonts {
     FontWeight weight = FontWeight.w400,
   }) =>
       GoogleFonts.workSans(
-          fontSize: size, fontWeight: weight, color: color ?? AppColors.text);
+          fontSize: size, fontWeight: weight, color: color ?? AppColors.text).copyWith(fontFamilyFallback: arabic);
 
   /// Secondary label style (captions, meta, tags). Was IBM Plex Mono with
   /// wide tracking; now Work Sans so the UI runs on two families, not
@@ -182,7 +186,7 @@ class AppFonts {
         fontWeight: weight,
         color: color ?? AppColors.muted2,
         letterSpacing: letterSpacing,
-      );
+      ).copyWith(fontFamilyFallback: arabic);
 
   /// Tabular monospace for prices, IDs, and discount codes only.
   static TextStyle code({
@@ -195,7 +199,7 @@ class AppFonts {
         fontWeight: weight,
         color: color ?? AppColors.text,
         letterSpacing: 0,
-      );
+      ).copyWith(fontFamilyFallback: arabic);
 
   /// Small uppercase category label above a title.
   static TextStyle eyebrow({Color? color, double size = 11}) =>
@@ -204,8 +208,21 @@ class AppFonts {
         fontWeight: FontWeight.w600,
         color: color ?? AppColors.red,
         letterSpacing: 0.6,
-      );
+      ).copyWith(fontFamilyFallback: arabic);
 }
+
+/// Work Sans with the Arabic fallback, for the theme's component styles.
+TextStyle _ws(
+        {double? fontSize,
+        FontWeight? fontWeight,
+        Color? color,
+        double? letterSpacing}) =>
+    GoogleFonts.workSans(
+            fontSize: fontSize,
+            fontWeight: fontWeight,
+            color: color,
+            letterSpacing: letterSpacing)
+        .copyWith(fontFamilyFallback: AppFonts.arabic);
 
 ThemeData buildAppTheme() {
   final base = ThemeData(
@@ -213,7 +230,10 @@ ThemeData buildAppTheme() {
       brightness:
           AppTheme.instance.isDark ? Brightness.dark : Brightness.light);
   final workSansTextTheme = GoogleFonts.workSansTextTheme(base.textTheme)
-      .apply(bodyColor: AppColors.text, displayColor: AppColors.text);
+      .apply(
+          bodyColor: AppColors.text,
+          displayColor: AppColors.text,
+          fontFamilyFallback: AppFonts.arabic);
 
   return base.copyWith(
     scaffoldBackgroundColor: AppColors.bg,
@@ -232,7 +252,7 @@ ThemeData buildAppTheme() {
       headlineLarge: AppFonts.heading(size: 32),
       headlineMedium: AppFonts.heading(size: 24),
       headlineSmall: AppFonts.heading(size: 20),
-      titleLarge: GoogleFonts.workSans(
+      titleLarge: _ws(
           fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
       labelSmall: AppFonts.mono(size: 11, color: AppColors.muted2),
     ),
@@ -240,13 +260,16 @@ ThemeData buildAppTheme() {
     // the header; screens that want a solid bar (the video player) set
     // their own backgroundColor.
     appBarTheme: AppBarTheme(
+      systemOverlayStyle: AppTheme.instance.isDark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       foregroundColor: AppColors.text,
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.workSans(
+      titleTextStyle: _ws(
           fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.text),
     ),
     cardTheme: CardThemeData(
@@ -265,7 +288,7 @@ ThemeData buildAppTheme() {
         disabledForegroundColor: Colors.white70,
         elevation: 0,
         minimumSize: const Size.fromHeight(48),
-        textStyle: GoogleFonts.workSans(
+        textStyle: _ws(
             fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.1),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         shape: RoundedRectangleBorder(
@@ -277,7 +300,7 @@ ThemeData buildAppTheme() {
         foregroundColor: AppColors.text,
         backgroundColor: AppColors.glassBg,
         minimumSize: const Size(0, 44),
-        textStyle: GoogleFonts.workSans(
+        textStyle: _ws(
             fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.1),
         side: BorderSide(color: AppColors.line),
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -290,7 +313,7 @@ ThemeData buildAppTheme() {
         foregroundColor: AppColors.red,
         minimumSize: const Size(0, 44),
         textStyle:
-            GoogleFonts.workSans(fontSize: 14, fontWeight: FontWeight.w600),
+            _ws(fontSize: 14, fontWeight: FontWeight.w600),
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -298,10 +321,10 @@ ThemeData buildAppTheme() {
       // Translucent so fields read as part of the glass panel they sit on
       // rather than as solid blocks punched into it.
       fillColor: AppColors.bg.withValues(alpha: 0.45),
-      labelStyle: GoogleFonts.workSans(fontSize: 14, color: AppColors.muted),
+      labelStyle: _ws(fontSize: 14, color: AppColors.muted),
       floatingLabelStyle:
-          GoogleFonts.workSans(fontSize: 13, color: AppColors.muted),
-      hintStyle: GoogleFonts.workSans(fontSize: 14, color: AppColors.muted2),
+          _ws(fontSize: 13, color: AppColors.muted),
+      hintStyle: _ws(fontSize: 14, color: AppColors.muted2),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.control),
@@ -326,12 +349,20 @@ ThemeData buildAppTheme() {
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.panel2,
       contentTextStyle:
-          GoogleFonts.workSans(fontSize: 14, color: AppColors.text),
+          _ws(fontSize: 14, color: AppColors.text),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.control)),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(color: AppColors.red),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.selected) ? Colors.white : AppColors.muted),
+      trackColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.selected) ? AppColors.red : AppColors.panel2),
+      trackOutlineColor: WidgetStateProperty.resolveWith((s) =>
+          s.contains(WidgetState.selected) ? AppColors.red : AppColors.line),
+    ),
     dialogTheme: DialogThemeData(
       backgroundColor: AppColors.panel.withValues(alpha: 0.94),
       surfaceTintColor: Colors.transparent,

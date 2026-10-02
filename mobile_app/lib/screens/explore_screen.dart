@@ -6,6 +6,7 @@ import '../services/error_reporter.dart';
 import '../services/learning_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
@@ -113,7 +114,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 textInputAction: TextInputAction.search,
                 decoration: InputDecoration(
                   hintText: t('explore_search_hint'),
-                  prefixIcon: Icon(Icons.search_rounded, color: AppColors.muted),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ArcIconView(ArcIcon.search,
+                        size: 22, color: AppColors.muted),
+                  ),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
@@ -171,8 +176,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
               GlassCard(
                 padding: const EdgeInsets.all(24),
                 child: Column(children: [
-                  Icon(Icons.search_off_rounded,
-                      size: 36, color: AppColors.muted2),
+                  ArcIconView(ArcIcon.search,
+                      size: 40, color: AppColors.muted2, active: true),
                   const SizedBox(height: 10),
                   Text(t('explore_no_results'),
                       textAlign: TextAlign.center,

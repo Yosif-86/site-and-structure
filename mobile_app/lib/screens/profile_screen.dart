@@ -7,6 +7,7 @@ import '../i18n/strings.dart';
 import '../services/deep_links.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/glass_icon_button.dart';
@@ -264,7 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             FadeSlideIn(
               delayMs: 180,
               child: _DashboardTile(
-                icon: Icons.workspace_premium_outlined,
+                icon: ArcIcon.award,
                 accent: AppColors.teal,
                 title: t('teacher_dashboard'),
                 subtitle: t('teacher_dashboard_sub'),
@@ -279,7 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             FadeSlideIn(
               delayMs: 240,
               child: _DashboardTile(
-                icon: Icons.shield_outlined,
+                icon: ArcIcon.dashboard,
                 accent: AppColors.red,
                 title: t('nav_admin'),
                 subtitle: t('admin_dashboard_sub'),
@@ -526,7 +527,7 @@ class _SocialButton extends StatelessWidget {
 }
 
 class _DashboardTile extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final Color accent;
   final String title;
   final String subtitle;
@@ -551,11 +552,19 @@ class _DashboardTile extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: accent.withValues(alpha: 0.35)),
+              borderRadius: BorderRadius.circular(14),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  accent.withValues(alpha: 0.24),
+                  accent.withValues(alpha: 0.08),
+                ],
+              ),
+              border: Border.all(color: accent.withValues(alpha: 0.30)),
             ),
-            child: Icon(icon, color: accent, size: 22),
+            child: Center(
+                child: ArcIconView(icon, color: accent, size: 22, active: true)),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -570,7 +579,7 @@ class _DashboardTile extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.chevron_right, color: AppColors.muted2),
+          ArcIconView(ArcIcon.chevron, size: 18, color: AppColors.muted2),
         ],
       ),
     );

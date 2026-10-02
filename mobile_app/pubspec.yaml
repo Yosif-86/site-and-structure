@@ -20,6 +20,7 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   url_launcher: ^6.3.0
   device_info_plus: ^11.1.1
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +35,22 @@ flutter:
   # finds them here by file name before trying the network.
   assets:
     - assets/google_fonts/
+    - assets/sounds/
+  # Arabic UI text. Every Latin style keeps its own family and lists this as
+  # its fallback, so Arabic glyphs render in the brand face (with real
+  # weights) instead of the phone's system font.
+  fonts:
+    - family: ArcArabic
+      fonts:
+        - asset: assets/google_fonts/Alexandria-Light.ttf
+          weight: 300
+        - asset: assets/google_fonts/Alexandria-Regular.ttf
+          weight: 400
+        - asset: assets/google_fonts/Alexandria-Medium.ttf
+          weight: 500
+        - asset: assets/google_fonts/Alexandria-SemiBold.ttf
+          weight: 600
+        - asset: assets/google_fonts/Alexandria-Bold.ttf
+          weight: 700
+        - asset: assets/google_fonts/Alexandria-ExtraBold.ttf
+          weight: 800

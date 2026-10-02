@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import 'auth_screen.dart';
@@ -69,7 +70,7 @@ class SettingsScreen extends StatelessWidget {
             FadeSlideIn(
               delayMs: 0,
               child: _SettingsTile(
-                icon: Icons.account_balance_wallet_outlined,
+                icon: ArcIcon.wallet,
                 accent: AppColors.teal,
                 title: t('settings_payment_info'),
                 subtitle: isTeacher
@@ -87,7 +88,7 @@ class SettingsScreen extends StatelessWidget {
             FadeSlideIn(
               delayMs: 60,
               child: _SettingsTile(
-                icon: Icons.support_agent_outlined,
+                icon: ArcIcon.support,
                 accent: AppColors.teal,
                 title: t('settings_support'),
                 subtitle: t('settings_support_sub'),
@@ -98,9 +99,7 @@ class SettingsScreen extends StatelessWidget {
             FadeSlideIn(
               delayMs: 120,
               child: _SettingsTile(
-                icon: AppTheme.instance.isDark
-                    ? Icons.dark_mode_outlined
-                    : Icons.light_mode_outlined,
+                icon: AppTheme.instance.isDark ? ArcIcon.moon : ArcIcon.sun,
                 accent: AppColors.byline,
                 title: t('settings_appearance'),
                 subtitle: AppTheme.instance.isDark
@@ -108,7 +107,6 @@ class SettingsScreen extends StatelessWidget {
                     : t('settings_appearance_light'),
                 trailing: Switch(
                   value: AppTheme.instance.isDark,
-                  activeThumbColor: AppColors.red,
                   onChanged: (_) => AppTheme.instance.toggle(),
                 ),
                 onTap: () => AppTheme.instance.toggle(),
@@ -118,7 +116,7 @@ class SettingsScreen extends StatelessWidget {
             FadeSlideIn(
               delayMs: 180,
               child: _SettingsTile(
-                icon: Icons.privacy_tip_outlined,
+                icon: ArcIcon.shield,
                 accent: AppColors.teal,
                 title: t('settings_privacy'),
                 subtitle: t('settings_privacy_sub'),
@@ -129,7 +127,7 @@ class SettingsScreen extends StatelessWidget {
             FadeSlideIn(
               delayMs: 240,
               child: _SettingsTile(
-                icon: loggedIn ? Icons.logout : Icons.login,
+                icon: loggedIn ? ArcIcon.logout : ArcIcon.login,
                 accent: AppColors.red,
                 title: loggedIn ? t('log_out') : t('log_in'),
                 onTap: () async {
@@ -146,7 +144,7 @@ class SettingsScreen extends StatelessWidget {
               FadeSlideIn(
                 delayMs: 300,
                 child: _SettingsTile(
-                  icon: Icons.delete_outline,
+                  icon: ArcIcon.trash,
                   accent: AppColors.error,
                   title: t('settings_delete_account'),
                   subtitle: t('settings_delete_account_sub'),
@@ -160,7 +158,7 @@ class SettingsScreen extends StatelessWidget {
 }
 
 class _SettingsTile extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final Color accent;
   final String title;
   final String? subtitle;
@@ -189,14 +187,22 @@ class _SettingsTile extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 42,
-              height: 42,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: accent.withValues(alpha: 0.35)),
+                borderRadius: BorderRadius.circular(14),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    accent.withValues(alpha: 0.24),
+                    accent.withValues(alpha: 0.08),
+                  ],
+                ),
+                border: Border.all(color: accent.withValues(alpha: 0.30)),
               ),
-              child: Icon(icon, color: accent, size: 20),
+              child: Center(
+                  child: ArcIconView(icon, color: accent, size: 22, active: true)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -213,7 +219,8 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            trailing ?? Icon(Icons.chevron_right, color: AppColors.muted2),
+            trailing ??
+                ArcIconView(ArcIcon.chevron, size: 18, color: AppColors.muted2),
           ],
         ),
       ),

@@ -8,6 +8,7 @@ import '../services/error_reporter.dart';
 import '../services/learning_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/brand_title.dart';
 import '../widgets/course_card.dart';
@@ -285,7 +286,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
             : FloatingBottomNav(
                 items: _navItems(t, loggedIn),
                 center: BottomNavItem(
-                  icon: Icons.explore_rounded,
+                  icon: ArcIcon.explore,
                   tooltip: t('nav_explore'),
                   onTap: _openExplore,
                 ),
@@ -303,8 +304,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.phone_android_outlined,
-                  size: 42, color: AppColors.muted),
+              ArcIconView(ArcIcon.phone,
+                  size: 44, color: AppColors.muted, active: true),
               const SizedBox(height: 14),
               Text(t('verify_phone_title'),
                   style: AppFonts.heading(size: 20),
@@ -326,29 +327,25 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   List<BottomNavItem> _navItems(String Function(String) t, bool loggedIn) {
     return [
       BottomNavItem(
-        icon: Icons.home_outlined,
-        activeIcon: Icons.home_rounded,
+        icon: ArcIcon.home,
         tooltip: t('nav_home'),
         active: _currentPage == 0,
         onTap: () => _goToPage(0),
       ),
       BottomNavItem(
-        icon: Icons.school_outlined,
-        activeIcon: Icons.school_rounded,
+        icon: ArcIcon.courses,
         tooltip: t('my_courses'),
         active: _currentPage == 1,
         onTap: () => loggedIn ? _goToPage(1) : _openAuth(),
       ),
       BottomNavItem(
-        icon: Icons.person_outline_rounded,
-        activeIcon: Icons.person_rounded,
+        icon: ArcIcon.profile,
         tooltip: t('nav_profile'),
         active: _currentPage == 2,
         onTap: () => loggedIn ? _goToPage(2) : _openAuth(),
       ),
       BottomNavItem(
-        icon: Icons.settings_outlined,
-        activeIcon: Icons.settings_rounded,
+        icon: ArcIcon.settings,
         tooltip: t('settings'),
         active: _currentPage == 3,
         onTap: () => _goToPage(3),
@@ -582,7 +579,7 @@ class _AvatarFallback extends StatelessWidget {
       child: initial != null
           ? Text(initial!,
               style: AppFonts.body(size: 17, weight: FontWeight.w700))
-          : Icon(Icons.person_outline_rounded, color: AppColors.muted, size: 22),
+          : ArcIconView(ArcIcon.profile, color: AppColors.muted, size: 22),
     );
   }
 }
@@ -614,9 +611,10 @@ class _Greeting extends StatelessWidget {
                   overflow: TextOverflow.ellipsis),
             ),
             const SizedBox(width: 8),
-            Icon(morning ? Icons.wb_sunny_rounded : Icons.nights_stay_rounded,
+            ArcIconView(morning ? ArcIcon.sun : ArcIcon.moon,
                 color: morning ? const Color(0xFFF2B33D) : AppColors.teal,
-                size: 22),
+                size: 24,
+                active: true),
           ],
         ),
         const SizedBox(height: 4),
@@ -710,6 +708,19 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(4),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFF2B544), Color(0xFFE8622C)],
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
         Text(title, style: AppFonts.body(size: 17, weight: FontWeight.w700)),
         if (count != null) ...[
           const SizedBox(width: 8),
@@ -735,7 +746,8 @@ class _SectionHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(actionLabel!),
-                const Icon(Icons.chevron_right, size: 18),
+                const SizedBox(width: 2),
+                ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.red, stroke: 2.2),
               ],
             ),
           ),

@@ -20,12 +20,18 @@ class GlassScaffold extends StatelessWidget {
   final Widget? bottomNavigationBar;
   final bool resizeToAvoidBottomInset;
 
+  /// On tablets the content column stops growing at this width and sits
+  /// centred on the full-screen backdrop, so lines and cards keep phone-like
+  /// proportions instead of stretching edge to edge.
+  final double maxContentWidth;
+
   const GlassScaffold({
     super.key,
     this.appBar,
     required this.body,
     this.bottomNavigationBar,
     this.resizeToAvoidBottomInset = true,
+    this.maxContentWidth = 760,
   });
 
   @override
@@ -38,7 +44,17 @@ class GlassScaffold extends StatelessWidget {
       appBar: appBar,
       bottomNavigationBar: bottomNavigationBar,
       body: AmbientBackground(
-        child: SafeArea(bottom: false, child: body),
+        child: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(builder: (context, c) {
+            final side = ((c.maxWidth - maxContentWidth) / 2)
+                .clamp(0.0, double.infinity);
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: side),
+              child: body,
+            );
+          }),
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'i18n/strings.dart';
 import 'screens/catalogue_screen.dart';
@@ -106,10 +107,18 @@ class SiteAndStructureApp extends StatelessWidget {
           // The launch intro sits above the navigator (not a route), so Home
           // loads underneath it and deep links (password reset) still open
           // normally; it removes itself when the animation ends.
-          builder: (context, child) => PrivacyOverlay(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [child!, const IntroOverlay()],
+          // Status bar icons follow the theme: light on the dark sheet,
+          // dark on the white one (screens with an AppBar get the same from
+          // appBarTheme; the sign-in screen forces light itself).
+          builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+            value: AppTheme.instance.isDark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            child: PrivacyOverlay(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [child!, const IntroOverlay()],
+              ),
             ),
           ),
           home: const CatalogueScreen(),
