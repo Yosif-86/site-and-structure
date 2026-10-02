@@ -786,12 +786,12 @@
 
   document.getElementById('logoutBtnDrawer').onclick = async () => {
     await sb.auth.signOut();
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
   };
 
   document.getElementById('logoutBtn').onclick = async () => {
     await sb.auth.signOut();
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
   };
 
   async function approve(enrollmentId){
@@ -1582,9 +1582,9 @@
 
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
-    if(!session){ window.location.href = 'index.html'; return; }
+    if(!session){ window.location.href = 'login.html?next=admin'; return; }
     const { data: prof } = await sb.from('profiles').select('is_admin, is_teacher').eq('id', session.user.id).maybeSingle();
-    if(!prof || !prof.is_admin){ window.location.href = 'index.html'; return; }
+    if(!prof || !prof.is_admin){ window.location.href = 'login.html?next=admin'; return; }
     const showTeacher = prof.is_teacher ? '' : 'none';
     document.getElementById('teacherLink').style.display = showTeacher;
     document.getElementById('teacherLinkDrawer').style.display = showTeacher;

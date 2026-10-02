@@ -29,7 +29,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-tLFXdJTBCkXjj/xpjUdvVhW4mDyVr91M5RuuGi8KM08=' 'sha256-YuVXHmUfcZ88AA7vt7JLW1ZKTn92IyZT4PfQPhIRKsc=' 'sha256-GsRWucwCbghLQrgGzMXCuN1w/FzwkxvCftLZXHkNe7k=' 'sha256-4FN6F1pv1HIWWC6299tR7tjIK4qMS+G7EtyNLMaKfUU=' 'sha256-O8HTeQp/ef8WF9HB4iyciAEwj0XDLdFt6QZRAAxs6jc=' 'sha256-pzfFeItQCE129X2caFCstlacES3RtHars9eVqjgN19U=' 'sha256-Q4PTM31M3li5Ut770QEvuZgOBKSxn2guhvQJ905746k='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://qdarzhzttjpkgfihupgp.supabase.co; connect-src 'self' https://qdarzhzttjpkgfihupgp.supabase.co https://ipapi.co https://site-structure-videos.siteandstructure.workers.dev https://cdn.jsdelivr.net; media-src 'self' blob:; frame-src https://site-structure-videos.siteandstructure.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+          "value": "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-tLFXdJTBCkXjj/xpjUdvVhW4mDyVr91M5RuuGi8KM08=' 'sha256-YuVXHmUfcZ88AA7vt7JLW1ZKTn92IyZT4PfQPhIRKsc=' 'sha256-YQ410Ss4GRj52eF2xQdUuNw3zp25HGvjPfkMjzjXzxg=' 'sha256-4FN6F1pv1HIWWC6299tR7tjIK4qMS+G7EtyNLMaKfUU=' 'sha256-O8HTeQp/ef8WF9HB4iyciAEwj0XDLdFt6QZRAAxs6jc=' 'sha256-qWOHxQauik4fBlkOOvBNB3YPFUZeuVLT0USp6csurOw=' 'sha256-Q4PTM31M3li5Ut770QEvuZgOBKSxn2guhvQJ905746k='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://qdarzhzttjpkgfihupgp.supabase.co; connect-src 'self' https://qdarzhzttjpkgfihupgp.supabase.co https://ipapi.co https://site-structure-videos.siteandstructure.workers.dev https://cdn.jsdelivr.net; media-src 'self' blob:; frame-src https://site-structure-videos.siteandstructure.workers.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         }
       ]
     }
@@ -64,6 +64,12 @@
       "source": "/teacher-profile",
       "destination": "/",
       "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/login",
+      "destination": "/login.html"
     }
   ]
 }

@@ -1015,14 +1015,14 @@
   // ---- Boot ----
   document.getElementById('logoutBtnDrawer').onclick = async () => {
     await sb.auth.signOut();
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
   };
 
   (async () => {
     const { data:{ session } } = await sb.auth.getSession();
-    if(!session){ window.location.href = 'index.html'; return; }
+    if(!session){ window.location.href = 'login.html?next=teacher'; return; }
     const { data: prof } = await sb.from('profiles').select('is_teacher, is_admin').eq('id', session.user.id).maybeSingle();
-    if(!prof || !prof.is_teacher){ window.location.href = 'index.html'; return; }
+    if(!prof || !prof.is_teacher){ window.location.href = 'login.html?next=teacher'; return; }
     currentUser = session.user;
     document.getElementById('adminLinkDrawer').style.display = prof.is_admin ? '' : 'none';
 
