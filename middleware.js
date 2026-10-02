@@ -71,7 +71,22 @@ function basicAuthOk(request, user, pass) {
   return provided === 'Basic ' + btoa(`${user}:${pass}`);
 }
 
+// Old brand address -> new one, for pages only. /api/* never reaches this
+// middleware (see matcher), so installed apps that still call the old host
+// keep working. Browsers carry the #fragment across a redirect, so
+// password-reset links (#access_token=...) still land correctly.
+const OLD_HOSTS = new Set(['site-and-structure.vercel.app']);
+const NEW_HOST = 'arcplatformiq.vercel.app';
+
 export default function middleware(request) {
+  const url = new URL(request.url);
+  if (OLD_HOSTS.has(url.host)) {
+    url.host = NEW_HOST;
+    url.protocol = 'https:';
+    url.port = '';
+    return Response.redirect(url.toString(), 308);
+  }
+
   // Normalize so /ADMIN.html, /admin.html/ or %61dmin.html can't slip past.
   let path = new URL(request.url).pathname;
   try { path = decodeURIComponent(path); } catch (e) { /* keep raw */ }
