@@ -29,3 +29,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Logo fonts (Montserrat, Alexandria; SIL OFL, licenses alongside) shipped
+  # with the app so the launch intro never waits on a download. google_fonts
+  # finds them here by file name before trying the network.
+  assets:
+    - assets/google_fonts/
