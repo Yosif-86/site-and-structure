@@ -8,6 +8,7 @@ import 'screens/set_new_password_screen.dart';
 import 'services/error_reporter.dart';
 import 'services/supabase_service.dart';
 import 'theme.dart';
+import 'widgets/intro_overlay.dart';
 import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -102,7 +103,15 @@ class SiteAndStructureApp extends StatelessWidget {
           title: AppStrings.instance.t('app_name'),
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(),
-          builder: (context, child) => PrivacyOverlay(child: child!),
+          // The launch intro sits above the navigator (not a route), so Home
+          // loads underneath it and deep links (password reset) still open
+          // normally; it removes itself when the animation ends.
+          builder: (context, child) => PrivacyOverlay(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [child!, const IntroOverlay()],
+            ),
+          ),
           home: const CatalogueScreen(),
         );
       },

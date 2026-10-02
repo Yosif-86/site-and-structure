@@ -162,11 +162,21 @@ class _AnimatedArcMarkState extends State<AnimatedArcMark>
 class ArcLogo extends StatelessWidget {
   final double height;
   final Color textColor;
+  final Color markColor;
+  final Color dividerColor;
   const ArcLogo({
     super.key,
     this.height = 40,
     this.textColor = const Color(0xFFFEE4BF),
+    this.markColor = const Color(0xFFE8622C),
+    this.dividerColor = const Color(0xFFE8622C),
   });
+
+  /// Monochrome dark (brand sheet V5 #5) for light backgrounds.
+  const ArcLogo.dark({super.key, this.height = 40})
+      : textColor = const Color(0xFF14120F),
+        markColor = const Color(0xFF14120F),
+        dividerColor = const Color(0xFF14120F);
 
   @override
   Widget build(BuildContext context) {
@@ -177,10 +187,9 @@ class ArcLogo extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ArcMark(size: height),
+          ArcMark(size: height, color: markColor),
           SizedBox(width: height * 0.2),
-          Container(
-              width: 1.5, height: height * 0.84, color: const Color(0xFFE8622C)),
+          Container(width: 1.5, height: height * 0.84, color: dividerColor),
           SizedBox(width: height * 0.2),
           Column(
             mainAxisSize: MainAxisSize.min,
