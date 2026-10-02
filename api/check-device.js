@@ -73,11 +73,28 @@ module.exports = async (req, res) => {
   // replaces a check-then-insert that raced under concurrent requests from
   // the same account (both could pass the count check before either insert
   // landed, letting the account exceed MAX_DEVICES).
+  // Per-account limit (add-per-account-device-limit.sql). Falls back to the
+  // default if the column/row isn't there, so this never fails open or 500s.
+  let maxDevices = MAX_DEVICES;
+  let existingToken = null;
+  {
+    const { data: prof, error: profErr } = await admin
+      .from('profiles')
+      .select('max_devices, active_session_token')
+      .eq('id', userId)
+      .maybeSingle();
+    if (!profErr && prof) {
+      const n = Number(prof.max_devices);
+      if (Number.isInteger(n) && n >= 1 && n <= 5) maxDevices = n;
+      existingToken = prof.active_session_token || null;
+    }
+  }
+
   const { data: allowed, error: claimErr } = await admin.rpc('claim_device_slot', {
     p_user_id: userId,
     p_device_id: deviceId,
     p_device_label: safeDeviceLabel || null,
-    p_max_devices: MAX_DEVICES
+    p_max_devices: maxDevices
   });
 
   // DB error detail is logged server-side only — the client gets a generic
@@ -94,6 +111,13 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Single-session rule: a new token logs every other device out. Accounts
+  // allowed several devices share the current token instead, otherwise
+  // signing in on device 2 would kick device 1 within 20 seconds.
+  if (maxDevices > 1 && existingToken) {
+    res.status(200).json({ allowed: true, sessionToken: existingToken });
+    return;
+  }
   const sessionToken = require('crypto').randomUUID();
   await admin.from('profiles').upsert({ id: userId, active_session_token: sessionToken });
 
