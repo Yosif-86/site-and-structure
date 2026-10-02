@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/arc_mark.dart';
 import 'teacher_screen.dart';
 import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
@@ -222,7 +223,7 @@ class _AuthScreenState extends State<AuthScreen> {
   static const _amber = Color(0xFFF2B544);
   static const _fieldBg = Color(0xFF1A1714);
   static const _fieldLine = Color(0x1FFFFFFF);
-  static const _ink = Color(0xFFF6F1EA);
+  static const _ink = Color(0xFFFEE4BF);
   static const _soft = Color(0xFFA79D8F);
   static const _faint = Color(0xFF6E665B);
   static const _danger = Color(0xFFFF7A59);
@@ -763,79 +764,33 @@ class _WarmBackdrop extends StatelessWidget {
   }
 }
 
-/// The brand mark (A, until the final logo) on a glowing tile, with a second frosted tile stacked
-/// beneath it.
+/// The official mark (brand sheet V5) on its app-icon tile, drawing itself
+/// in like a snake each time the sign-in screen opens.
 class _GlowLogo extends StatelessWidget {
   const _GlowLogo();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 120,
-      height: 118,
-      child: Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          // lower, frosted layer
-          Positioned(
-            top: 22,
-            child: Transform.rotate(
-              angle: 0.785398, // 45 degrees
-              child: Container(
-                width: 78,
-                height: 78,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  color: const Color(0x14FFFFFF),
-                  border: Border.all(color: const Color(0x1FFFFFFF)),
-                ),
-              ),
-            ),
-          ),
-          // top tile
-          Positioned(
-            top: 4,
-            child: Transform.rotate(
-              angle: 0.785398,
-              child: Container(
-                width: 78,
-                height: 78,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF3A2416), Color(0xFF1B120C)],
-                  ),
-                  border: Border.all(color: const Color(0x33FFFFFF)),
-                  boxShadow: [
-                    BoxShadow(
-                        color: const Color(0xFFE8622C).withValues(alpha: 0.35),
-                        blurRadius: 36,
-                        spreadRadius: 2),
-                  ],
-                ),
-                child: Transform.rotate(
-                  angle: -0.785398,
-                  child: Center(
-                    child: ShaderMask(
-                      blendMode: BlendMode.srcIn,
-                      shaderCallback: (r) => const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFFF2B544), Color(0xFFE8622C)],
-                      ).createShader(r),
-                      child: Text('A',
-                          style: AppFonts.heading(
-                              size: 40, color: Colors.white)),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+    return Container(
+      width: 132,
+      height: 132,
+      decoration: BoxDecoration(
+        color: const Color(0xFF14120F),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: const Color(0xFF3A362F), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 40,
+              offset: const Offset(0, 16)),
+          BoxShadow(
+              color: const Color(0xFFE8622C).withValues(alpha: 0.22),
+              blurRadius: 48,
+              spreadRadius: 2),
         ],
       ),
+      alignment: Alignment.center,
+      child: const AnimatedArcMark(size: 92),
     );
   }
 }

@@ -79,7 +79,7 @@ const _dark = _Palette(
   line: Color(0x1EF3EDE4), // rgba(243,237,228,0.12)
   red: Color(0xFFE8622C),
   teal: Color(0xFF6FA8A0),
-  text: Color(0xFFF3EDE4),
+  text: Color(0xFFFEE4BF),
   muted: Color(0xFFAFA492),
   muted2: Color(0xFF7D7362),
   byline: Color(0xFFA8496B),

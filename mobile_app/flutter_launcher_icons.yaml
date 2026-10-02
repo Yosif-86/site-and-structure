@@ -1,0 +1,10 @@
+# App icon: the official ARC Platform mark (brand sheet V5).
+# Regenerate after changing assets/icon/*: dart run flutter_launcher_icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#14120F"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  min_sdk_android: 21
