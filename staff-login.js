@@ -83,7 +83,7 @@
       const dest = destination(await staffProfile(data.user.id));
       if(!dest){
         await sb.auth.signOut();
-        show('هذه الصفحة للإدارة والمدرّسين فقط. سجّل الدخول من التطبيق.');
+        show('هذه الصفحة للإدارة فقط. استخدم التطبيق.');
         return;
       }
       await logLoginEvent(data.user.id, data.user.email);
