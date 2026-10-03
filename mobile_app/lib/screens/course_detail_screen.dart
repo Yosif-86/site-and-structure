@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:gal/gal.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -16,6 +18,7 @@ import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import '../widgets/arc_icons.dart';
+import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
 import 'auth_screen.dart';
 import 'video_player_screen.dart';
@@ -33,6 +36,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Course? _course;
   List<Lecture> _lectures = [];
   String? _enrollmentStatus; // 'active' | 'pending' | null
+  /// Why the student's last payment for this course was rejected (shown
+  /// until they submit again).
+  String? _rejectionReason;
   Set<String> _completedLectureIds = {};
   // lecture_id -> {position_seconds, duration_seconds}, in-progress (not
   // completed) lectures only -- drives each row's progress bar plus which
@@ -83,6 +89,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           .toList();
 
       String? status;
+      String? rejection;
       var completedIds = <String>{};
       var progressByLecture = <String, Map<String, int>>{};
       String? continueWatchingId;
@@ -95,6 +102,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             .eq('course_slug', course.slug)
             .maybeSingle();
         status = enr?['status'] as String?;
+        if (status == null) {
+          try {
+            final rej = await sb
+                .from('enrollment_rejections')
+                .select('reason')
+                .eq('user_id', user.id)
+                .eq('course_slug', course.slug)
+                .order('created_at', ascending: false)
+                .limit(1)
+                .maybeSingle();
+            rejection = rej?['reason'] as String?;
+          } catch (_) {}
+        }
 
         if (lectures.isNotEmpty) {
           final progressRows = await sb
@@ -135,6 +155,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _course = course;
         _lectures = lectures;
         _enrollmentStatus = status;
+        _rejectionReason = rejection;
         _completedLectureIds = completedIds;
         _progressByLecture = progressByLecture;
         _continueWatchingId = continueWatchingId;
@@ -308,6 +329,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           ]),
         ],
         const SizedBox(height: 16),
+        if (_enrollmentStatus == null && _rejectionReason != null) ...[
+          _RejectedBanner(reason: _rejectionReason!),
+          const SizedBox(height: 12),
+        ],
         FadeSlideIn(
           delayMs: 60,
           child: _EnrollPanel(
@@ -1136,6 +1161,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
           _payZaincashPhone = row['zaincash_phone'] as String?;
           _payQiAccountNumber = row['qi_account_number'] as String?;
           _payQiQrUrl = row['qi_qr_url'] as String?;
+          if (_hasZain != _hasQi) _method = _hasZain ? 'zain' : 'qi';
         });
       }
     } catch (_) {
@@ -1220,6 +1246,48 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
     if (picked != null) setState(() => _proof = picked);
   }
 
+  bool get _hasZain => _payZaincashPhone?.trim().isNotEmpty ?? false;
+  bool get _hasQi =>
+      (_payQiAccountNumber?.trim().isNotEmpty ?? false) ||
+      (_payQiQrUrl?.trim().isNotEmpty ?? false);
+
+  Future<void> _copy(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppStrings.instance.t('copied')),
+        duration: const Duration(seconds: 2)));
+  }
+
+  bool _savingQr = false;
+
+  Future<void> _saveQr() async {
+    final t = AppStrings.instance.t;
+    final url = _payQiQrUrl;
+    if (url == null || _savingQr) return;
+    setState(() => _savingQr = true);
+    try {
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode != 200) throw Exception('download failed');
+      await Gal.putImageBytes(res.bodyBytes,
+          name: 'arc-payment-qr-${DateTime.now().millisecondsSinceEpoch}');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(children: [
+        const ArcIconView(ArcIcon.check, size: 18, color: Colors.white),
+        const SizedBox(width: 8),
+        Expanded(child: Text(t('qr_saved'))),
+      ])));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(t('qr_save_failed'))));
+    } finally {
+      if (mounted) setState(() => _savingQr = false);
+    }
+  }
+
   Future<void> _submit() async {
     final t = AppStrings.instance.t;
     if (_method == null || _detailCtrl.text.trim().isEmpty) {
@@ -1298,135 +1366,120 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                       Text(widget.course.localizedTitle(ar),
-                          style: AppFonts.heading(size: 22)),
+                          style: AppFonts.body(size: 20, weight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text(
-                        '${_discountedPrice ?? widget.course.price ?? ''}${t('choose_payment_sub')}',
-                        style: AppFonts.body(size: 13, color: AppColors.muted),
-                      ),
-                      if (_payInfoLoading) ...[
-                        const SizedBox(height: 12),
-                        const SizedBox(
-                            height: 2,
-                            width: 60,
-                            child: LinearProgressIndicator()),
-                      ] else if ((_payZaincashPhone?.isNotEmpty ?? false) ||
-                          (_payQiAccountNumber?.isNotEmpty ?? false) ||
-                          (_payQiQrUrl?.isNotEmpty ?? false)) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: AppColors.teal.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: AppColors.teal.withOpacity(0.3)),
-                          ),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(t('send_payment_to'),
-                                    style: AppFonts.body(
-                                        size: 11.5, color: AppColors.muted)),
-                                const SizedBox(height: 4),
-                                if (_payZaincashPhone?.isNotEmpty ?? false)
-                                  Text('${t('zain_cash')} — $_payZaincashPhone',
-                                      style: AppFonts.body(
-                                          size: 14, weight: FontWeight.w700)),
-                                if (_payQiAccountNumber?.isNotEmpty ?? false)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Text(
-                                        '${t('qi_card')} — $_payQiAccountNumber',
-                                        style: AppFonts.body(
-                                            size: 14, weight: FontWeight.w700)),
-                                  ),
-                                if (_payQiQrUrl?.isNotEmpty ?? false)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.network(_payQiQrUrl!,
-                                          width: 140,
-                                          height: 140,
-                                          fit: BoxFit.cover),
-                                    ),
-                                  ),
-                              ]),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
                       Row(children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _discountCtrl,
-                            enabled: !_discountApplied,
-                            decoration:
-                                InputDecoration(labelText: t('discount_code')),
-                            textCapitalization: TextCapitalization.characters,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton(
-                            onPressed: _discountApplied ? null : _applyDiscount,
-                            child: Text(t('apply'))),
+                        Text(t('amount_to_pay'),
+                            style: AppFonts.body(size: 13, color: AppColors.muted)),
+                        const SizedBox(width: 6),
+                        Text('${_discountedPrice ?? widget.course.price ?? ''}',
+                            style: AppFonts.code(size: 15, color: AppColors.red)),
                       ]),
-                      if (_discountError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(_discountError!,
-                              style: AppFonts.body(
-                                  size: 12, color: AppColors.red)),
-                        ),
-                      if (_discountOk != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(_discountOk!,
-                              style: AppFonts.body(
-                                  size: 12, color: AppColors.teal)),
-                        ),
-                      const SizedBox(height: 16),
-                      Row(children: [
-                        Expanded(
-                            child: _PayOption(
-                                label: t('zain_cash'),
-                                sub: t('zain_sub'),
-                                selected: _method == 'zain',
-                                onTap: () => setState(() => _method = 'zain'))),
-                        const SizedBox(width: 10),
-                        Expanded(
-                            child: _PayOption(
-                                label: t('qi_card'),
-                                sub: t('qi_sub'),
-                                selected: _method == 'qi',
-                                onTap: () => setState(() => _method = 'qi'))),
-                      ]),
-                      const SizedBox(height: 14),
-                      TextField(
-                          controller: _detailCtrl,
-                          decoration:
-                              InputDecoration(labelText: t('pay_label'))),
-                      const SizedBox(height: 14),
-                      OutlinedButton.icon(
-                        onPressed: _pickProof,
-                        icon: const Icon(Icons.image_outlined),
-                        label: Text(
-                            _proof == null
-                                ? t('payment_screenshot')
-                                : _proof!.name,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 10),
-                        Text(_error!,
-                            style: AppFonts.body(
-                                size: 12.5, color: AppColors.red)),
-                      ],
                       const SizedBox(height: 18),
+                      if (_payInfoLoading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (!_hasZain && !_hasQi)
+                        _NoPayInfo(text: t('no_payment_info'))
+                      else ...[
+                        _StepLabel(n: 1, text: t('step_choose_method')),
+                        Row(children: [
+                          if (_hasZain)
+                            Expanded(
+                                child: _PayOption(
+                                    label: t('zain_cash'),
+                                    sub: t('zain_sub'),
+                                    selected: _method == 'zain',
+                                    onTap: () => setState(() => _method = 'zain'))),
+                          if (_hasZain && _hasQi) const SizedBox(width: 10),
+                          if (_hasQi)
+                            Expanded(
+                                child: _PayOption(
+                                    label: t('qi_card'),
+                                    sub: t('qi_sub'),
+                                    selected: _method == 'qi',
+                                    onTap: () => setState(() => _method = 'qi'))),
+                        ]),
+                        if (_method != null) ...[
+                          const SizedBox(height: 18),
+                          _StepLabel(n: 2, text: t('step_send_to')),
+                          _SendToCard(
+                            label: _method == 'zain'
+                                ? t('label_zaincash_phone')
+                                : t('label_qi_account'),
+                            number: _method == 'zain'
+                                ? _payZaincashPhone
+                                : _payQiAccountNumber,
+                            qrUrl: _method == 'qi' ? _payQiQrUrl : null,
+                            savingQr: _savingQr,
+                            onCopy: _copy,
+                            onSaveQr: _saveQr,
+                          ),
+                        ],
+                        const SizedBox(height: 18),
+                        _StepLabel(n: _method == null ? 2 : 3, text: t('step_confirm')),
+                        Row(children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _discountCtrl,
+                              enabled: !_discountApplied,
+                              decoration:
+                                  InputDecoration(labelText: t('discount_code')),
+                              textCapitalization: TextCapitalization.characters,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          OutlinedButton(
+                              onPressed: _discountApplied ? null : _applyDiscount,
+                              child: Text(t('apply'))),
+                        ]),
+                        if (_discountError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(_discountError!,
+                                style: AppFonts.body(
+                                    size: 12, color: AppColors.error)),
+                          ),
+                        if (_discountOk != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(_discountOk!,
+                                style: AppFonts.body(
+                                    size: 12, color: AppColors.teal)),
+                          ),
+                        const SizedBox(height: 12),
+                        TextField(
+                            controller: _detailCtrl,
+                            textDirection: TextDirection.ltr,
+                            decoration:
+                                InputDecoration(labelText: t('pay_label'))),
+                        const SizedBox(height: 12),
+                        FilePickBox(
+                          file: _proof,
+                          emptyLabel: t('payment_screenshot'),
+                          height: 220,
+                          onPick: _pickProof,
+                          onRemove: () => setState(() => _proof = null),
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 10),
+                          Text(_error!,
+                              style: AppFonts.body(
+                                  size: 12.5, color: AppColors.error)),
+                        ],
+                        const SizedBox(height: 18),
                       ElevatedButton(
                           onPressed: _loading ? null : _submit,
-                          child: Text(t('confirm_payment'))),
+                          child: _loading
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: Colors.white))
+                              : Text(t('confirm_payment'))),
+                      ],
                       const SizedBox(height: 16),
                     ]),
         ),
@@ -1463,6 +1516,235 @@ class _PayOption extends StatelessWidget {
           const SizedBox(height: 4),
           Text(sub, style: AppFonts.mono(size: 10, letterSpacing: 0.3)),
         ]),
+      ),
+    );
+  }
+}
+
+/// "01  Choose a payment method" -- numbered step label in the checkout.
+class _StepLabel extends StatelessWidget {
+  final int n;
+  final String text;
+  const _StepLabel({required this.n, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(children: [
+        Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(9),
+            color: AppColors.red.withValues(alpha: 0.14),
+            border: Border.all(color: AppColors.red.withValues(alpha: 0.4)),
+          ),
+          child: Text(n.toString().padLeft(2, '0'),
+              style: AppFonts.code(size: 11.5, color: AppColors.red)),
+        ),
+        const SizedBox(width: 10),
+        Text(text, style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+      ]),
+    );
+  }
+}
+
+/// Where to send the money: the number with a copy button, and the Qi Card
+/// QR with a save-to-gallery button when there is one.
+class _SendToCard extends StatelessWidget {
+  final String label;
+  final String? number;
+  final String? qrUrl;
+  final bool savingQr;
+  final void Function(String) onCopy;
+  final VoidCallback onSaveQr;
+  const _SendToCard({
+    required this.label,
+    required this.number,
+    required this.qrUrl,
+    required this.savingQr,
+    required this.onCopy,
+    required this.onSaveQr,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final hasNumber = number?.trim().isNotEmpty ?? false;
+    final hasQr = qrUrl?.trim().isNotEmpty ?? false;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: AppColors.teal.withValues(alpha: 0.08),
+        border: Border.all(color: AppColors.teal.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (hasNumber) ...[
+            Text(label, style: AppFonts.body(size: 12, color: AppColors.muted)),
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(
+                child: Text(number!.trim(),
+                    textDirection: TextDirection.ltr,
+                    textAlign: TextAlign.start,
+                    style: AppFonts.code(size: 19, color: AppColors.text)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                onPressed: () => onCopy(number!.trim()),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 40),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  backgroundColor: AppColors.teal,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const ArcIconView(ArcIcon.copy, size: 17, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(t('btn_copy')),
+                ]),
+              ),
+            ]),
+          ],
+          if (hasQr) ...[
+            if (hasNumber) const SizedBox(height: 14),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6)),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(qrUrl!,
+                      width: 190, height: 190, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Gradient pill: the one "fun" control in the sheet.
+            Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFFE8622C), Color(0xFFF2B544)]),
+                  boxShadow: [
+                    BoxShadow(
+                        color: const Color(0xFFE8622C).withValues(alpha: 0.35),
+                        blurRadius: 14,
+                        offset: const Offset(0, 5)),
+                  ],
+                ),
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: savingQr ? null : onSaveQr,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 11),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (savingQr)
+                          const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Color(0xFF2A1406)))
+                        else
+                          const ArcIconView(ArcIcon.download,
+                              size: 19, color: Color(0xFF2A1406), stroke: 2.2),
+                        const SizedBox(width: 8),
+                        Text(t('btn_save_qr'),
+                            style: AppFonts.body(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: const Color(0xFF2A1406))),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NoPayInfo extends StatelessWidget {
+  final String text;
+  const _NoPayInfo({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: const Color(0xFFE0A030).withValues(alpha: 0.12),
+        border: Border.all(color: const Color(0xFFE0A030).withValues(alpha: 0.45)),
+      ),
+      child: Row(children: [
+        const ArcIconView(ArcIcon.warning,
+            size: 22, color: Color(0xFFE0A030), active: true),
+        const SizedBox(width: 10),
+        Expanded(child: Text(text, style: AppFonts.body(size: 13))),
+      ]),
+    );
+  }
+}
+
+/// Shown on the course page after a payment was rejected, with the reason.
+class _RejectedBanner extends StatelessWidget {
+  final String reason;
+  const _RejectedBanner({required this.reason});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        color: AppColors.error.withValues(alpha: 0.10),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ArcIconView(ArcIcon.alert, size: 22, color: AppColors.error, active: true),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(t('payment_rejected_title'),
+                    style: AppFonts.body(
+                        size: 14, weight: FontWeight.w700, color: AppColors.error)),
+                const SizedBox(height: 4),
+                Text(reason, style: AppFonts.body(size: 13)),
+                const SizedBox(height: 6),
+                Text(t('payment_rejected_retry'),
+                    style: AppFonts.body(size: 12, color: AppColors.muted)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

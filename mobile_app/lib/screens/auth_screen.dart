@@ -236,7 +236,8 @@ class _AuthScreenState extends State<AuthScreen>
         // account is no good to anyone (including its own owner) until
         // there's somewhere to send their earnings.
         Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (_) => const TeacherScreen(openPaymentInfo: true)));
+            builder: (_) => const TeacherScreen(
+                openPaymentInfo: true, mandatoryPayment: true)));
       } else {
         Navigator.of(context).pop();
       }

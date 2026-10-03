@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
@@ -9,6 +11,9 @@ import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/dashboard_kit.dart';
+import '../widgets/file_preview.dart';
+import '../widgets/payment_requests.dart';
+import '../widgets/proof_viewer.dart';
 import '../widgets/glass_scaffold.dart';
 
 /// Port of admin.html's dashboard: a landing view of clickable stat cards,
@@ -42,6 +47,7 @@ enum _View {
   discountCodes,
   errorLog,
   myPayment,
+  payments,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -72,8 +78,10 @@ class _AdminScreenState extends State<AdminScreen> {
   Map<String, Map<String, dynamic>> _profileByUser = {};
   Map<String, Map<String, dynamic>> _courseBySlug = {};
 
-  final _payMethodCtrl = ValueNotifier<String>('zain');
-  final _payDetailCtrl = TextEditingController();
+  final _payZainCtrl = TextEditingController();
+  final _payQiCtrl = TextEditingController();
+  XFile? _payQrFile;
+  String? _payQrUrl;
   bool _payLoaded = false;
   String? _payError;
   String? _payOk;
@@ -86,7 +94,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   @override
   void dispose() {
-    _payDetailCtrl.dispose();
+    _payZainCtrl.dispose();
+    _payQiCtrl.dispose();
     super.dispose();
   }
 
@@ -132,7 +141,7 @@ class _AdminScreenState extends State<AdminScreen> {
         sb.from('courses').select(
             'id, slug, title, price, is_free, teacher_id, pay_to_teacher, status'),
         sb.from('profiles').select(
-            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail'),
+            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url'),
         sb
             .from('login_events')
             .select('user_id, email, created_at')
@@ -230,10 +239,15 @@ class _AdminScreenState extends State<AdminScreen> {
         _pendingUploads = uploads;
         _discountCodes = codes;
         _errorLogs = errors;
-        _payMethodCtrl.value =
-            (myProfile?['teacher_payment_method'] as String?) ?? 'zain';
-        _payDetailCtrl.text =
-            (myProfile?['teacher_payment_detail'] as String?) ?? '';
+        // New three-field details, seeded from the old single method/number
+        // pair the first time so nothing already set is lost.
+        final oldMethod = myProfile?['teacher_payment_method'] as String?;
+        final oldDetail = myProfile?['teacher_payment_detail'] as String?;
+        _payZainCtrl.text = (myProfile?['teacher_zaincash_phone'] as String?) ??
+            (oldMethod == 'zain' ? oldDetail ?? '' : '');
+        _payQiCtrl.text = (myProfile?['teacher_qi_account_number'] as String?) ??
+            (oldMethod == 'qi' ? oldDetail ?? '' : '');
+        _payQrUrl = myProfile?['teacher_qi_qr_url'] as String?;
         _payLoaded = true;
         _loading = false;
       });
@@ -298,19 +312,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _viewProof(String path) async {
-    final t = AppStrings.instance.t;
-    try {
-      final signedUrl = await SupabaseService.instance.client.storage
-          .from('payment-proofs')
-          .createSignedUrl(path, 60);
-      if (!mounted) return;
-      await Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => _ProofViewerScreen(url: signedUrl)));
-    } catch (e) {
-      _showError('${t('alert_proof_failed')}$e');
-    }
-  }
+  Future<void> _viewProof(String path) => openPaymentProof(context, path);
 
   Future<void> _removeDevice(String deviceRowId, String email) async {
     final t = AppStrings.instance.t;
@@ -364,15 +366,37 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _togglePayToTeacher(String id, bool value) async {
+  /// The database only lets a course pay its teacher once that teacher is
+  /// unlocked for direct payments (and refuses to unlock a teacher with no
+  /// payment details) -- otherwise the update is silently reverted, which is
+  /// why the box used to spring back. Unlock first, then set, then confirm.
+  Future<void> _togglePayToTeacher(Map<String, dynamic> course, bool value) async {
     final t = AppStrings.instance.t;
+    final sb = SupabaseService.instance.client;
     try {
-      await SupabaseService.instance.client
+      if (value && course['teacher_id'] != null) {
+        try {
+          await sb.rpc('set_teacher_payment_enabled', params: {
+            'p_teacher_id': course['teacher_id'],
+            'p_enabled': true,
+          });
+        } catch (_) {
+          _showError(t('err_teacher_no_payment_info'));
+          return;
+        }
+      }
+      final row = await sb
           .from('courses')
-          .update({'pay_to_teacher': value}).eq('id', id);
+          .update({'pay_to_teacher': value})
+          .eq('id', course['id'])
+          .select('pay_to_teacher')
+          .single();
+      if (row['pay_to_teacher'] != value) {
+        _showError(t('err_teacher_no_payment_info'));
+      }
       await _loadAll();
     } catch (e) {
-      _showError('${t('alert_review_failed')}$e');
+      _showError(t('err_generic_failed'));
     }
   }
 
@@ -438,19 +462,52 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _saveMyPayment() async {
+    final t = AppStrings.instance.t;
     setState(() {
       _payError = null;
       _payOk = null;
     });
+    final zain = _payZainCtrl.text.trim();
+    final qi = _payQiCtrl.text.trim();
+    if (zain.isEmpty && qi.isEmpty) {
+      setState(() => _payError = t('err_payment_method_required'));
+      return;
+    }
     try {
+      final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      await SupabaseService.instance.client.from('profiles').update({
-        'teacher_payment_method': _payMethodCtrl.value,
-        'teacher_payment_detail': _payDetailCtrl.text.trim(),
+      String? qrUrl;
+      if (_payQrFile != null) {
+        final ext = _payQrFile!.name.split('.').last.toLowerCase();
+        final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
+        await sb.storage.from('payment-qr').upload(path, File(_payQrFile!.path));
+        qrUrl = sb.storage.from('payment-qr').getPublicUrl(path);
+      }
+      await sb.from('profiles').update({
+        'teacher_zaincash_phone': zain.isEmpty ? null : zain,
+        'teacher_qi_account_number': qi.isEmpty ? null : qi,
+        if (qrUrl != null) 'teacher_qi_qr_url': qrUrl,
       }).eq('id', user.id);
-      setState(() => _payOk = 'Saved.');
+      setState(() {
+        if (qrUrl != null) _payQrUrl = qrUrl;
+        _payQrFile = null;
+        _payOk = t('saved');
+      });
     } catch (e) {
-      setState(() => _payError = 'Failed to save: $e');
+      setState(() => _payError = t('err_save_failed'));
+    }
+  }
+
+  Future<void> _rejectEnrollment(String id) async {
+    final t = AppStrings.instance.t;
+    final reason = await askRejectReason(context);
+    if (reason == null) return;
+    try {
+      await SupabaseService.instance.client.rpc('reject_enrollment',
+          params: {'p_enrollment_id': id, 'p_reason': reason});
+      await _loadAll();
+    } catch (e) {
+      _showError(t('err_generic_failed'));
     }
   }
 
@@ -529,6 +586,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('error_log');
       case _View.myPayment:
         return t('my_payment_number');
+      case _View.payments:
+        return t('payment_requests');
       case _View.dashboard:
         return t('nav_admin');
     }
@@ -580,6 +639,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.discountCodes => _buildDiscountCodes(t),
         _View.errorLog => _buildErrorLog(t),
         _View.myPayment => _buildMyPayment(t),
+        _View.payments => _buildPayments(t),
       },
     );
   }
@@ -622,13 +682,14 @@ class _AdminScreenState extends State<AdminScreen> {
                     ?.isAfter(now) ??
                 false))
         .length;
-    final myPaySet = (_profileByUser[SupabaseService.instance.currentUser?.id]
-                ?['teacher_payment_detail'] as String?)
-            ?.isNotEmpty ==
-        true;
+    final me = _profileByUser[SupabaseService.instance.currentUser?.id];
+    bool filled(String k) => ((me?[k] as String?)?.trim().isNotEmpty ?? false);
+    final myPaySet = filled('teacher_zaincash_phone') ||
+        filled('teacher_qi_account_number') ||
+        filled('teacher_payment_detail');
+    final myPendingPayments = _pendingPayments.where((e) => !_teacherPaid(e)).length;
     final activeStudents = {for (final e in _activeEnrollments) e['user_id']}.length;
-    final pendingEnrollments =
-        _enrollments.where((e) => e['status'] != 'active').length;
+    final pendingEnrollments = _pendingPayments.length;
 
     var delay = 0;
     Widget tile(ArcIcon icon, String value, String label, Color accent,
@@ -655,11 +716,21 @@ class _AdminScreenState extends State<AdminScreen> {
             stats: [
               ('$revenue', t('est_revenue')),
               ('$activeStudents', t('active_students')),
-              ('${_pendingReview.length + pendingEnrollments}',
+              ('${_pendingReview.length + myPendingPayments}',
                   t('dash_needs_attention')),
             ],
           ),
         ),
+        if (myPendingPayments > 0) ...[
+          const SizedBox(height: 12),
+          FadeSlideIn(
+            delayMs: 30,
+            child: _PendingBanner(
+              count: myPendingPayments,
+              onTap: () => _goto(_View.payments),
+            ),
+          ),
+        ],
         DashSection(t('dash_sec_content')),
         DashGrid(children: [
           tile(ArcIcon.courses, '${_publishedCourses.length}',
@@ -685,6 +756,9 @@ class _AdminScreenState extends State<AdminScreen> {
         ]),
         DashSection(t('dash_sec_money')),
         DashGrid(children: [
+          tile(ArcIcon.review, '${_pendingPayments.length}', t('payment_requests'),
+              const Color(0xFFE0A030), _View.payments,
+              alert: myPendingPayments > 0),
           tile(ArcIcon.money, '$revenue', t('est_revenue'), AppColors.red,
               _View.revenue),
           tile(ArcIcon.tag, '$activeDiscountCodes', t('discount_codes'),
@@ -840,8 +914,56 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  List<Map<String, dynamic>> get _pendingPayments {
+    final list = _enrollments.where((e) => e['status'] != 'active').toList();
+    list.sort((a, b) => ((b['created_at'] as String?) ?? '')
+        .compareTo((a['created_at'] as String?) ?? ''));
+    return list;
+  }
+
+  bool _teacherPaid(Map<String, dynamic> e) {
+    final c = _courseBySlug[e['course_slug']];
+    return c?['pay_to_teacher'] == true && c?['teacher_id'] != null;
+  }
+
+  Widget _buildPayments(String Function(String) t) {
+    final list = _pendingPayments;
+    if (list.isEmpty) return _empty(t('no_payment_requests'), ArcIcon.check);
+    return _list(list.length, (i) {
+      final e = list[i];
+      final uid = e['user_id'] as String;
+      final prof = _profileByUser[uid];
+      final course = _courseBySlug[e['course_slug']];
+      final teacherPaid = _teacherPaid(e);
+      final teacherName =
+          _profileByUser[course?['teacher_id']]?['full_name'] as String? ?? '—';
+      final proof = e['payment_proof_path'] as String?;
+      return PaymentRequestCard(
+        studentName: prof?['full_name'] as String? ?? _emailByUser[uid] ?? '—',
+        contact: [_emailByUser[uid], prof?['phone']]
+            .whereType<String>()
+            .where((s) => s.isNotEmpty)
+            .join(' · '),
+        courseTitle: _courseTitle(e['course_slug'] as String),
+        price: course?['price'] as String?,
+        method: e['payment_method'] as String?,
+        detail: e['payment_detail'] as String?,
+        createdAt: _date(e['created_at'] as String?, time: true),
+        canDecide: !teacherPaid,
+        decidedByNote: teacherPaid
+            ? t('decided_by_teacher').replaceAll('{name}', teacherName)
+            : null,
+        onViewProof: proof == null ? null : () => _viewProof(proof),
+        onApprove: () => _approve(e['id'] as String),
+        onReject: () => _rejectEnrollment(e['id'] as String),
+      );
+    });
+  }
+
   Widget _buildEnrollments(String Function(String) t) {
     if (_enrollments.isEmpty) return _empty(t('no_enrollments'), ArcIcon.lessons);
+    _enrollments.sort((a, b) => ((b['created_at'] as String?) ?? '')
+        .compareTo((a['created_at'] as String?) ?? ''));
     return _list(_enrollments.length, (i) {
       final e = _enrollments[i];
       final userId = e['user_id'] as String;
@@ -904,11 +1026,11 @@ class _AdminScreenState extends State<AdminScreen> {
           const SizedBox(height: 8),
           InkWell(
             borderRadius: BorderRadius.circular(10),
-            onTap: () => _togglePayToTeacher(id, c['pay_to_teacher'] != true),
+            onTap: () => _togglePayToTeacher(c, c['pay_to_teacher'] != true),
             child: Row(children: [
               Checkbox(
                   value: c['pay_to_teacher'] == true,
-                  onChanged: (v) => _togglePayToTeacher(id, v ?? false)),
+                  onChanged: (v) => _togglePayToTeacher(c, v ?? false)),
               Text(t('pay_to_teacher'),
                   style: AppFonts.body(size: 13, color: AppColors.muted)),
             ]),
@@ -1125,34 +1247,37 @@ class _AdminScreenState extends State<AdminScreen> {
           children: [
             Text(t('my_payment_hint'),
                 style: AppFonts.body(size: 12.5, color: AppColors.muted)),
-            const SizedBox(height: 12),
-            ValueListenableBuilder<String>(
-              valueListenable: _payMethodCtrl,
-              builder: (context, value, _) => Row(children: [
-                Expanded(
-                  child: RadioListTile<String>(
-                    value: 'zain',
-                    groupValue: value,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(t('zain_cash')),
-                    onChanged: (v) => _payMethodCtrl.value = v!,
-                  ),
-                ),
-                Expanded(
-                  child: RadioListTile<String>(
-                    value: 'qi',
-                    groupValue: value,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(t('qi_card')),
-                    onChanged: (v) => _payMethodCtrl.value = v!,
-                  ),
-                ),
-              ]),
-            ),
+            const SizedBox(height: 14),
             TextField(
-                controller: _payDetailCtrl,
+                controller: _payZainCtrl,
                 textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                    labelText: t('label_zaincash_phone'),
+                    hintText: '07XX XXX XXXX')),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _payQiCtrl,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                    labelText: t('label_qi_account'),
+                    hintText: 'XXXX XXXX XXXX XXXX')),
+            const SizedBox(height: 14),
+            Text(t('label_qi_qr'),
+                style: AppFonts.body(size: 13, weight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            FilePickBox(
+              file: _payQrFile,
+              existingUrl: _payQrUrl,
+              emptyLabel: t('pick_qr'),
+              height: 200,
+              onPick: () async {
+                final picked = await ImagePicker()
+                    .pickImage(source: ImageSource.gallery, imageQuality: 90);
+                if (picked != null) setState(() => _payQrFile = picked);
+              },
+              onRemove: () => setState(() => _payQrFile = null),
+            ),
             if (_payError != null)
               Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -1175,77 +1300,6 @@ class _AdminScreenState extends State<AdminScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 24),
         children: [DashEmpty(icon: icon, message: message)],
       );
-}
-
-/// Shows a payment-proof screenshot in-app via WebView instead of handing
-/// the signed URL to an external browser — the URL never sits in a browser
-/// address bar, history, or share sheet, and it expires in 60s regardless.
-/// Renders images directly (the common case); a PDF proof falls back to
-/// whatever the system WebView does with a bare PDF URL, which varies by
-/// device — acceptable since screenshots are the overwhelming majority.
-class _ProofViewerScreen extends StatefulWidget {
-  final String url;
-  const _ProofViewerScreen({required this.url});
-
-  @override
-  State<_ProofViewerScreen> createState() => _ProofViewerScreenState();
-}
-
-class _ProofViewerScreenState extends State<_ProofViewerScreen> {
-  late final WebViewController _controller;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    // The signed URL's path contains the file name the *student* chose when
-    // uploading, so it's attacker-controlled text going into HTML: escaped
-    // before interpolation, and JavaScript is off entirely (showing an image
-    // needs none) so even a missed edge case can't run script in an admin's
-    // session.
-    final safeUrl = widget.url
-        .replaceAll('&', '&amp;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.disabled)
-      ..setBackgroundColor(Colors.black)
-      ..setNavigationDelegate(NavigationDelegate(
-        onPageFinished: (_) {
-          if (mounted) setState(() => _loading = false);
-        },
-      ))
-      ..loadHtmlString('''
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
-<style>
-  html, body { margin:0; padding:0; background:#000; height:100%; display:flex; align-items:center; justify-content:center; }
-  img { max-width:100%; max-height:100vh; width:auto; height:auto; object-fit:contain; }
-</style>
-</head>
-<body><img src="$safeUrl"></body>
-</html>
-''');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar:
-          AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_loading) const Center(child: CircularProgressIndicator()),
-        ],
-      ),
-    );
-  }
 }
 
 /// An invite code in a monospace box with a copy button beside it.
@@ -1291,12 +1345,60 @@ class _InviteCode extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const ArcIconView(ArcIcon.review, size: 16, color: Colors.white),
+              const ArcIconView(ArcIcon.copy, size: 16, color: Colors.white),
               const SizedBox(width: 6),
               Text(AppStrings.instance.t('btn_copy')),
             ]),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Amber call-to-action at the top of the dashboard while payment requests
+/// are waiting on this admin.
+class _PendingBanner extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+  const _PendingBanner({required this.count, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = Color(0xFFE0A030);
+    final t = AppStrings.instance.t;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: amber.withValues(alpha: 0.12),
+            border: Border.all(color: amber.withValues(alpha: 0.5)),
+          ),
+          child: Row(children: [
+            const DashIconBadge(icon: ArcIcon.review, accent: amber, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      t('pending_payments_banner')
+                          .replaceAll('{n}', '$count'),
+                      style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(t('pending_payments_banner_sub'),
+                      style: AppFonts.body(size: 12, color: AppColors.muted)),
+                ],
+              ),
+            ),
+            ArcIconView(ArcIcon.chevron, size: 18, color: amber),
+          ]),
+        ),
       ),
     );
   }

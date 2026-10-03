@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
+import '../main.dart' show routeObserver;
 import '../models/course.dart';
 import '../services/error_reporter.dart';
 import '../services/learning_service.dart';
@@ -22,6 +23,7 @@ import 'explore_screen.dart';
 import 'my_courses_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'teacher_screen.dart';
 import 'verify_phone_screen.dart';
 
 /// App shell: a fixed glass top bar (logo + avatar), the swipeable tabs
@@ -34,7 +36,7 @@ class CatalogueScreen extends StatefulWidget {
   State<CatalogueScreen> createState() => _CatalogueScreenState();
 }
 
-class _CatalogueScreenState extends State<CatalogueScreen> {
+class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   List<Course>? _courses;
   Map<String, CourseStats> _stats = {};
   String? _error;
@@ -42,6 +44,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   // Payment info entry. is_admin is read by ProfileScreen itself, which is
   // the only place a dashboard is reachable from.
   bool _isTeacher = false;
+  bool _paymentGateShown = false;
   // null = not checked yet (or logged out) -- only an explicit false blocks
   // the app, so this never flashes the block screen while still loading.
   bool? _phoneVerified;
@@ -68,7 +71,19 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) routeObserver.subscribe(this, route);
+  }
+
+  /// Back on top (sign-in or another screen closed): re-check the profile.
+  @override
+  void didPopNext() => _loadProfile();
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     AppStrings.instance.removeListener(_onLangChange);
     SupabaseService.instance.removeListener(_onAuthChange);
     AppTheme.instance.removeListener(_onThemeChange);
@@ -110,7 +125,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
       final prof = await SupabaseService.instance.client
           .from('profiles')
           .select(
-              'is_teacher, phone_verified, full_name, avatar_url, teacher_photo_url')
+              'is_teacher, phone_verified, full_name, avatar_url, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number')
           .eq('id', user.id)
           .maybeSingle();
       if (!mounted) return;
@@ -124,6 +139,25 @@ class _CatalogueScreenState extends State<CatalogueScreen> {
         final photoKey = isTeacher ? 'teacher_photo_url' : 'avatar_url';
         _avatarUrl = prof?[photoKey] as String?;
       });
+      // A teacher must have somewhere to be paid before using the app; this
+      // catches anyone who closed the app during the sign-up payment step.
+      final hasPayment =
+          ((prof?['teacher_zaincash_phone'] as String?)?.trim().isNotEmpty ?? false) ||
+              ((prof?['teacher_qi_account_number'] as String?)?.trim().isNotEmpty ?? false);
+      // Only from the top of the stack: a sign-in screen that is about to
+      // pop itself must not take this route with it. didPopNext re-checks.
+      if (isTeacher &&
+          !hasPayment &&
+          !_paymentGateShown &&
+          mounted &&
+          (ModalRoute.of(context)?.isCurrent ?? false)) {
+        _paymentGateShown = true;
+        Navigator.of(context)
+            .push(MaterialPageRoute(
+                builder: (_) => const TeacherScreen(
+                    openPaymentInfo: true, mandatoryPayment: true)))
+            .whenComplete(() => _paymentGateShown = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _isTeacher = false);
     }

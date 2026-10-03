@@ -2,18 +2,21 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
+import '../services/resumable_upload.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
 import '../widgets/dashboard_kit.dart';
+import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
+import '../widgets/payment_requests.dart';
+import '../widgets/proof_viewer.dart';
 
 /// Net-new teacher dashboard, ported from teacher.html: a dashboard-card
 /// landing (Overview) plus My courses / course edit / curriculum / discount
@@ -29,13 +32,18 @@ class TeacherScreen extends StatefulWidget {
   /// Settings > Payment info entry so that flow isn't duplicated there.
   final bool openPaymentInfo;
 
-  const TeacherScreen({super.key, this.openPaymentInfo = false});
+  /// Payment setup a new teacher can't skip: no back, no discard, and saving
+  /// (with at least one method) lands on Home.
+  final bool mandatoryPayment;
+
+  const TeacherScreen(
+      {super.key, this.openPaymentInfo = false, this.mandatoryPayment = false});
 
   @override
   State<TeacherScreen> createState() => _TeacherScreenState();
 }
 
-enum _TView { overview, courses, courseEdit, curriculum, codes, profile }
+enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments }
 
 class _TeacherScreenState extends State<TeacherScreen> {
   bool _checking = true;
@@ -50,6 +58,96 @@ class _TeacherScreenState extends State<TeacherScreen> {
   List<Map<String, dynamic>> _activeCodes = [];
 
   int _statStudents = 0;
+
+  /// Pending payment requests on this teacher's pay-to-teacher courses
+  /// (get_teacher_students). Only these are the teacher's to decide.
+  List<Map<String, dynamic>> _paymentRequests = [];
+
+  Future<void> _loadPaymentRequests() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .rpc('get_teacher_students') as List;
+      if (!mounted) return;
+      setState(() => _paymentRequests = rows
+          .cast<Map<String, dynamic>>()
+          .where((r) => r['status'] != 'active' && r['pay_to_teacher'] == true)
+          .toList());
+    } catch (_) {
+      // Leaves the list as it was; the overview tile just shows 0.
+    }
+  }
+
+  Future<void> _approvePayment(String id) async {
+    final t = AppStrings.instance.t;
+    try {
+      await SupabaseService.instance.client
+          .rpc('teacher_approve_enrollment', params: {'p_enrollment_id': id});
+      _showError(t('payment_approved'));
+      await _loadPaymentRequests();
+      await _loadCourses();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
+  Future<void> _rejectPayment(String id) async {
+    final t = AppStrings.instance.t;
+    final reason = await askRejectReason(context);
+    if (reason == null) return;
+    try {
+      await SupabaseService.instance.client.rpc('reject_enrollment',
+          params: {'p_enrollment_id': id, 'p_reason': reason});
+      await _loadPaymentRequests();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
+  Widget _buildPayments(String Function(String) t) {
+    return RefreshIndicator(
+      onRefresh: _loadPaymentRequests,
+      child: _paymentRequests.isEmpty
+          ? ListView(children: [
+              DashEmpty(icon: ArcIcon.check, message: t('no_payment_requests'))
+            ])
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              itemCount: _paymentRequests.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final r = _paymentRequests[i];
+                final proof = r['payment_proof_path'] as String?;
+                final created =
+                    DateTime.tryParse(r['created_at'] as String? ?? '')?.toLocal();
+                return FadeSlideIn(
+                  delayMs: (i % 10) * 30,
+                  child: PaymentRequestCard(
+                    studentName: r['full_name'] as String? ??
+                        r['email'] as String? ??
+                        '—',
+                    contact: [r['email'], r['phone']]
+                        .whereType<String>()
+                        .where((s) => s.isNotEmpty)
+                        .join(' · '),
+                    courseTitle: r['course_title'] as String? ?? '—',
+                    price: r['course_price'] as String?,
+                    method: r['payment_method'] as String?,
+                    detail: r['payment_detail'] as String?,
+                    createdAt: created?.toString().substring(0, 16),
+                    canDecide: true,
+                    onViewProof: proof == null
+                        ? null
+                        : () => openPaymentProof(context, proof),
+                    onApprove: () =>
+                        _approvePayment(r['enrollment_id'] as String),
+                    onReject: () =>
+                        _rejectPayment(r['enrollment_id'] as String),
+                  ),
+                );
+              },
+            ),
+    );
+  }
   int _statEarnings = 0;
 
   // Course edit form state.
@@ -69,6 +167,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   // 0.0-1.0 while a video is uploading, null the rest of the time — drives
   // the circular progress pill in place of the Add button.
   double? _lUploadProgress;
+  ResumableUpload? _upload;
 
   // Discount code form state.
   final _dCode = TextEditingController();
@@ -132,6 +231,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       if (isTeacher) {
         await _loadCourses();
         await _loadProfile();
+        await _loadPaymentRequests();
       }
     } catch (e) {
       setState(() {
@@ -297,8 +397,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _submitForReview(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
-    final confirmed = await _confirm(t('confirm_submit_review')
-        .replaceAll('{title}', c['title'] as String? ?? ''));
+    final confirmed = await _confirm(
+        t('confirm_submit_review')
+            .replaceAll('{title}', c['title'] as String? ?? ''),
+        confirmLabel: t('btn_confirm'),
+        danger: false);
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -375,14 +478,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
       // page can show real lecture/course durations from the first moment
       // the lecture exists (not only after someone has watched it).
       final durationSeconds = await _readVideoDuration(File(_lVideoFile!.path));
-      await _uploadWithProgress(
+      final upload = _upload = ResumableUpload(
         bucket: 'lecture-uploads',
-        path: path,
+        objectPath: path,
         file: File(_lVideoFile!.path),
-        onProgress: (p) {
-          if (mounted) setState(() => _lUploadProgress = p);
-        },
       );
+      await upload.start((p) {
+        if (mounted) setState(() => _lUploadProgress = p);
+      });
       final orderIndex = _activeLectures.isEmpty
           ? 0
           : (_activeLectures
@@ -401,9 +504,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _lVideoFile = null;
       _lIsFree = false;
       await _loadLectures();
+    } on UploadCancelled {
+      if (mounted) _showError(t('upload_cancelled'));
+    } on UploadTooLarge {
+      if (mounted) setState(() => _lFormError = t('err_video_too_large'));
     } catch (e) {
-      setState(() => _lFormError = '${t('err_save_failed')}$e');
+      if (mounted) setState(() => _lFormError = t('err_video_upload_failed'));
     } finally {
+      _upload = null;
       if (mounted) setState(() => _lUploadProgress = null);
     }
   }
@@ -421,54 +529,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
       return null;
     } finally {
       await controller.dispose();
-    }
-  }
-
-  /// Uploads straight to Supabase Storage's REST endpoint (the same one
-  /// `SupabaseStorageFileApi.upload()` calls under the hood) instead of
-  /// going through it, because the storage_client package gives no way to
-  /// observe upload progress — a lecture video can run to hundreds of MB, so
-  /// silently sitting on the same button for a couple of minutes reads as a
-  /// hang. A StreamedRequest fed from the multipart body's own byte stream
-  /// gives real progress without adding a new HTTP dependency.
-  Future<void> _uploadWithProgress({
-    required String bucket,
-    required String path,
-    required File file,
-    required void Function(double) onProgress,
-  }) async {
-    final accessToken =
-        SupabaseService.instance.client.auth.currentSession!.accessToken;
-    final uri = Uri.parse('$kSupabaseUrl/storage/v1/object/$bucket/$path');
-
-    final multipart = http.MultipartRequest('POST', uri)
-      ..headers['apikey'] = kSupabaseAnonKey
-      ..headers['Authorization'] = 'Bearer $accessToken'
-      ..headers['x-upsert'] = 'false'
-      ..fields['cacheControl'] = '3600'
-      ..files.add(await http.MultipartFile.fromPath('file', file.path));
-
-    final total = multipart.contentLength;
-    var sent = 0;
-    final streamed = http.StreamedRequest(multipart.method, multipart.url)
-      ..headers.addAll(multipart.headers)
-      ..contentLength = total;
-
-    multipart.finalize().listen(
-      (chunk) {
-        sent += chunk.length;
-        if (total > 0) onProgress((sent / total).clamp(0.0, 1.0));
-        streamed.sink.add(chunk);
-      },
-      onDone: () => streamed.sink.close(),
-      onError: streamed.sink.addError,
-      cancelOnError: true,
-    );
-
-    final response = await http.Client().send(streamed);
-    if (response.statusCode >= 400) {
-      final body = await response.stream.bytesToString();
-      throw Exception('upload failed (${response.statusCode}): $body');
     }
   }
 
@@ -600,6 +660,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _pFormError = null;
       _pSavedMsg = null;
     });
+    final hasMethod = _pZaincashPhone.text.trim().isNotEmpty ||
+        _pQiAccount.text.trim().isNotEmpty;
+    if (!hasMethod) {
+      setState(() => _pFormError = t('err_payment_method_required'));
+      return;
+    }
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -624,7 +690,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _pQiQrFile = null;
       await _loadProfile();
       if (!mounted) return;
-      setState(() => _pSavedMsg = 'Saved.');
+      if (widget.mandatoryPayment) {
+        Navigator.of(context).popUntil((r) => r.isFirst);
+        return;
+      }
+      setState(() => _pSavedMsg = t('saved'));
     } catch (e) {
       setState(() => _pFormError = '${t('err_save_failed')}$e');
     }
@@ -662,7 +732,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<bool> _confirm(String message) async {
+  Future<bool> _confirm(String message,
+      {String? confirmLabel, bool danger = true}) async {
     final t = AppStrings.instance.t;
     final result = await showDialog<bool>(
       context: context,
@@ -674,11 +745,23 @@ class _TeacherScreenState extends State<TeacherScreen> {
               child: Text(t('cancel'))),
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: Text(t('btn_delete'))),
+              style: TextButton.styleFrom(
+                  foregroundColor: danger ? AppColors.error : AppColors.red),
+              child: Text(confirmLabel ?? t('btn_delete'))),
         ],
       ),
     );
     return result ?? false;
+  }
+
+  /// Asks first, then stops the running lecture upload.
+  Future<bool> _confirmCancelUpload() async {
+    if (_upload == null) return true;
+    final t = AppStrings.instance.t;
+    final ok = await _confirm(t('confirm_cancel_upload'),
+        confirmLabel: t('btn_cancel_upload'));
+    if (ok) _upload?.cancel();
+    return ok;
   }
 
   @override
@@ -690,7 +773,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
       child: GlassScaffold(
         maxContentWidth: 1100,
         appBar: AppBar(
-          leading: widget.openPaymentInfo
+          automaticallyImplyLeading: !widget.mandatoryPayment,
+          leading: widget.mandatoryPayment
+              ? null
+              : widget.openPaymentInfo
               // This instance was pushed just for Settings > Payment info --
               // there's no dashboard overview to fall back into, so back
               // means leave the screen entirely instead of switching views.
@@ -701,19 +787,32 @@ class _TeacherScreenState extends State<TeacherScreen> {
               : _view != _TView.overview
                   ? IconButton(
                       icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
-                      onPressed: () => setState(() => _view =
-                          (_view == _TView.curriculum ||
-                                  _view == _TView.codes ||
-                                  _view == _TView.courseEdit)
-                              ? _TView.courses
-                              : _TView.overview),
+                      onPressed: () async {
+                        if (!await _confirmCancelUpload()) return;
+                        setState(() => _view = (_view == _TView.curriculum ||
+                                _view == _TView.codes ||
+                                _view == _TView.courseEdit)
+                            ? _TView.courses
+                            : _TView.overview);
+                      },
                     )
                   : null,
           title: Text(widget.openPaymentInfo
               ? t('settings_payment_info')
               : t('teacher_dashboard')),
         ),
-        body: _buildBody(t),
+        body: PopScope(
+          // System back: blocked during the mandatory payment step, and
+          // asks before abandoning a lecture upload.
+          canPop: !widget.mandatoryPayment && _upload == null,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop || widget.mandatoryPayment) return;
+            if (await _confirmCancelUpload() && mounted) {
+              Navigator.of(context).pop();
+            }
+          },
+          child: _buildBody(t),
+        ),
       ),
     );
   }
@@ -736,6 +835,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.courseEdit => _buildCourseEdit(t),
       _TView.curriculum => _buildCurriculum(t),
       _TView.codes => _buildCodes(t),
+      _TView.payments => _buildPayments(t),
       _TView.profile => _buildProfile(t),
     };
   }
@@ -762,6 +862,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       onRefresh: () async {
         await _loadCourses();
         await _loadProfile();
+        await _loadPaymentRequests();
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -780,6 +881,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
           ),
           DashSection(t('dash_quick_actions')),
           DashGrid(children: [
+            tile(ArcIcon.review, '${_paymentRequests.length}',
+                t('payment_requests'), const Color(0xFFE0A030),
+                () => go(_TView.payments),
+                alert: _paymentRequests.isNotEmpty),
             tile(ArcIcon.courses, '${_myCourses.length}', t('stat_courses'),
                 AppColors.teal, () => go(_TView.courses)),
             tile(ArcIcon.users, '$_statStudents', t('stat_students'),
@@ -906,25 +1011,17 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: t('label_price'))),
             const SizedBox(height: 12),
-            _filePicker(
-              icon: ArcIcon.image,
-              label: _cThumbFile?.name ?? t('label_thumbnail'),
-              onTap: () async {
+            FilePickBox(
+              file: _cThumbFile,
+              existingUrl: _activeCourse?['thumbnail_url'] as String?,
+              emptyLabel: t('label_thumbnail'),
+              onPick: () async {
                 final picked = await ImagePicker()
                     .pickImage(source: ImageSource.gallery, imageQuality: 85);
                 if (picked != null) setState(() => _cThumbFile = picked);
               },
+              onRemove: () => setState(() => _cThumbFile = null),
             ),
-            if (_activeCourse?['thumbnail_url'] != null && _cThumbFile == null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: SizedBox(
-                  height: 120,
-                  child: CourseThumb(
-                      url: _activeCourse!['thumbnail_url'] as String?,
-                      radius: 12),
-                ),
-              ),
             _formError(_cFormError),
             const SizedBox(height: 18),
             Row(children: [
@@ -965,14 +1062,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 decoration:
                     InputDecoration(labelText: t('label_lecture_title'))),
             const SizedBox(height: 12),
-            _filePicker(
-              icon: ArcIcon.video,
-              label: _lVideoFile?.name ?? t('label_video_file'),
-              onTap: () async {
+            FilePickBox(
+              file: _lVideoFile,
+              video: true,
+              emptyLabel: t('label_video_file'),
+              onPick: () async {
+                if (_upload != null) return;
                 final picked =
                     await ImagePicker().pickVideo(source: ImageSource.gallery);
                 if (picked != null) setState(() => _lVideoFile = picked);
               },
+              onRemove: _upload != null
+                  ? null
+                  : () => setState(() => _lVideoFile = null),
             ),
             const SizedBox(height: 4),
             InkWell(
@@ -991,9 +1093,22 @@ class _TeacherScreenState extends State<TeacherScreen> {
             const SizedBox(height: 10),
             if (_lUploadProgress != null)
               Center(
-                  child: _UploadProgressPill(
-                      progress: _lUploadProgress!,
-                      label: t('uploading_video')))
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    _UploadProgressPill(
+                        progress: _lUploadProgress!,
+                        label: t('uploading_video')),
+                    DashButton(t('btn_cancel_upload'),
+                        danger: true,
+                        icon: ArcIcon.close,
+                        onPressed: _confirmCancelUpload),
+                  ],
+                ),
+              )
             else
               ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
           ],
@@ -1156,38 +1271,17 @@ class _TeacherScreenState extends State<TeacherScreen> {
             Text(t('label_qi_qr'),
                 style: AppFonts.body(size: 13, weight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: GestureDetector(
-                onTap: () async {
-                  final picked = await ImagePicker()
-                      .pickImage(source: ImageSource.gallery, imageQuality: 85);
-                  if (picked != null) setState(() => _pQiQrFile = picked);
-                },
-                child: Container(
-                  width: 132,
-                  height: 132,
-                  decoration: BoxDecoration(
-                    color: AppColors.bg.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: AppColors.red.withValues(alpha: 0.35)),
-                  ),
-                  child: _pQiQrFile != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(15),
-                          child: Image.file(File(_pQiQrFile!.path),
-                              fit: BoxFit.cover))
-                      : (_pQiQrUrl != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(15),
-                              child: Image.network(_pQiQrUrl!,
-                                  fit: BoxFit.cover))
-                          : Center(
-                              child: ArcIconView(ArcIcon.qr,
-                                  size: 44, color: AppColors.muted, active: true))),
-                ),
-              ),
+            FilePickBox(
+              file: _pQiQrFile,
+              existingUrl: _pQiQrUrl,
+              emptyLabel: t('pick_qr'),
+              height: 200,
+              onPick: () async {
+                final picked = await ImagePicker()
+                    .pickImage(source: ImageSource.gallery, imageQuality: 90);
+                if (picked != null) setState(() => _pQiQrFile = picked);
+              },
+              onRemove: () => setState(() => _pQiQrFile = null),
             ),
             if (_pFormError != null) _formError(_pFormError),
             if (_pSavedMsg != null)
@@ -1196,21 +1290,26 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   child: Text(_pSavedMsg!,
                       style: AppFonts.body(size: 12, color: AppColors.teal))),
             const SizedBox(height: 18),
-            Row(children: [
-              Expanded(
-                  child: ElevatedButton(
-                      onPressed: _saveProfile, child: Text(t('save')))),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: OutlinedButton(
-                      onPressed: () => widget.openPaymentInfo
-                          ? Navigator.of(context).pop()
-                          : setState(() => _view = _TView.overview),
-                      child: Text(t('discard')))),
-            ]),
-            if (_pZaincashPhone.text.trim().isNotEmpty ||
+            if (widget.mandatoryPayment)
+              ElevatedButton(
+                  onPressed: _saveProfile, child: Text(t('save_and_continue')))
+            else
+              Row(children: [
+                Expanded(
+                    child: ElevatedButton(
+                        onPressed: _saveProfile, child: Text(t('save')))),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: OutlinedButton(
+                        onPressed: () => widget.openPaymentInfo
+                            ? Navigator.of(context).pop()
+                            : setState(() => _view = _TView.overview),
+                        child: Text(t('discard')))),
+              ]),
+            if (!widget.mandatoryPayment &&
+                (_pZaincashPhone.text.trim().isNotEmpty ||
                 _pQiAccount.text.trim().isNotEmpty ||
-                _pQiQrUrl != null) ...[
+                _pQiQrUrl != null)) ...[
               const SizedBox(height: 10),
               TextButton(
                 onPressed: _deletePaymentMethod,

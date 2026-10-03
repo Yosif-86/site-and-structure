@@ -1,10 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Saving the payment QR code to the gallery (gal). Only Android 9 and
+         older need a permission for that; newer versions write to Pictures
+         without one. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
     <application
         android:label="Arc Platform"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:allowAudioPlaybackCapture="false">
+        android:allowAudioPlaybackCapture="false"
+        android:requestLegacyExternalStorage="true">
         <!-- FLAG_SECURE (set at runtime in MainActivity/ScreenSecurity while a
              lecture is playing) only blocks the VIDEO half of a screen
              recording; Android's AudioPlaybackCapture API (used by most

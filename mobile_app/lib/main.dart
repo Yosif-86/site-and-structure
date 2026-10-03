@@ -15,6 +15,9 @@ import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
+/// Lets Home notice when a screen above it closes (see CatalogueScreen).
+final routeObserver = RouteObserver<PageRoute<dynamic>>();
+
 void _reportError(Object error, StackTrace stack) {
   ErrorReporter.report(error, stack, page: 'uncaught');
 }
@@ -102,6 +105,7 @@ class SiteAndStructureApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           navigatorKey: navigatorKey,
+          navigatorObservers: [routeObserver],
           title: AppStrings.instance.t('app_name'),
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(),

@@ -53,6 +53,8 @@ enum ArcIcon {
   fullscreenExit,
   playlist,
   close,
+  download,
+  copy,
 }
 
 class ArcIconView extends StatelessWidget {
@@ -341,6 +343,15 @@ const _icons = <ArcIcon, List<_Shape>>{
   ArcIcon.playlist: [
     _Shape.path('M4 7 H16 M4 12 H16 M4 17 H11'),
     _Shape.path('M15 14.4 L20.4 17.4 L15 20.4 Z', fill: _Fill.solid),
+  ],
+  ArcIcon.download: [
+    _Shape.path('M12 4 V14.5 M7.5 10 L12 14.5 L16.5 10'),
+    _Shape.path('M5 19.5 H19'),
+  ],
+  ArcIcon.copy: [
+    _Shape.path('M9.5 8 H17 Q19.5 8 19.5 10.5 V18 Q19.5 20.5 17 20.5 H9.5 Q7 20.5 7 18 V10.5 Q7 8 9.5 8 Z',
+        fill: _Fill.active),
+    _Shape.path('M4.5 15.5 V6 Q4.5 3.5 7 3.5 H15'),
   ],
   ArcIcon.close: [
     _Shape.path('M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5'),
