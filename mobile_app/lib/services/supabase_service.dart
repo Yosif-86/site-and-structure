@@ -27,7 +27,7 @@ const bool kPhoneOtpEnabled = true;
 // Paused: see _requiresLoginEmailOtp's doc comment. Flip back on once the
 // email-link flow (or a proper code, after custom SMTP is set up) has been
 // verified against a real inbox.
-const bool kTeacherAdminEmailOtpEnabled = true;
+const bool kTeacherAdminEmailOtpEnabled = false;
 
 /// Every account must sign in again this long after signing in, however
 /// actively it uses the app (session timeout).
