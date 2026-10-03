@@ -454,6 +454,7 @@ class AppStrings extends ChangeNotifier {
     'now_playing': 'يُعرض الآن',
     'course_lessons': 'دروس الدورة',
     'locked_lesson': 'مقفل',
+    'err_login_network': 'تعذّر إكمال تسجيل الدخول بسبب الاتصال. تحقق من الإنترنت وحاول مرة أخرى.',
     'preparing_video': 'جاري تجهيز الفيديو بدقة 1080p...',
     'lecture_sent_for_review': 'تم رفع المحاضرة وأُرسلت للإدارة للموافقة.',
     'lecture_pending_review': 'بانتظار موافقة الإدارة',

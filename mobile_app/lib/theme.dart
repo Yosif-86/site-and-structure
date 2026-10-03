@@ -114,7 +114,8 @@ class AppTheme extends ChangeNotifier {
   static final AppTheme instance = AppTheme._();
 
   static const _key = 'ss_theme';
-  final _storage = const FlutterSecureStorage();
+  final _storage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(resetOnError: true));
 
   bool _isDark = true;
   bool get isDark => _isDark;

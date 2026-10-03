@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show HttpException, Platform;
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -62,7 +62,12 @@ class SupabaseService extends ChangeNotifier {
 
   SupabaseClient get client => Supabase.instance.client;
 
-  final _secureStorage = const FlutterSecureStorage();
+  // resetOnError: after an app reinstall signed with a different key (debug
+  // vs release builds), Android can no longer decrypt what was stored, and
+  // every read throws. Starting clean is the only way out -- otherwise
+  // sign-in crashes after the password was already accepted.
+  final _secureStorage = const FlutterSecureStorage(
+      aOptions: AndroidOptions(resetOnError: true));
   Timer? _sessionWatchTimer;
 
   static Future<void> init() async {
@@ -88,7 +93,10 @@ class SupabaseService extends ChangeNotifier {
   /// no cached value (a genuinely fresh or post-uninstall install) computes
   /// the new stable id, which is exactly the case this is meant to fix.
   Future<String> getDeviceId() async {
-    final cached = await _secureStorage.read(key: _deviceIdKey);
+    String? cached;
+    try {
+      cached = await _secureStorage.read(key: _deviceIdKey);
+    } catch (_) {}
     if (cached != null) return cached;
 
     String? id;
@@ -114,25 +122,42 @@ class SupabaseService extends ChangeNotifier {
 
   Future<bool> _isDeviceAllowed(String accessToken) async {
     final deviceId = await getDeviceId();
-    final res = await http.post(
+    final res = await http
+        .post(
       Uri.parse('$kApiBaseUrl/api/check-device'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $accessToken',
       },
       body: jsonEncode({'deviceId': deviceId, 'deviceLabel': 'Flutter app'}),
-    );
-    if (res.statusCode != 200) return false;
+    )
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) {
+      throw HttpException('check-device ${res.statusCode}');
+    }
     final result = jsonDecode(res.body) as Map<String, dynamic>;
     if (result['allowed'] != true) return false;
-    await _secureStorage.write(
-        key: _sessionTokenKey, value: result['sessionToken'] as String);
+    _sessionTokenMemory = result['sessionToken'] as String;
+    try {
+      await _secureStorage.write(
+          key: _sessionTokenKey, value: result['sessionToken'] as String);
+    } catch (_) {}
     _startSessionWatch();
     return true;
   }
 
-  Future<String?> getSessionToken() =>
-      _secureStorage.read(key: _sessionTokenKey);
+  /// Kept in memory too, so a storage hiccup can't make this device look
+  /// like a different one.
+  String? _sessionTokenMemory;
+
+  Future<String?> getSessionToken() async {
+    try {
+      return await _secureStorage.read(key: _sessionTokenKey) ??
+          _sessionTokenMemory;
+    } catch (_) {
+      return _sessionTokenMemory;
+    }
+  }
 
   /// Saved sign-in details for the login form, or null if none are saved.
   Future<({String email, String password})?> getSavedLogin() async {
@@ -165,7 +190,16 @@ class SupabaseService extends ChangeNotifier {
       // match -- without this the user is "kicked" mid-way through typing
       // their new password.
       if (_inPasswordRecovery) return;
-      final myToken = await _secureStorage.read(key: _sessionTokenKey);
+      try {
+      var myToken = await getSessionToken();
+      if (myToken == null) {
+        // This device never finished its device check (e.g. the network
+        // dropped right after the password was accepted). Claim the slot
+        // now instead of treating it as "signed in elsewhere".
+        final access = client.auth.currentSession?.accessToken;
+        if (access != null && await _isDeviceAllowed(access)) return;
+        myToken = await getSessionToken();
+      }
       final row = await client
           .from('profiles')
           .select('active_session_token')
@@ -176,9 +210,16 @@ class SupabaseService extends ChangeNotifier {
         _sessionWatchTimer?.cancel();
         _sessionWatchTimer = null;
         await client.auth.signOut();
-        await _secureStorage.delete(key: _sessionTokenKey);
+        _sessionTokenMemory = null;
+        try {
+          await _secureStorage.delete(key: _sessionTokenKey);
+        } catch (_) {}
         notifyListeners();
         onForcedLogout?.call();
+      }
+      } catch (_) {
+        // Offline or a transient error: check again on the next tick rather
+        // than signing anyone out over it.
       }
     });
   }
@@ -295,7 +336,15 @@ class SupabaseService extends ChangeNotifier {
     if (accessToken == null || user == null) {
       return const LoginResult(error: 'Login failed.');
     }
-    final allowed = await _isDeviceAllowed(accessToken);
+    bool allowed;
+    try {
+      allowed = await _isDeviceAllowed(accessToken);
+    } catch (_) {
+      // Password was right but the device check couldn't complete: don't
+      // leave a half-signed-in session behind (it would later be "kicked").
+      await client.auth.signOut().catchError((_) {});
+      return const LoginResult(error: 'err_login_network');
+    }
     if (!allowed) {
       await client.auth.signOut();
       return const LoginResult(error: 'err_device_limit');
@@ -314,8 +363,9 @@ class SupabaseService extends ChangeNotifier {
     _awaitingEmailLinkConfirmation = false;
     final trimmedEmail = email.trim();
     try {
-      final res = await client.auth.signInWithPassword(
-          email: trimmedEmail, password: password.trim());
+      final res = await client.auth
+          .signInWithPassword(email: trimmedEmail, password: password.trim())
+          .timeout(const Duration(seconds: 20));
       final user = res.user;
       if (user == null) return const LoginResult(error: 'Login failed.');
 
@@ -332,6 +382,8 @@ class SupabaseService extends ChangeNotifier {
       return await _finishPasswordLogin(res, trimmedEmail);
     } on AuthException catch (e) {
       return LoginResult(error: e.message);
+    } catch (_) {
+      return const LoginResult(error: 'err_login_network');
     }
   }
 
