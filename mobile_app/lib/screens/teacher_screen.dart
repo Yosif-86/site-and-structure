@@ -10,7 +10,9 @@ import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
-import '../widgets/glass_card.dart';
+import '../widgets/arc_icons.dart';
+import '../widgets/course_card.dart';
+import '../widgets/dashboard_kit.dart';
 import '../widgets/glass_scaffold.dart';
 
 /// Net-new teacher dashboard, ported from teacher.html: a dashboard-card
@@ -693,12 +695,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
               // there's no dashboard overview to fall back into, so back
               // means leave the screen entirely instead of switching views.
               ? IconButton(
-                  icon: const Icon(Icons.arrow_back),
+                  icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
                   onPressed: () => Navigator.of(context).pop(),
                 )
               : _view != _TView.overview
                   ? IconButton(
-                      icon: const Icon(Icons.arrow_back),
+                      icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
                       onPressed: () => setState(() => _view =
                           (_view == _TView.curriculum ||
                                   _view == _TView.codes ||
@@ -739,33 +741,63 @@ class _TeacherScreenState extends State<TeacherScreen> {
   }
 
   Widget _buildOverview(String Function(String) t) {
-    final cards = [
-      _StatCardData(
-          Icons.menu_book_outlined,
-          '${_myCourses.length}',
-          t('stat_courses'),
-          AppColors.teal,
-          () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.groups_outlined, '$_statStudents', t('stat_students'),
-          AppColors.teal, () => setState(() => _view = _TView.courses)),
-      _StatCardData(Icons.attach_money, '$_statEarnings', t('stat_earnings'),
-          AppColors.red, () => setState(() => _view = _TView.courses)),
-    ];
+    void go(_TView v) => setState(() => _view = v);
+    var delay = 0;
+    Widget tile(ArcIcon icon, String value, String label, Color accent,
+            VoidCallback onTap, {bool alert = false}) =>
+        FadeSlideIn(
+          delayMs: delay += 40,
+          child: DashStatCard(
+              icon: icon,
+              value: value,
+              label: label,
+              accent: accent,
+              alert: alert,
+              onTap: onTap),
+        );
+    final paymentSet = _pZaincashPhone.text.trim().isNotEmpty ||
+        _pQiAccount.text.trim().isNotEmpty ||
+        _pQiQrUrl != null;
     return RefreshIndicator(
       onRefresh: () async {
         await _loadCourses();
         await _loadProfile();
       },
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 1.5),
-        itemCount: cards.length,
-        itemBuilder: (context, i) =>
-            FadeSlideIn(delayMs: i * 60, child: _StatCard(data: cards[i])),
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
+          FadeSlideIn(
+            delayMs: 0,
+            child: DashHero(
+              title: t('teacher_dashboard'),
+              subtitle: t('dash_teacher_sub'),
+              stats: [
+                ('${_myCourses.length}', t('stat_courses')),
+                ('$_statStudents', t('stat_students')),
+                ('$_statEarnings', t('stat_earnings')),
+              ],
+            ),
+          ),
+          DashSection(t('dash_quick_actions')),
+          DashGrid(children: [
+            tile(ArcIcon.courses, '${_myCourses.length}', t('stat_courses'),
+                AppColors.teal, () => go(_TView.courses)),
+            tile(ArcIcon.users, '$_statStudents', t('stat_students'),
+                AppColors.byline, () => go(_TView.courses)),
+            tile(ArcIcon.money, '$_statEarnings', t('stat_earnings'),
+                AppColors.red, () => go(_TView.courses)),
+            tile(ArcIcon.wallet, paymentSet ? '✓' : '—',
+                t('settings_payment_info'), AppColors.teal,
+                () => go(_TView.profile),
+                alert: !paymentSet),
+          ]),
+          const SizedBox(height: 16),
+          FadeSlideIn(
+            delayMs: delay + 40,
+            child: DashButton(t('create_course'),
+                primary: true, icon: ArcIcon.plus, onPressed: _openNewCourse),
+          ),
+        ],
       ),
     );
   }
@@ -774,28 +806,30 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return RefreshIndicator(
       onRefresh: _loadCourses,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          ElevatedButton.icon(
-              onPressed: _openNewCourse,
-              icon: const Icon(Icons.add),
-              label: Text(t('create_course'))),
+          DashButton(t('create_course'),
+              primary: true, icon: ArcIcon.plus, onPressed: _openNewCourse),
           const SizedBox(height: 12),
           if (_myCourses.isEmpty)
-            Text(t('no_courses_teacher'),
-                style: AppFonts.body(color: AppColors.muted))
+            DashEmpty(icon: ArcIcon.courses, message: t('no_courses_teacher'))
           else
-            for (final c in _myCourses) ...[
-              _CourseCard(
-                course: c,
-                t: t,
-                onEdit:
-                    c['status'] == 'draft' ? () => _openCourseEdit(c) : null,
-                onCurriculum: () => _openCurriculum(c),
-                onCodes: () => _openCodes(c),
-                onSubmit:
-                    c['status'] == 'draft' ? () => _submitForReview(c) : null,
-                onDelete: () => _deleteCourse(c),
+            for (var i = 0; i < _myCourses.length; i++) ...[
+              FadeSlideIn(
+                delayMs: (i % 10) * 30,
+                child: _CourseCard(
+                  course: _myCourses[i],
+                  t: t,
+                  onEdit: _myCourses[i]['status'] == 'draft'
+                      ? () => _openCourseEdit(_myCourses[i])
+                      : null,
+                  onCurriculum: () => _openCurriculum(_myCourses[i]),
+                  onCodes: () => _openCodes(_myCourses[i]),
+                  onSubmit: _myCourses[i]['status'] == 'draft'
+                      ? () => _submitForReview(_myCourses[i])
+                      : null,
+                  onDelete: () => _deleteCourse(_myCourses[i]),
+                ),
               ),
               const SizedBox(height: 10),
             ],
@@ -804,322 +838,388 @@ class _TeacherScreenState extends State<TeacherScreen> {
     );
   }
 
-  Widget _buildCourseEdit(String Function(String) t) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(_activeCourse != null ? t('edit_course') : t('new_course_title'),
-            style: AppFonts.heading(size: 20)),
-        const SizedBox(height: 16),
-        TextField(
-            controller: _cTitle,
-            decoration: InputDecoration(labelText: t('label_title'))),
-        const SizedBox(height: 12),
-        TextField(
-            controller: _cDescription,
-            maxLines: 4,
-            decoration: InputDecoration(labelText: t('label_description'))),
-        const SizedBox(height: 12),
-        TextField(
-            controller: _cLearning,
-            minLines: 3,
-            maxLines: 8,
-            keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-                labelText: t('what_you_learn'),
-                hintText: t('learning_points_hint'),
-                helperText: t('learning_points_helper'))),
-        const SizedBox(height: 12),
-        TextField(
-            controller: _cPrice,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: t('label_price'))),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final picked = await ImagePicker()
-                .pickImage(source: ImageSource.gallery, imageQuality: 85);
-            if (picked != null) setState(() => _cThumbFile = picked);
-          },
-          icon: const Icon(Icons.image_outlined),
-          label: Text(_cThumbFile?.name ?? t('label_thumbnail')),
+  Widget _filePicker({
+    required ArcIcon icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: AppColors.bg.withValues(alpha: 0.35),
+          border: Border.all(color: AppColors.red.withValues(alpha: 0.35)),
         ),
-        if (_activeCourse?['thumbnail_url'] != null && _cThumbFile == null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-                '${t('current_file')}${_activeCourse!['thumbnail_url']}',
-                style: AppFonts.mono(size: 10.5, color: AppColors.muted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-        if (_cFormError != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(_cFormError!,
-                  style: AppFonts.body(size: 12, color: AppColors.red))),
-        const SizedBox(height: 18),
-        Row(children: [
-          Expanded(
-              child: ElevatedButton(
-                  onPressed: _saveCourse, child: Text(t('save')))),
+        child: Row(children: [
+          ArcIconView(icon, size: 22, color: AppColors.red, active: true),
           const SizedBox(width: 10),
           Expanded(
-              child: OutlinedButton(
-                  onPressed: () => setState(() => _view = _TView.courses),
-                  child: Text(t('cancel')))),
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppFonts.body(size: 13.5, color: AppColors.text)),
+          ),
+          ArcIconView(ArcIcon.plus, size: 18, color: AppColors.muted2),
         ]),
+      ),
+    );
+  }
+
+  Widget _formError(String? msg) => msg == null
+      ? const SizedBox.shrink()
+      : Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(msg, style: AppFonts.body(size: 12, color: AppColors.error)));
+
+  Widget _buildCourseEdit(String Function(String) t) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        DashFormPanel(
+          title: _activeCourse != null ? t('edit_course') : t('new_course_title'),
+          icon: ArcIcon.edit,
+          children: [
+            TextField(
+                controller: _cTitle,
+                decoration: InputDecoration(labelText: t('label_title'))),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _cDescription,
+                maxLines: 4,
+                decoration: InputDecoration(labelText: t('label_description'))),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _cLearning,
+                minLines: 3,
+                maxLines: 8,
+                keyboardType: TextInputType.multiline,
+                decoration: InputDecoration(
+                    labelText: t('what_you_learn'),
+                    hintText: t('learning_points_hint'),
+                    helperText: t('learning_points_helper'))),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _cPrice,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: t('label_price'))),
+            const SizedBox(height: 12),
+            _filePicker(
+              icon: ArcIcon.image,
+              label: _cThumbFile?.name ?? t('label_thumbnail'),
+              onTap: () async {
+                final picked = await ImagePicker()
+                    .pickImage(source: ImageSource.gallery, imageQuality: 85);
+                if (picked != null) setState(() => _cThumbFile = picked);
+              },
+            ),
+            if (_activeCourse?['thumbnail_url'] != null && _cThumbFile == null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: SizedBox(
+                  height: 120,
+                  child: CourseThumb(
+                      url: _activeCourse!['thumbnail_url'] as String?,
+                      radius: 12),
+                ),
+              ),
+            _formError(_cFormError),
+            const SizedBox(height: 18),
+            Row(children: [
+              Expanded(
+                  child: ElevatedButton(
+                      onPressed: _saveCourse, child: Text(t('save')))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: () => setState(() => _view = _TView.courses),
+                      child: Text(t('cancel')))),
+            ]),
+          ],
+        ),
       ],
     );
   }
 
   Widget _buildCurriculum(String Function(String) t) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Text('${t('curriculum')} — ${_activeCourse?['title'] ?? ''}',
-            style: AppFonts.heading(size: 18)),
-        const SizedBox(height: 16),
+        DashSection('${t('curriculum')} · ${_activeCourse?['title'] ?? ''}'),
         if (_activeLectures.isEmpty)
-          Text(t('no_lectures_teacher'),
-              style: AppFonts.body(color: AppColors.muted))
+          DashEmpty(icon: ArcIcon.video, message: t('no_lectures_teacher'))
         else
-          for (final l in _activeLectures) ...[
-            _AdminCard(children: [
-              Text(l['title'] as String? ?? '—',
-                  style: AppFonts.body(size: 14, weight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(
-                '${l['r2_path'] != null ? t('status_live') : t('status_pending_upload')}${l['is_free'] == true ? ' · ${t('free_tag')}' : ''}',
-                style: AppFonts.mono(size: 10.5, color: AppColors.muted),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                  onPressed: () => _deleteLecture(l['id'] as String),
-                  child: Text(t('btn_delete'))),
-            ]),
+          for (var i = 0; i < _activeLectures.length; i++) ...[
+            _lectureRow(i, _activeLectures[i], t),
             const SizedBox(height: 10),
           ],
-        const Divider(height: 32),
-        Text(t('btn_add'),
-            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _lTitle,
-            decoration: InputDecoration(labelText: t('label_lecture_title'))),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final picked =
-                await ImagePicker().pickVideo(source: ImageSource.gallery);
-            if (picked != null) setState(() => _lVideoFile = picked);
-          },
-          icon: const Icon(Icons.videocam_outlined),
-          label: Text(_lVideoFile?.name ?? t('label_video_file')),
+        const SizedBox(height: 14),
+        DashFormPanel(
+          title: t('btn_add'),
+          icon: ArcIcon.video,
+          children: [
+            TextField(
+                controller: _lTitle,
+                decoration:
+                    InputDecoration(labelText: t('label_lecture_title'))),
+            const SizedBox(height: 12),
+            _filePicker(
+              icon: ArcIcon.video,
+              label: _lVideoFile?.name ?? t('label_video_file'),
+              onTap: () async {
+                final picked =
+                    await ImagePicker().pickVideo(source: ImageSource.gallery);
+                if (picked != null) setState(() => _lVideoFile = picked);
+              },
+            ),
+            const SizedBox(height: 4),
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => setState(() => _lIsFree = !_lIsFree),
+              child: Row(children: [
+                Checkbox(
+                    value: _lIsFree,
+                    onChanged: (v) => setState(() => _lIsFree = v ?? false)),
+                Expanded(
+                    child: Text(t('label_free_lecture'),
+                        style: AppFonts.body(size: 13, color: AppColors.muted))),
+              ]),
+            ),
+            _formError(_lFormError),
+            const SizedBox(height: 10),
+            if (_lUploadProgress != null)
+              Center(
+                  child: _UploadProgressPill(
+                      progress: _lUploadProgress!,
+                      label: t('uploading_video')))
+            else
+              ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
+          ],
         ),
-        Row(children: [
-          Checkbox(
-              value: _lIsFree,
-              onChanged: (v) => setState(() => _lIsFree = v ?? false)),
-          Expanded(
-              child: Text(t('label_free_lecture'),
-                  style: AppFonts.body(size: 12.5, color: AppColors.muted))),
-        ]),
-        if (_lFormError != null)
-          Text(_lFormError!,
-              style: AppFonts.body(size: 12, color: AppColors.red)),
-        const SizedBox(height: 10),
-        if (_lUploadProgress != null)
-          Center(
-              child: _UploadProgressPill(
-                  progress: _lUploadProgress!, label: t('uploading_video')))
-        else
-          ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
+      ],
+    );
+  }
+
+  Widget _lectureRow(int i, Map<String, dynamic> l, String Function(String) t) {
+    final live = l['r2_path'] != null;
+    return DashCard(
+      leading: Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          color: AppColors.bg.withValues(alpha: 0.4),
+          border: Border.all(color: AppColors.line),
+        ),
+        alignment: Alignment.center,
+        child: Text((i + 1).toString().padLeft(2, '0'),
+            style: AppFonts.code(size: 14, color: AppColors.red)),
+      ),
+      title: l['title'] as String? ?? '—',
+      titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+      trailing: StatusPill(
+          live ? t('status_live') : t('status_pending_upload'),
+          tone: live ? StatusTone.good : StatusTone.warn),
+      meta: [if (l['is_free'] == true) t('free_tag')],
+      metaColor: AppColors.teal,
+      actions: [
+        DashButton(t('btn_delete'),
+            danger: true,
+            icon: ArcIcon.trash,
+            onPressed: () => _deleteLecture(l['id'] as String)),
       ],
     );
   }
 
   Widget _buildCodes(String Function(String) t) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Text('${t('discount_codes')} — ${_activeCourse?['title'] ?? ''}',
-            style: AppFonts.heading(size: 18)),
-        const SizedBox(height: 16),
+        DashSection('${t('discount_codes')} · ${_activeCourse?['title'] ?? ''}'),
         if (_activeCodes.isEmpty)
-          Text(t('no_codes'), style: AppFonts.body(color: AppColors.muted))
+          DashEmpty(icon: ArcIcon.tag, message: t('no_codes'))
         else
           for (final c in _activeCodes) ...[
-            _AdminCard(children: [
-              Row(children: [
-                Expanded(
-                    child: Text(c['code'] as String? ?? '—',
-                        style:
-                            AppFonts.mono(size: 14, weight: FontWeight.w700))),
-                Text(
-                    c['is_active'] == true
-                        ? t('status_active_code')
-                        : t('status_inactive'),
-                    style: AppFonts.mono(size: 10.5, color: AppColors.teal)),
-              ]),
-              const SizedBox(height: 4),
-              Text(
-                '${c['discount_type'] == 'percent' ? '${c['discount_value']}%' : '${c['discount_value']} IQD'} · ${c['used_count']}/${c['max_uses']}',
-                style: AppFonts.body(size: 12.5, color: AppColors.muted),
-              ),
-              if (c['is_active'] == true) ...[
-                const SizedBox(height: 8),
-                OutlinedButton(
-                    onPressed: () => _stopCode(c), child: Text(t('btn_stop'))),
+            DashCard(
+              leading: DashIconBadge(icon: ArcIcon.tag, accent: AppColors.byline),
+              title: c['code'] as String? ?? '—',
+              titleStyle: AppFonts.code(size: 15),
+              subtitle:
+                  '${c['discount_type'] == 'percent' ? '${c['discount_value']}%' : '${c['discount_value']} IQD'} · ${c['used_count']}/${c['max_uses']} ${t('codes_used')}',
+              trailing: StatusPill(
+                  c['is_active'] == true
+                      ? t('status_active_code')
+                      : t('status_inactive'),
+                  tone: c['is_active'] == true
+                      ? StatusTone.good
+                      : StatusTone.neutral),
+              actions: [
+                if (c['is_active'] == true)
+                  DashButton(t('btn_stop'),
+                      danger: true,
+                      icon: ArcIcon.close,
+                      onPressed: () => _stopCode(c)),
               ],
-            ]),
+            ),
             const SizedBox(height: 10),
           ],
-        const Divider(height: 32),
-        Text(t('create_course'),
-            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _dCode,
-            textCapitalization: TextCapitalization.characters,
-            decoration: InputDecoration(labelText: t('label_code'))),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              value: _dType,
-              decoration: InputDecoration(labelText: t('label_discount_type')),
-              items: [
-                DropdownMenuItem(value: 'percent', child: Text(t('percent'))),
-                DropdownMenuItem(value: 'fixed', child: Text(t('fixed'))),
-              ],
-              onChanged: (v) => setState(() => _dType = v ?? 'percent'),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-              child: TextField(
-                  controller: _dValue,
-                  keyboardType: TextInputType.number,
+        const SizedBox(height: 14),
+        DashFormPanel(
+          title: t('create_code'),
+          icon: ArcIcon.tag,
+          children: [
+            TextField(
+                controller: _dCode,
+                textCapitalization: TextCapitalization.characters,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(labelText: t('label_code'))),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _dType,
                   decoration:
-                      InputDecoration(labelText: t('label_discount_value')))),
-        ]),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _dMaxUses,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: t('label_max_uses'))),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final picked = await showDatePicker(
-              context: context,
-              initialDate: DateTime.now().add(const Duration(days: 30)),
-              firstDate: DateTime.now(),
-              lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
-            );
-            if (picked != null) setState(() => _dExpires = picked);
-          },
-          icon: const Icon(Icons.event_outlined),
-          label: Text(_dExpires != null
-              ? _dExpires!.toString().split(' ').first
-              : t('label_expires')),
+                      InputDecoration(labelText: t('label_discount_type')),
+                  items: [
+                    DropdownMenuItem(
+                        value: 'percent', child: Text(t('percent'))),
+                    DropdownMenuItem(value: 'fixed', child: Text(t('fixed'))),
+                  ],
+                  onChanged: (v) => setState(() => _dType = v ?? 'percent'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: TextField(
+                      controller: _dValue,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                          labelText: t('label_discount_value')))),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _dMaxUses,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: t('label_max_uses'))),
+            const SizedBox(height: 12),
+            _filePicker(
+              icon: ArcIcon.calendar,
+              label: _dExpires != null
+                  ? _dExpires!.toString().split(' ').first
+                  : t('label_expires'),
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.now().add(const Duration(days: 30)),
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
+                );
+                if (picked != null) setState(() => _dExpires = picked);
+              },
+            ),
+            _formError(_dFormError),
+            const SizedBox(height: 14),
+            ElevatedButton(onPressed: _addCode, child: Text(t('btn_add'))),
+          ],
         ),
-        if (_dFormError != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_dFormError!,
-                  style: AppFonts.body(size: 12, color: AppColors.red))),
-        const SizedBox(height: 12),
-        ElevatedButton(onPressed: _addCode, child: Text(t('btn_add'))),
       ],
     );
   }
 
   Widget _buildProfile(String Function(String) t) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Text(t('my_payment_number'),
-            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(t('payment_required_hint'),
-            style: AppFonts.body(size: 11.5, color: AppColors.muted)),
-        const SizedBox(height: 8),
-        TextField(
-            controller: _pZaincashPhone,
-            decoration: InputDecoration(
-                labelText: t('label_zaincash_phone'),
-                hintText: '07XX XXX XXXX')),
-        const SizedBox(height: 12),
-        TextField(
-            controller: _pQiAccount,
-            decoration: InputDecoration(
-                labelText: t('label_qi_account'),
-                hintText: 'XXXX XXXX XXXX XXXX')),
-        const SizedBox(height: 12),
-        Text(t('label_qi_qr'), style: AppFonts.body(size: 13)),
-        const SizedBox(height: 6),
-        GestureDetector(
-          onTap: () async {
-            final picked = await ImagePicker()
-                .pickImage(source: ImageSource.gallery, imageQuality: 85);
-            if (picked != null) setState(() => _pQiQrFile = picked);
-          },
-          child: Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-                color: AppColors.glassBg,
-                borderRadius: BorderRadius.circular(10)),
-            child: _pQiQrFile != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child:
-                        Image.file(File(_pQiQrFile!.path), fit: BoxFit.cover))
-                : (_pQiQrUrl != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: Image.network(_pQiQrUrl!, fit: BoxFit.cover))
-                    : const Icon(Icons.qr_code_2_outlined)),
-          ),
-        ),
-        if (_pFormError != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(_pFormError!,
-                  style: AppFonts.body(size: 12, color: AppColors.red))),
-        if (_pSavedMsg != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Text(_pSavedMsg!,
-                  style: AppFonts.body(size: 12, color: AppColors.teal))),
-        const SizedBox(height: 18),
-        Row(children: [
-          Expanded(
-              child: ElevatedButton(
-                  onPressed: _saveProfile, child: Text(t('save')))),
-          const SizedBox(width: 10),
-          Expanded(
-              child: OutlinedButton(
-                  onPressed: () => widget.openPaymentInfo
-                      ? Navigator.of(context).pop()
-                      : setState(() => _view = _TView.overview),
-                  child: Text(t('discard')))),
-        ]),
-        if (_pZaincashPhone.text.trim().isNotEmpty ||
-            _pQiAccount.text.trim().isNotEmpty ||
-            _pQiQrUrl != null) ...[
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton(
-              onPressed: _deletePaymentMethod,
-              style: TextButton.styleFrom(foregroundColor: AppColors.error),
-              child: Text(t('delete_payment_method')),
+        DashFormPanel(
+          title: t('my_payment_number'),
+          icon: ArcIcon.wallet,
+          children: [
+            Text(t('payment_required_hint'),
+                style: AppFonts.body(size: 12, color: AppColors.muted)),
+            const SizedBox(height: 14),
+            TextField(
+                controller: _pZaincashPhone,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                    labelText: t('label_zaincash_phone'),
+                    hintText: '07XX XXX XXXX')),
+            const SizedBox(height: 12),
+            TextField(
+                controller: _pQiAccount,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                    labelText: t('label_qi_account'),
+                    hintText: 'XXXX XXXX XXXX XXXX')),
+            const SizedBox(height: 14),
+            Text(t('label_qi_qr'),
+                style: AppFonts.body(size: 13, weight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: GestureDetector(
+                onTap: () async {
+                  final picked = await ImagePicker()
+                      .pickImage(source: ImageSource.gallery, imageQuality: 85);
+                  if (picked != null) setState(() => _pQiQrFile = picked);
+                },
+                child: Container(
+                  width: 132,
+                  height: 132,
+                  decoration: BoxDecoration(
+                    color: AppColors.bg.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppColors.red.withValues(alpha: 0.35)),
+                  ),
+                  child: _pQiQrFile != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(15),
+                          child: Image.file(File(_pQiQrFile!.path),
+                              fit: BoxFit.cover))
+                      : (_pQiQrUrl != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(15),
+                              child: Image.network(_pQiQrUrl!,
+                                  fit: BoxFit.cover))
+                          : Center(
+                              child: ArcIconView(ArcIcon.qr,
+                                  size: 44, color: AppColors.muted, active: true))),
+                ),
+              ),
             ),
-          ),
-        ],
+            if (_pFormError != null) _formError(_pFormError),
+            if (_pSavedMsg != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(_pSavedMsg!,
+                      style: AppFonts.body(size: 12, color: AppColors.teal))),
+            const SizedBox(height: 18),
+            Row(children: [
+              Expanded(
+                  child: ElevatedButton(
+                      onPressed: _saveProfile, child: Text(t('save')))),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: OutlinedButton(
+                      onPressed: () => widget.openPaymentInfo
+                          ? Navigator.of(context).pop()
+                          : setState(() => _view = _TView.overview),
+                      child: Text(t('discard')))),
+            ]),
+            if (_pZaincashPhone.text.trim().isNotEmpty ||
+                _pQiAccount.text.trim().isNotEmpty ||
+                _pQiQrUrl != null) ...[
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: _deletePaymentMethod,
+                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                child: Text(t('delete_payment_method')),
+              ),
+            ],
+          ],
+        ),
       ],
     );
   }
@@ -1147,100 +1247,35 @@ class _CourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = course['status'] as String? ?? 'draft';
-    return _AdminCard(children: [
-      Row(children: [
-        Expanded(
-            child: Text(course['title'] as String? ?? '—',
-                style: AppFonts.body(size: 15, weight: FontWeight.w600))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-              border: Border.all(color: AppColors.teal),
-              borderRadius: BorderRadius.circular(999)),
-          child: Text(t('status_$status').toUpperCase(),
-              style: AppFonts.mono(size: 9, color: AppColors.teal)),
-        ),
-      ]),
-      const SizedBox(height: 4),
-      Text(
-          course['is_free'] == true
-              ? t('card_free')
-              : '${course['price'] ?? '—'}',
-          style: AppFonts.body(size: 13, color: AppColors.muted)),
-      const SizedBox(height: 10),
-      Wrap(spacing: 8, runSpacing: 8, children: [
-        if (onEdit != null)
-          OutlinedButton(onPressed: onEdit, child: Text(t('btn_edit'))),
-        OutlinedButton(
-            onPressed: onCurriculum, child: Text(t('btn_curriculum'))),
-        OutlinedButton(onPressed: onCodes, child: Text(t('btn_codes'))),
+    final tone = switch (status) {
+      'published' => StatusTone.good,
+      'pending' || 'pending_review' => StatusTone.warn,
+      'rejected' => StatusTone.bad,
+      _ => StatusTone.neutral,
+    };
+    return DashCard(
+      leading: SizedBox(
+        width: 74,
+        height: 56,
+        child: CourseThumb(url: course['thumbnail_url'] as String?, radius: 12),
+      ),
+      title: course['title'] as String? ?? '—',
+      subtitle: course['is_free'] == true
+          ? t('card_free')
+          : '${course['price'] ?? '—'}',
+      trailing: StatusPill(t('status_$status'), tone: tone),
+      actions: [
         if (onSubmit != null)
-          ElevatedButton(
-              onPressed: onSubmit, child: Text(t('submit_for_review'))),
-        OutlinedButton(onPressed: onDelete, child: Text(t('btn_delete'))),
-      ]),
-    ]);
-  }
-}
-
-class _StatCardData {
-  final IconData icon;
-  final String number;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  _StatCardData(this.icon, this.number, this.label, this.color, this.onTap);
-}
-
-class _StatCard extends StatelessWidget {
-  final _StatCardData data;
-  const _StatCard({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-        onTap: data.onTap,
-        padding: const EdgeInsets.all(14),
-        borderRadius: BorderRadius.circular(16),
-        child: Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                color: data.color.withOpacity(0.16),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(data.icon, color: data.color, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (data.number.isNotEmpty)
-                  Text(data.number, style: AppFonts.heading(size: 20)),
-                Text(data.label,
-                    style: AppFonts.mono(size: 9.5, color: AppColors.muted2),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ]),
-    );
-  }
-}
-
-class _AdminCard extends StatelessWidget {
-  final List<Widget> children;
-  const _AdminCard({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: children),
+          DashButton(t('submit_for_review'),
+              primary: true, icon: ArcIcon.check, onPressed: onSubmit),
+        if (onEdit != null)
+          DashButton(t('btn_edit'), icon: ArcIcon.edit, onPressed: onEdit),
+        DashButton(t('btn_curriculum'),
+            icon: ArcIcon.video, onPressed: onCurriculum),
+        DashButton(t('btn_codes'), icon: ArcIcon.tag, onPressed: onCodes),
+        DashButton(t('btn_delete'),
+            danger: true, icon: ArcIcon.trash, onPressed: onDelete),
+      ],
     );
   }
 }

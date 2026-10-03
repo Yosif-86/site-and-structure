@@ -31,6 +31,28 @@ enum ArcIcon {
   chevron,
   check,
   phone,
+  users,
+  money,
+  review,
+  video,
+  warning,
+  tag,
+  alert,
+  plus,
+  image,
+  qr,
+  calendar,
+  back,
+  skipPrev,
+  skipNext,
+  rewind,
+  forward,
+  pause,
+  replay,
+  fullscreen,
+  fullscreenExit,
+  playlist,
+  close,
 }
 
 class ArcIconView extends StatelessWidget {
@@ -52,7 +74,7 @@ class ArcIconView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Chevrons and arrows point "forward", which is left in Arabic.
-    final mirror = (icon == ArcIcon.chevron) &&
+    final mirror = (icon == ArcIcon.chevron || icon == ArcIcon.back) &&
         Directionality.of(context) == TextDirection.rtl;
     Widget paint = CustomPaint(
       size: Size.square(size),
@@ -213,6 +235,116 @@ const _icons = <ArcIcon, List<_Shape>>{
   ArcIcon.check: [
     _Shape.path('M5 12.5 L9.8 17 L19 7.5'),
   ],
+  ArcIcon.users: [
+    _Shape.circle(9, 8.5, 3.2, fill: _Fill.active),
+    _Shape.path('M3.5 19.5 C4 16.2 6.3 14.3 9 14.3 C11.7 14.3 14 16.2 14.5 19.5 Z',
+        fill: _Fill.active, stroke: false),
+    _Shape.path('M3.5 19.5 C4 16.2 6.3 14.3 9 14.3 C11.7 14.3 14 16.2 14.5 19.5'),
+    _Shape.path('M15.2 6.2 A2.7 2.7 0 1 1 15.6 11.6'),
+    _Shape.path('M16.4 14.4 C18.6 14.6 20.2 16.4 20.6 19'),
+  ],
+  ArcIcon.money: [
+    _Shape.path('M5 6.5 H19 Q21 6.5 21 8.5 V15.5 Q21 17.5 19 17.5 H5 Q3 17.5 3 15.5 V8.5 Q3 6.5 5 6.5 Z',
+        fill: _Fill.active),
+    _Shape.circle(12, 12, 2.6),
+    _Shape.circle(6.6, 12, 0.8, fill: _Fill.solid),
+    _Shape.circle(17.4, 12, 0.8, fill: _Fill.solid),
+  ],
+  ArcIcon.review: [
+    _Shape.path('M7 5 H17 Q19 5 19 7 V19 Q19 21 17 21 H7 Q5 21 5 19 V7 Q5 5 7 5 Z',
+        fill: _Fill.active),
+    _Shape.path('M9.5 3.5 H14.5 Q15.3 3.5 15.3 4.3 V6.2 Q15.3 7 14.5 7 H9.5 Q8.7 7 8.7 6.2 V4.3 Q8.7 3.5 9.5 3.5 Z'),
+    _Shape.path('M9 13.6 L11.2 15.8 L15.2 11.4'),
+  ],
+  ArcIcon.video: [
+    _Shape.path('M5.5 7 H13.5 Q16 7 16 9.5 V14.5 Q16 17 13.5 17 H5.5 Q3 17 3 14.5 V9.5 Q3 7 5.5 7 Z',
+        fill: _Fill.active),
+    _Shape.path('M16 10.6 L20 8.2 Q21 7.7 21 8.8 V15.2 Q21 16.3 20 15.8 L16 13.4'),
+  ],
+  ArcIcon.warning: [
+    _Shape.path('M10.6 5.2 Q12 3 13.4 5.2 L20.6 17.6 Q21.7 19.5 19.5 19.5 H4.5 Q2.3 19.5 3.4 17.6 Z',
+        fill: _Fill.active),
+    _Shape.path('M12 9.5 V13.4'),
+    _Shape.circle(12, 16.4, 0.95, fill: _Fill.solid),
+  ],
+  ArcIcon.tag: [
+    _Shape.path('M4 11.6 V5.5 Q4 4 5.5 4 H11.6 L20 12.4 Q21 13.4 20 14.4 L14.4 20 Q13.4 21 12.4 20 Z',
+        fill: _Fill.active),
+    _Shape.circle(8.4, 8.4, 1.5),
+  ],
+  ArcIcon.alert: [
+    _Shape.circle(12, 12, 8.5, fill: _Fill.active),
+    _Shape.path('M12 7.6 V12.6'),
+    _Shape.circle(12, 15.9, 0.95, fill: _Fill.solid),
+  ],
+  ArcIcon.plus: [
+    _Shape.path('M12 5 V19 M5 12 H19'),
+  ],
+  ArcIcon.image: [
+    _Shape.path('M6 4.5 H18 Q19.5 4.5 19.5 6 V18 Q19.5 19.5 18 19.5 H6 Q4.5 19.5 4.5 18 V6 Q4.5 4.5 6 4.5 Z',
+        fill: _Fill.active),
+    _Shape.path('M4.8 16.5 L9.5 11.6 L13 15 L15.5 12.6 L19.3 16.3'),
+    _Shape.circle(15, 8.6, 1.5),
+  ],
+  ArcIcon.qr: [
+    _Shape.path('M5.5 4.5 H9 Q10 4.5 10 5.5 V9 Q10 10 9 10 H5.5 Q4.5 10 4.5 9 V5.5 Q4.5 4.5 5.5 4.5 Z',
+        fill: _Fill.active),
+    _Shape.path('M15 4.5 H18.5 Q19.5 4.5 19.5 5.5 V9 Q19.5 10 18.5 10 H15 Q14 10 14 9 V5.5 Q14 4.5 15 4.5 Z',
+        fill: _Fill.active),
+    _Shape.path('M5.5 14 H9 Q10 14 10 15 V18.5 Q10 19.5 9 19.5 H5.5 Q4.5 19.5 4.5 18.5 V15 Q4.5 14 5.5 14 Z',
+        fill: _Fill.active),
+    _Shape.path('M14 14 H16.2 V16.2 H14 Z M17.3 17.3 H19.5 V19.5 H17.3 Z', fill: _Fill.solid),
+    _Shape.path('M18.4 14 V15.4 M14 18.4 V19.5'),
+  ],
+  ArcIcon.calendar: [
+    _Shape.path('M6 5.5 H18 Q20 5.5 20 7.5 V18 Q20 20 18 20 H6 Q4 20 4 18 V7.5 Q4 5.5 6 5.5 Z',
+        fill: _Fill.active),
+    _Shape.path('M4 10 H20 M8.5 3.5 V7 M15.5 3.5 V7'),
+  ],
+  ArcIcon.back: [
+    _Shape.path('M19 12 H5.5 M11 6.5 L5.5 12 L11 17.5'),
+  ],
+  ArcIcon.skipPrev: [
+    _Shape.path('M6.5 6 V18'),
+    _Shape.path('M18 6.6 Q18 5.5 17.1 6.1 L9.6 11.2 Q8.6 12 9.6 12.8 L17.1 17.9 Q18 18.5 18 17.4 Z',
+        fill: _Fill.solid),
+  ],
+  ArcIcon.skipNext: [
+    _Shape.path('M17.5 6 V18'),
+    _Shape.path('M6 6.6 Q6 5.5 6.9 6.1 L14.4 11.2 Q15.4 12 14.4 12.8 L6.9 17.9 Q6 18.5 6 17.4 Z',
+        fill: _Fill.solid),
+  ],
+  ArcIcon.rewind: [
+    _Shape.path('M12 4.5 A7.5 7.5 0 1 1 4.5 12'),
+    _Shape.path('M14.6 2.1 L12 4.5 L14.6 6.9'),
+  ],
+  ArcIcon.forward: [
+    _Shape.path('M12 4.5 A7.5 7.5 0 1 0 19.5 12'),
+    _Shape.path('M9.4 2.1 L12 4.5 L9.4 6.9'),
+  ],
+  ArcIcon.pause: [
+    _Shape.path('M8 5.5 H9.8 Q10.8 5.5 10.8 6.5 V17.5 Q10.8 18.5 9.8 18.5 H8 Q7 18.5 7 17.5 V6.5 Q7 5.5 8 5.5 Z M14.2 5.5 H16 Q17 5.5 17 6.5 V17.5 Q17 18.5 16 18.5 H14.2 Q13.2 18.5 13.2 17.5 V6.5 Q13.2 5.5 14.2 5.5 Z',
+        fill: _Fill.solid),
+  ],
+  ArcIcon.replay: [
+    _Shape.path('M5 12 A7 7 0 1 0 7.2 6.9'),
+    _Shape.path('M6.6 3.4 L7.2 7 L10.8 6.5'),
+  ],
+  ArcIcon.fullscreen: [
+    _Shape.path(
+        'M4.5 9 V5.5 Q4.5 4.5 5.5 4.5 H9 M15 4.5 H18.5 Q19.5 4.5 19.5 5.5 V9 M19.5 15 V18.5 Q19.5 19.5 18.5 19.5 H15 M9 19.5 H5.5 Q4.5 19.5 4.5 18.5 V15'),
+  ],
+  ArcIcon.fullscreenExit: [
+    _Shape.path(
+        'M9 4.5 V8 Q9 9 8 9 H4.5 M15 4.5 V8 Q15 9 16 9 H19.5 M19.5 15 H16 Q15 15 15 16 V19.5 M4.5 15 H8 Q9 15 9 16 V19.5'),
+  ],
+  ArcIcon.playlist: [
+    _Shape.path('M4 7 H16 M4 12 H16 M4 17 H11'),
+    _Shape.path('M15 14.4 L20.4 17.4 L15 20.4 Z', fill: _Fill.solid),
+  ],
+  ArcIcon.close: [
+    _Shape.path('M6.5 6.5 L17.5 17.5 M17.5 6.5 L6.5 17.5'),
+  ],
   ArcIcon.phone: [
     _Shape.path(
         'M8.5 3.5 H15.5 Q17.5 3.5 17.5 5.5 V18.5 Q17.5 20.5 15.5 20.5 H8.5 Q6.5 20.5 6.5 18.5 V5.5 Q6.5 3.5 8.5 3.5 Z',
@@ -250,6 +382,20 @@ class _ArcIconPainter extends CustomPainter {
       if (s.fill == _Fill.solid) canvas.drawPath(path, solid);
       if (s.fill == _Fill.active && active) canvas.drawPath(path, soft);
       if (s.stroke && s.fill != _Fill.solid) canvas.drawPath(path, line);
+    }
+    // The 10-second skip icons carry their number inside the arrow.
+    if (icon == ArcIcon.rewind || icon == ArcIcon.forward) {
+      final tp = TextPainter(
+        text: TextSpan(
+            text: '10',
+            style: TextStyle(
+                fontSize: 6.8,
+                fontWeight: FontWeight.w800,
+                color: color,
+                height: 1)),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(12 - tp.width / 2, 12.4 - tp.height / 2));
     }
     canvas.restore();
   }

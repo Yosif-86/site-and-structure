@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'i18n/strings.dart';
+import 'screens/auth_screen.dart';
 import 'screens/catalogue_screen.dart';
 import 'screens/set_new_password_screen.dart';
 import 'services/error_reporter.dart';
 import 'services/supabase_service.dart';
 import 'theme.dart';
-import 'widgets/intro_overlay.dart';
+import 'widgets/blueprint_splash.dart';
 import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -104,9 +105,6 @@ class SiteAndStructureApp extends StatelessWidget {
           title: AppStrings.instance.t('app_name'),
           debugShowCheckedModeBanner: false,
           theme: buildAppTheme(),
-          // The launch intro sits above the navigator (not a route), so Home
-          // loads underneath it and deep links (password reset) still open
-          // normally; it removes itself when the animation ends.
           // Status bar icons follow the theme: light on the dark sheet,
           // dark on the white one (screens with an AppBar get the same from
           // appBarTheme; the sign-in screen forces light itself).
@@ -115,15 +113,63 @@ class SiteAndStructureApp extends StatelessWidget {
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
             child: PrivacyOverlay(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [child!, const IntroOverlay()],
-              ),
+              child: child!,
             ),
           ),
-          home: const CatalogueScreen(),
+          home: const _LaunchGate(),
         );
       },
+    );
+  }
+}
+
+/// What a cold start shows. Signed out: straight to the sign-in screen,
+/// whose Blueprint Pour animation then lifts into the form (back from there
+/// still lands on Home for browsing as a guest). Signed in: the same
+/// animation as a splash over Home, then a fade.
+class _LaunchGate extends StatefulWidget {
+  const _LaunchGate();
+
+  @override
+  State<_LaunchGate> createState() => _LaunchGateState();
+}
+
+class _LaunchGateState extends State<_LaunchGate> {
+  final bool _signedIn = SupabaseService.instance.isLoggedIn;
+  late bool _splash = _signedIn;
+  // Dark cover for the single frame before the sign-in route is pushed, so
+  // Home never flashes between the native splash and the sign-in screen.
+  late bool _cover = !_signedIn;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_signedIn) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // A password-reset link that cold-started the app owns the screen.
+      if (!_setNewPasswordOpen) {
+        navigatorKey.currentState?.push(PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const AuthScreen(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: const Duration(milliseconds: 250),
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+        ));
+      }
+      if (mounted) setState(() => _cover = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const CatalogueScreen(),
+        if (_cover) const ColoredBox(color: Color(0xFF14120F)),
+        if (_splash)
+          BlueprintSplash(onDone: () => setState(() => _splash = false)),
+      ],
     );
   }
 }

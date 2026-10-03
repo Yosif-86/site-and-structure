@@ -11,7 +11,17 @@ class AppStrings extends ChangeNotifier {
   String get lang => _lang;
   bool get isAr => true;
 
-  String t(String key) => _map[key] ?? key;
+  String t(String key) {
+    final v = _map[key];
+    if (v != null) return v;
+    if (key.startsWith('For security purposes')) {
+      return 'محاولات كثيرة. انتظر قليلًا ثم حاول مجددًا.';
+    }
+    if (key.contains('SocketException') || key.contains('Failed host lookup')) {
+      return 'لا يوجد اتصال بالإنترنت. تحقق من الشبكة وحاول مجددًا.';
+    }
+    return key;
+  }
 
   static final Map<String, String> _map = {
     'app_name': 'Arc Platform',
@@ -398,5 +408,70 @@ class AppStrings extends ChangeNotifier {
     'privacy_h_sharing': 'المشاركة',
     'privacy_b_sharing':
         'لا نبيع بياناتك. تُخزَّن البيانات لدى مزوّد الاستضافة والخدمات السحابية الذي يشغّل المنصة، ويطّلع فريق الإدارة عليها لتشغيل المنصة والتحقق من المدفوعات فقط.',
+    // Dashboards (admin / teacher) and the player.
+    'dash_admin_sub': 'نظرة عامة على المنصة وما يحتاج انتباهك',
+    'dash_teacher_sub': 'دوراتك وطلابك وأرباحك في مكان واحد',
+    'dash_sec_content': 'المحتوى',
+    'dash_sec_people': 'المستخدمون',
+    'dash_sec_money': 'المالية',
+    'dash_sec_security': 'الأمان والنظام',
+    'dash_needs_attention': 'يحتاج انتباهك',
+    'dash_quick_actions': 'إجراءات سريعة',
+    'no_teachers': 'لا يوجد مدرّسون بعد.',
+    'no_students': 'لا يوجد طلاب نشطون بعد.',
+    'no_revenue': 'لا توجد إيرادات بعد.',
+    'no_review': 'لا توجد دورات بانتظار المراجعة.',
+    'no_uploads': 'لا توجد محاضرات بانتظار الرفع.',
+    'no_discount_codes': 'لا توجد أكواد خصم بعد.',
+    'no_errors': 'لا توجد أخطاء مسجلة. علامة جيدة.',
+    'no_invites': 'لا توجد دعوات بعد.',
+    'rev_total': 'الإجمالي',
+    'rev_revenue': 'الإيرادات',
+    'rev_teacher': 'للمدرّس',
+    'rev_mine': 'للمنصة',
+    'rev_students': 'طالب',
+    'rev_discounted': 'بخصم',
+    'pay_to_teacher': 'الدفع للمدرّس',
+    'btn_publish': 'نشر',
+    'btn_reject': 'رفض',
+    'create_invite': 'إنشاء رابط دعوة',
+    'btn_revoke': 'إلغاء الدعوة',
+    'btn_dismiss': 'تجاهل',
+    'btn_clear_all': 'مسح الكل',
+    'invite_created': 'أُنشئت',
+    'invite_expires': 'تنتهي',
+    'invite_used_by': 'استخدمها',
+    'st_used': 'مستخدمة',
+    'st_expired': 'منتهية',
+    'st_unused': 'متاحة',
+    'st_inactive': 'متوقف',
+    'st_active': 'فعّال',
+    'uploads_hint': 'انشر هذه المحاضرة من لوحة الويب بعد جاهزية ملفها. التطبيق يعرض المحاضرات المعلقة للمتابعة فقط.',
+    'my_payment_hint': 'يظهر للطلاب عند الدفع لأي دورة لا يُدفع ثمنها للمدرّس.',
+    'codes_used': 'مستخدم',
+    'create_code': 'إنشاء كود خصم',
+    'lesson_of': 'الدرس {n} من {total}',
+    'now_playing': 'يُعرض الآن',
+    'course_lessons': 'دروس الدورة',
+    'locked_lesson': 'مقفل',
+    'have_account': 'لديك حساب بالفعل؟',
+    'copied': 'تم النسخ',
+    'btn_copy': 'نسخ',
+    'invite_code_label': 'رمز الدعوة',
+    'invite_code_hint': 'أرسل الرمز للمدرّس: يُنشئ حسابًا في التطبيق ويضغط «لديك رمز دعوة؟» ثم يلصقه.',
+    'confirm_revoke_invite': 'إلغاء هذه الدعوة؟ لن يعمل الرمز بعد ذلك.',
+    'err_create_invite': 'تعذّر إنشاء الدعوة، حاول مرة أخرى.',
+    'err_generic_failed': 'حدث خطأ، حاول مرة أخرى.',
+    // Supabase auth messages arrive in English; translated by exact text.
+    'Invalid login credentials': 'الإيميل أو كلمة المرور غير صحيحة، يرجى التأكد من المعلومات المدخلة.',
+    'Login failed.': 'تعذّر تسجيل الدخول، حاول مرة أخرى.',
+    'Email not confirmed': 'لم يتم تأكيد البريد الإلكتروني بعد. افتح رابط التأكيد في بريدك.',
+    'User already registered': 'هذا البريد الإلكتروني مسجّل مسبقًا. سجّل الدخول بدلًا من ذلك.',
+    'Email rate limit exceeded': 'تم إرسال رسائل كثيرة. حاول بعد قليل.',
+    'email rate limit exceeded': 'تم إرسال رسائل كثيرة. حاول بعد قليل.',
+    'Too many requests': 'محاولات كثيرة. انتظر قليلًا ثم حاول مجددًا.',
+    'Unable to validate email address: invalid format': 'صيغة البريد الإلكتروني غير صحيحة.',
+    'New password should be different from the old password.': 'يجب أن تختلف كلمة المرور الجديدة عن القديمة.',
+    'Password should be at least 6 characters.': 'كلمة المرور قصيرة جدًا.',
   };
 }

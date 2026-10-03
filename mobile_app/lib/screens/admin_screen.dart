@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -6,7 +7,8 @@ import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
-import '../widgets/glass_card.dart';
+import '../widgets/arc_icons.dart';
+import '../widgets/dashboard_kit.dart';
 import '../widgets/glass_scaffold.dart';
 
 /// Port of admin.html's dashboard: a landing view of clickable stat cards,
@@ -387,13 +389,13 @@ class _AdminScreenState extends State<AdminScreen> {
           {'token': token, 'created_by': user.id, 'expires_at': expiresAt});
       await _loadAll();
     } catch (e) {
-      _showError('Failed to create invite: $e');
+      _showError(AppStrings.instance.t('err_create_invite'));
     }
   }
 
   Future<void> _revokeInvite(String id) async {
     final confirmed = await _confirm(
-        'Revoke this invite? The link will stop working.',
+        AppStrings.instance.t('confirm_revoke_invite'),
         confirmLabel: AppStrings.instance.t('btn_confirm'));
     if (!confirmed) return;
     try {
@@ -488,7 +490,7 @@ class _AdminScreenState extends State<AdminScreen> {
         appBar: AppBar(
           leading: _view != _View.dashboard
               ? IconButton(
-                  icon: const Icon(Icons.arrow_back),
+                  icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
                   onPressed: () => _goto(_View.dashboard))
               : null,
           title:
@@ -584,15 +586,26 @@ class _AdminScreenState extends State<AdminScreen> {
 
   // ---- Dashboard ----
 
+  int _parsePrice(dynamic price) {
+    final digits = RegExp(r'\d')
+        .allMatches((price ?? '').toString())
+        .map((m) => m.group(0))
+        .join();
+    return digits.isEmpty ? 0 : int.parse(digits);
+  }
+
+  String _date(String? iso, {bool time = false}) {
+    final d = DateTime.tryParse(iso ?? '')?.toLocal();
+    if (d == null) return '—';
+    final s = d.toString();
+    return time ? s.substring(0, 16) : s.split(' ').first;
+  }
+
   Widget _buildDashboard(String Function(String) t) {
     final revenue = _activeEnrollments.fold<int>(0, (sum, e) {
       final c = _courseBySlug[e['course_slug']];
       if (c == null || c['is_free'] == true) return sum;
-      final digits = RegExp(r'\d')
-          .allMatches((c['price'] ?? '').toString())
-          .map((m) => m.group(0))
-          .join();
-      return sum + (digits.isEmpty ? 0 : int.parse(digits));
+      return sum + _parsePrice(c['price']);
     });
     final now = DateTime.now();
     final activeInvitesCount = _invites
@@ -613,138 +626,153 @@ class _AdminScreenState extends State<AdminScreen> {
                 ?['teacher_payment_detail'] as String?)
             ?.isNotEmpty ==
         true;
+    final activeStudents = {for (final e in _activeEnrollments) e['user_id']}.length;
+    final pendingEnrollments =
+        _enrollments.where((e) => e['status'] != 'active').length;
 
-    final cards = <_StatCardData>[
-      _StatCardData(Icons.school_outlined, '${_publishedCourses.length}',
-          t('published_courses'), AppColors.teal, () => _goto(_View.courses)),
-      _StatCardData(Icons.people_outline, '${_teacherProfiles.length}',
-          t('teachers'), AppColors.red, () => _goto(_View.teachers)),
-      _StatCardData(
-          Icons.groups_outlined,
-          '${{for (final e in _activeEnrollments) e['user_id']}.length}',
-          t('active_students'),
-          AppColors.muted,
-          () => _goto(_View.students)),
-      _StatCardData(Icons.attach_money, revenue.toString(), t('est_revenue'),
-          AppColors.red, () => _goto(_View.revenue)),
-      _StatCardData(
-          Icons.menu_book_outlined,
-          '${_enrollments.length}',
-          t('students_courses'),
-          AppColors.teal,
-          () => _goto(_View.enrollments)),
-      _StatCardData(Icons.fact_check_outlined, '${_pendingReview.length}',
-          t('course_review'), AppColors.teal, () => _goto(_View.review)),
-      _StatCardData(Icons.mail_outline, '$activeInvitesCount',
-          t('teacher_invites'), AppColors.red, () => _goto(_View.invites)),
-      _StatCardData(Icons.video_library_outlined, '${_pendingUploads.length}',
-          t('pending_lectures'), AppColors.muted, () => _goto(_View.uploads)),
-      _StatCardData(Icons.warning_amber_outlined, '${_flagged.length}',
-          t('flagged_logins'), AppColors.red, () => _goto(_View.flagged)),
-      _StatCardData(Icons.phone_android_outlined, '${_devices.length}',
-          t('trusted_devices'), AppColors.teal, () => _goto(_View.devices)),
-      _StatCardData(Icons.local_offer_outlined, '$activeDiscountCodes',
-          t('discount_codes'), AppColors.red, () => _goto(_View.discountCodes)),
-      _StatCardData(Icons.error_outline, '${_errorLogs.length}', t('error_log'),
-          AppColors.red, () => _goto(_View.errorLog)),
-      _StatCardData(Icons.payments_outlined, myPaySet ? '✓' : '—',
-          t('my_payment_number'), AppColors.teal, () => _goto(_View.myPayment)),
-    ];
+    var delay = 0;
+    Widget tile(ArcIcon icon, String value, String label, Color accent,
+            _View view, {bool alert = false}) =>
+        FadeSlideIn(
+          delayMs: delay += 30,
+          child: DashStatCard(
+              icon: icon,
+              value: value,
+              label: label,
+              accent: accent,
+              alert: alert,
+              onTap: () => _goto(view)),
+        );
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 1.5),
-      itemCount: cards.length,
-      itemBuilder: (context, i) =>
-          FadeSlideIn(delayMs: i * 40, child: _StatCard(data: cards[i])),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        FadeSlideIn(
+          delayMs: 0,
+          child: DashHero(
+            title: t('nav_admin'),
+            subtitle: t('dash_admin_sub'),
+            stats: [
+              ('$revenue', t('est_revenue')),
+              ('$activeStudents', t('active_students')),
+              ('${_pendingReview.length + pendingEnrollments}',
+                  t('dash_needs_attention')),
+            ],
+          ),
+        ),
+        DashSection(t('dash_sec_content')),
+        DashGrid(children: [
+          tile(ArcIcon.courses, '${_publishedCourses.length}',
+              t('published_courses'), AppColors.teal, _View.courses),
+          tile(ArcIcon.review, '${_pendingReview.length}', t('course_review'),
+              AppColors.red, _View.review,
+              alert: _pendingReview.isNotEmpty),
+          tile(ArcIcon.video, '${_pendingUploads.length}',
+              t('pending_lectures'), AppColors.byline, _View.uploads,
+              alert: _pendingUploads.isNotEmpty),
+        ]),
+        DashSection(t('dash_sec_people')),
+        DashGrid(children: [
+          tile(ArcIcon.award, '${_teacherProfiles.length}', t('teachers'),
+              AppColors.red, _View.teachers),
+          tile(ArcIcon.users, '$activeStudents', t('active_students'),
+              AppColors.teal, _View.students),
+          tile(ArcIcon.lessons, '${_enrollments.length}',
+              t('students_courses'), AppColors.byline, _View.enrollments,
+              alert: pendingEnrollments > 0),
+          tile(ArcIcon.mail, '$activeInvitesCount', t('teacher_invites'),
+              AppColors.teal, _View.invites),
+        ]),
+        DashSection(t('dash_sec_money')),
+        DashGrid(children: [
+          tile(ArcIcon.money, '$revenue', t('est_revenue'), AppColors.red,
+              _View.revenue),
+          tile(ArcIcon.tag, '$activeDiscountCodes', t('discount_codes'),
+              AppColors.byline, _View.discountCodes),
+          tile(ArcIcon.wallet, myPaySet ? '✓' : '—', t('my_payment_number'),
+              AppColors.teal, _View.myPayment,
+              alert: !myPaySet),
+        ]),
+        DashSection(t('dash_sec_security')),
+        DashGrid(children: [
+          tile(ArcIcon.warning, '${_flagged.length}', t('flagged_logins'),
+              AppColors.red, _View.flagged,
+              alert: _flagged.isNotEmpty),
+          tile(ArcIcon.phone, '${_devices.length}', t('trusted_devices'),
+              AppColors.teal, _View.devices),
+          tile(ArcIcon.alert, '${_errorLogs.length}', t('error_log'),
+              AppColors.error, _View.errorLog,
+              alert: _errorLogs.isNotEmpty),
+        ]),
+      ],
     );
   }
 
   // ---- Drill-in views ----
 
+  Widget _list(int count, Widget Function(int) item) => ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        itemCount: count,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, i) =>
+            FadeSlideIn(delayMs: (i % 10) * 30, child: item(i)),
+      );
+
+  String _priceLabel(Map<String, dynamic> c, String Function(String) t) =>
+      c['is_free'] == true ? t('card_free') : '${c['price'] ?? '—'}';
+
   Widget _buildCoursesList(String Function(String) t) {
-    if (_publishedCourses.isEmpty) return _empty(t('no_courses'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _publishedCourses.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final c = _publishedCourses[i];
-        final teacherName =
-            (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
-        return _AdminCard(children: [
-          Text(c['title'] as String? ?? '—',
-              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(
-              '$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}',
-              style: AppFonts.body(size: 13, color: AppColors.muted)),
-        ]);
-      },
-    );
+    if (_publishedCourses.isEmpty) {
+      return _empty(t('no_courses'), ArcIcon.courses);
+    }
+    return _list(_publishedCourses.length, (i) {
+      final c = _publishedCourses[i];
+      final teacherName =
+          (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.courses, accent: AppColors.teal),
+        title: c['title'] as String? ?? '—',
+        subtitle: teacherName,
+        trailing: StatusPill(_priceLabel(c, t),
+            tone: c['is_free'] == true ? StatusTone.good : StatusTone.neutral),
+      );
+    });
   }
 
+  Widget _person(String? name, String? email, String? phone) => DashCard(
+        leading: DashAvatar(name: name),
+        title: name ?? '—',
+        subtitle: email ?? '—',
+        meta: [if (phone != null && phone.isNotEmpty) phone],
+      );
+
   Widget _buildTeachersList(String Function(String) t) {
-    if (_teacherProfiles.isEmpty) return _empty('No teachers yet.');
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _teacherProfiles.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final p = _teacherProfiles[i];
-        final email = _emailByUser[p['id']] ?? '—';
-        return _AdminCard(children: [
-          Text(p['full_name'] as String? ?? '—',
-              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text('$email · ${p['phone'] ?? '—'}',
-              style: AppFonts.body(size: 13, color: AppColors.muted)),
-        ]);
-      },
-    );
+    if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);
+    return _list(_teacherProfiles.length, (i) {
+      final p = _teacherProfiles[i];
+      return _person(p['full_name'] as String?, _emailByUser[p['id']],
+          p['phone'] as String?);
+    });
   }
 
   Widget _buildStudentsList(String Function(String) t) {
     final userIds =
         {for (final e in _activeEnrollments) e['user_id'] as String}.toList();
-    if (userIds.isEmpty) return _empty('No active students yet.');
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: userIds.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final uid = userIds[i];
-        final prof = _profileByUser[uid];
-        final email = _emailByUser[uid] ?? '—';
-        return _AdminCard(children: [
-          Text(prof?['full_name'] as String? ?? '—',
-              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text('$email · ${prof?['phone'] ?? '—'}',
-              style: AppFonts.body(size: 13, color: AppColors.muted)),
-        ]);
-      },
-    );
+    if (userIds.isEmpty) return _empty(t('no_students'), ArcIcon.users);
+    return _list(userIds.length, (i) {
+      final uid = userIds[i];
+      final prof = _profileByUser[uid];
+      return _person(prof?['full_name'] as String?, _emailByUser[uid],
+          prof?['phone'] as String?);
+    });
   }
 
   Widget _buildRevenue(String Function(String) t) {
-    int parsePrice(dynamic price) {
-      final digits = RegExp(r'\d')
-          .allMatches((price ?? '').toString())
-          .map((m) => m.group(0))
-          .join();
-      return digits.isEmpty ? 0 : int.parse(digits);
-    }
-
     final rows = <Map<String, dynamic>>[];
     int totalRevenue = 0, totalTeacher = 0, totalMine = 0;
     for (final c in _publishedCourses) {
       if (c['is_free'] == true) continue;
-      final priceNum = parsePrice(c['price']);
+      final priceNum = _parsePrice(c['price']);
       if (priceNum <= 0) continue;
       final enrolled = _activeEnrollments
           .where((e) => e['course_slug'] == c['slug'])
@@ -780,33 +808,32 @@ class _AdminScreenState extends State<AdminScreen> {
     }
     rows.sort((a, b) => (b['revenue'] as int).compareTo(a['revenue'] as int));
 
-    if (rows.isEmpty) return _empty('No revenue yet.');
+    if (rows.isEmpty) return _empty(t('no_revenue'), ArcIcon.money);
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        _AdminCard(children: [
-          Text('Total',
-              style: AppFonts.body(size: 15, weight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(
-              'Revenue: $totalRevenue · Teacher: $totalTeacher · Mine: $totalMine',
-              style: AppFonts.mono(size: 11, color: AppColors.teal)),
-        ]),
-        const SizedBox(height: 10),
+        DashHero(
+          title: t('rev_total'),
+          subtitle: t('est_revenue'),
+          stats: [
+            ('$totalRevenue', t('rev_revenue')),
+            ('$totalTeacher', t('rev_teacher')),
+            ('$totalMine', t('rev_mine')),
+          ],
+        ),
+        const SizedBox(height: 12),
         for (final r in rows) ...[
-          _AdminCard(children: [
-            Text((r['c']['title'] as String?) ?? '—',
-                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(
-              '${_profileByUser[r['c']['teacher_id']]?['full_name'] ?? '—'} · ${r['students']} students${r['discounted'] > 0 ? ' (${r['discounted']} discounted)' : ''}',
-              style: AppFonts.body(size: 13, color: AppColors.muted),
-            ),
-            const SizedBox(height: 4),
-            Text(
-                'Revenue: ${r['revenue']} · Teacher: ${r['teacherAmt']} · Mine: ${r['mineAmt']}',
-                style: AppFonts.mono(size: 10.5)),
-          ]),
+          DashCard(
+            leading: DashIconBadge(icon: ArcIcon.money, accent: AppColors.red),
+            title: (r['c']['title'] as String?) ?? '—',
+            subtitle:
+                '${_profileByUser[r['c']['teacher_id']]?['full_name'] ?? '—'} · ${r['students']} ${t('rev_students')}${r['discounted'] > 0 ? ' (${r['discounted']} ${t('rev_discounted')})' : ''}',
+            trailing: Text('${r['revenue']}',
+                style: AppFonts.code(size: 15, color: AppColors.red)),
+            meta: [
+              '${t('rev_teacher')}: ${r['teacherAmt']} · ${t('rev_mine')}: ${r['mineAmt']}'
+            ],
+          ),
           const SizedBox(height: 10),
         ],
       ],
@@ -814,146 +841,112 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildEnrollments(String Function(String) t) {
-    if (_enrollments.isEmpty) return _empty(t('no_enrollments'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _enrollments.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final e = _enrollments[i];
-        final userId = e['user_id'] as String;
-        final prof = _profileByUser[userId];
-        final email = _emailByUser[userId] ?? '—';
-        final title = _courseTitle(e['course_slug'] as String);
-        final isActive = e['status'] == 'active';
-        final proofPath = e['payment_proof_path'] as String?;
-        final payment = e['payment_method'] != null
-            ? '${e['payment_method']}${e['payment_detail'] != null ? ' — ${e['payment_detail']}' : ''}'
-            : '—';
-        final createdAt = DateTime.tryParse(e['created_at'] as String? ?? '');
-        final approvedBy = e['approved_by'] as String?;
-        final approvedAt = DateTime.tryParse(e['approved_at'] as String? ?? '');
-        return _AdminCard(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                    child: Text(email,
-                        style:
-                            AppFonts.body(size: 15, weight: FontWeight.w600))),
-                _StatusChip(
-                    isActive: isActive,
-                    activeLabel: t('status_active'),
-                    pendingLabel: t('status_pending')),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(title, style: AppFonts.body(size: 13, color: AppColors.muted)),
-            if (prof?['full_name'] != null || prof?['phone'] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                    '${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}',
-                    style: AppFonts.mono(size: 10.5)),
-              ),
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                  '$payment${createdAt != null ? ' · ${createdAt.toLocal().toString().split(' ').first}' : ''}',
-                  style: AppFonts.mono(size: 10.5)),
-            ),
-            if (approvedBy != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
-                  '${t('approved_by')}: ${_emailByUser[approvedBy] ?? approvedBy}${approvedAt != null ? ' · ${approvedAt.toLocal()}' : ''}',
-                  style: AppFonts.mono(size: 10.5, color: AppColors.teal),
-                ),
-              ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (proofPath != null)
-                  OutlinedButton(
-                      onPressed: () => _viewProof(proofPath),
-                      child: Text(t('view_proof'))),
-                if (!isActive)
-                  ElevatedButton(
-                      onPressed: () => _approve(e['id'] as String),
-                      child: Text(t('approve'))),
-                OutlinedButton(
-                    onPressed: () =>
-                        _removeEnrollment(e['id'] as String, title, email),
-                    child: Text(t('remove'))),
-              ],
-            ),
-          ],
-        );
-      },
-    );
+    if (_enrollments.isEmpty) return _empty(t('no_enrollments'), ArcIcon.lessons);
+    return _list(_enrollments.length, (i) {
+      final e = _enrollments[i];
+      final userId = e['user_id'] as String;
+      final prof = _profileByUser[userId];
+      final email = _emailByUser[userId] ?? '—';
+      final title = _courseTitle(e['course_slug'] as String);
+      final isActive = e['status'] == 'active';
+      final proofPath = e['payment_proof_path'] as String?;
+      final payment = e['payment_method'] != null
+          ? '${e['payment_method']}${e['payment_detail'] != null ? ' — ${e['payment_detail']}' : ''}'
+          : '—';
+      final approvedBy = e['approved_by'] as String?;
+      return DashCard(
+        leading: DashAvatar(name: prof?['full_name'] as String? ?? email),
+        title: email,
+        titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+        subtitle: title,
+        trailing: StatusPill(
+            isActive ? t('status_active') : t('status_pending'),
+            tone: isActive ? StatusTone.good : StatusTone.warn),
+        meta: [
+          if (prof?['full_name'] != null || prof?['phone'] != null)
+            '${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}',
+          '$payment · ${_date(e['created_at'] as String?)}',
+          if (approvedBy != null)
+            '${t('approved_by')}: ${_emailByUser[approvedBy] ?? approvedBy} · ${_date(e['approved_at'] as String?, time: true)}',
+        ],
+        actions: [
+          if (!isActive)
+            DashButton(t('approve'),
+                primary: true,
+                icon: ArcIcon.check,
+                onPressed: () => _approve(e['id'] as String)),
+          if (proofPath != null)
+            DashButton(t('view_proof'),
+                icon: ArcIcon.image, onPressed: () => _viewProof(proofPath)),
+          DashButton(t('remove'),
+              danger: true,
+              icon: ArcIcon.trash,
+              onPressed: () =>
+                  _removeEnrollment(e['id'] as String, title, email)),
+        ],
+      );
+    });
   }
 
   Widget _buildReview(String Function(String) t) {
-    if (_pendingReview.isEmpty) return _empty('No courses pending review.');
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _pendingReview.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final c = _pendingReview[i];
-        final teacherName =
-            (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
-        final id = c['id'] as String;
-        final title = c['title'] as String? ?? '—';
-        return _AdminCard(children: [
-          Text(title, style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(
-              '$teacherName · ${c['is_free'] == true ? t('card_free') : (c['price'] ?? '—')}',
-              style: AppFonts.body(size: 13, color: AppColors.muted)),
-          Row(children: [
-            Checkbox(
-                value: c['pay_to_teacher'] == true,
-                onChanged: (v) => _togglePayToTeacher(id, v ?? false)),
-            Expanded(
-                child: Text('Pay to teacher',
-                    style: AppFonts.body(size: 12.5, color: AppColors.muted))),
-          ]),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            ElevatedButton(
-                onPressed: () => _publishCourse(id), child: Text('Publish')),
-            OutlinedButton(
-                onPressed: () => _rejectCourse(id, title),
-                child: Text('Reject')),
-          ]),
-        ]);
-      },
-    );
+    if (_pendingReview.isEmpty) return _empty(t('no_review'), ArcIcon.review);
+    return _list(_pendingReview.length, (i) {
+      final c = _pendingReview[i];
+      final teacherName =
+          (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
+      final id = c['id'] as String;
+      final title = c['title'] as String? ?? '—';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.review, accent: AppColors.red),
+        title: title,
+        subtitle: '$teacherName · ${_priceLabel(c, t)}',
+        extra: [
+          const SizedBox(height: 8),
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _togglePayToTeacher(id, c['pay_to_teacher'] != true),
+            child: Row(children: [
+              Checkbox(
+                  value: c['pay_to_teacher'] == true,
+                  onChanged: (v) => _togglePayToTeacher(id, v ?? false)),
+              Text(t('pay_to_teacher'),
+                  style: AppFonts.body(size: 13, color: AppColors.muted)),
+            ]),
+          ),
+        ],
+        actions: [
+          DashButton(t('btn_publish'),
+              primary: true,
+              icon: ArcIcon.check,
+              onPressed: () => _publishCourse(id)),
+          DashButton(t('btn_reject'),
+              danger: true,
+              icon: ArcIcon.close,
+              onPressed: () => _rejectCourse(id, title)),
+        ],
+      );
+    });
   }
 
   Widget _buildInvites(String Function(String) t) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        ElevatedButton(
-            onPressed: _createInvite,
-            child: const Text('+ Create invite link')),
+        DashButton(t('create_invite'),
+            primary: true, icon: ArcIcon.plus, onPressed: _createInvite),
         const SizedBox(height: 12),
         if (_invites.isEmpty)
-          Text('No invites yet.', style: AppFonts.body(color: AppColors.muted))
+          DashEmpty(icon: ArcIcon.mail, message: t('no_invites'))
         else
           for (final inv in _invites) ...[
-            _AdminCard(children: _inviteRow(inv)),
+            _inviteRow(inv, t),
             const SizedBox(height: 10),
           ],
       ],
     );
   }
 
-  List<Widget> _inviteRow(Map<String, dynamic> inv) {
+  Widget _inviteRow(Map<String, dynamic> inv, String Function(String) t) {
     final usedAt = inv['used_at'];
     final expiresAt = DateTime.tryParse(inv['expires_at'] as String? ?? '') ??
         DateTime.fromMillisecondsSinceEpoch(0);
@@ -963,209 +956,158 @@ class _AdminScreenState extends State<AdminScreen> {
     final usedByName = inv['used_by'] != null
         ? (_profileByUser[inv['used_by']]?['full_name'] ?? '—')
         : '—';
-    return [
-      Row(children: [
-        Expanded(
-            child: Text(
-                'Created ${DateTime.tryParse(inv['created_at'] as String? ?? '')?.toLocal().toString().split(' ').first ?? '—'}',
-                style: AppFonts.body(size: 13, weight: FontWeight.w600))),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-              border: Border.all(color: AppColors.teal),
-              borderRadius: BorderRadius.circular(999)),
-          child: Text(status.toUpperCase(),
-              style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
-        ),
-      ]),
-      const SizedBox(height: 4),
-      Text(
-          'Expires ${expiresAt.toLocal().toString().split(' ').first} · Used by $usedByName',
-          style: AppFonts.body(size: 12.5, color: AppColors.muted)),
-      if (status == 'unused') ...[
-        const SizedBox(height: 8),
-        OutlinedButton(
-            onPressed: () => _revokeInvite(inv['id'] as String),
-            child: const Text('Revoke')),
+    return DashCard(
+      leading: DashIconBadge(icon: ArcIcon.mail, accent: AppColors.teal),
+      title: '${t('invite_created')} ${_date(inv['created_at'] as String?)}',
+      titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+      subtitle:
+          '${t('invite_expires')} ${expiresAt.toLocal().toString().split(' ').first} · ${t('invite_used_by')}: $usedByName',
+      trailing: StatusPill(t('st_$status'),
+          tone: switch (status) {
+            'unused' => StatusTone.good,
+            'used' => StatusTone.neutral,
+            _ => StatusTone.bad,
+          }),
+      // The app redeems invites by code (Sign up > "Have an invite code?"),
+      // so an open invite shows its code with a one-tap copy; the old web
+      // ?invite= links no longer lead anywhere.
+      extra: [
+        if (status == 'unused' && inv['token'] != null) ...[
+          const SizedBox(height: 12),
+          _InviteCode(code: inv['token'] as String),
+          const SizedBox(height: 6),
+          Text(t('invite_code_hint'),
+              style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+        ],
       ],
-    ];
+      actions: [
+        if (status == 'unused')
+          DashButton(t('btn_revoke'),
+              danger: true,
+              icon: ArcIcon.close,
+              onPressed: () => _revokeInvite(inv['id'] as String)),
+      ],
+    );
   }
 
   Widget _buildUploads(String Function(String) t) {
-    if (_pendingUploads.isEmpty) return _empty('No pending uploads.');
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _pendingUploads.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final l = _pendingUploads[i];
-        return _AdminCard(children: [
-          Text(l['title'] as String? ?? '—',
-              style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(
-            'Lecture id: ${l['id']}\nPath: ${l['pending_upload_path']}',
-            style: AppFonts.mono(size: 10.5, color: AppColors.muted),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Publish this lecture from the admin.html web dashboard once its R2 path is ready — the mobile screen surfaces pending uploads for visibility, not full re-encoding controls.',
-            style: AppFonts.body(size: 11.5, color: AppColors.muted2),
-          ),
-        ]);
-      },
-    );
+    if (_pendingUploads.isEmpty) return _empty(t('no_uploads'), ArcIcon.video);
+    return _list(_pendingUploads.length, (i) {
+      final l = _pendingUploads[i];
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.video, accent: AppColors.byline),
+        title: l['title'] as String? ?? '—',
+        meta: ['ID: ${l['id']}', '${l['pending_upload_path']}'],
+        extra: [
+          const SizedBox(height: 8),
+          Text(t('uploads_hint'),
+              style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+        ],
+      );
+    });
   }
 
   Widget _buildFlagged(String Function(String) t) {
-    if (_flagged.isEmpty) return _empty(t('no_flagged'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _flagged.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final f = _flagged[i];
-        final createdAt = DateTime.tryParse(f['created_at'] as String? ?? '');
-        return _AdminCard(
-          children: [
-            Text(f['email'] as String? ?? '—',
-                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text('${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
-                style: AppFonts.body(size: 13, color: AppColors.muted)),
-            const SizedBox(height: 4),
-            Text(
-              '${f['distance_km']} km${createdAt != null ? ' · ${createdAt.toLocal()}' : ''}',
-              style: AppFonts.mono(size: 10.5, color: AppColors.red),
-            ),
-          ],
-        );
-      },
-    );
+    if (_flagged.isEmpty) return _empty(t('no_flagged'), ArcIcon.warning);
+    return _list(_flagged.length, (i) {
+      final f = _flagged[i];
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.warning, accent: AppColors.error),
+        title: f['email'] as String? ?? '—',
+        titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+        subtitle: '${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
+        trailing: StatusPill('${f['distance_km']} km', tone: StatusTone.bad),
+        meta: [_date(f['created_at'] as String?, time: true)],
+      );
+    });
   }
 
   Widget _buildDevices(String Function(String) t) {
-    if (_devices.isEmpty) return _empty(t('no_devices'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _devices.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final d = _devices[i];
-        final email = _emailByUser[d['user_id'] as String] ?? '—';
-        final firstSeen = DateTime.tryParse(d['first_seen'] as String? ?? '');
-        final lastSeen = DateTime.tryParse(d['last_seen'] as String? ?? '');
-        return _AdminCard(
-          children: [
-            Text(email,
-                style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(d['device_label'] as String? ?? '—',
-                style: AppFonts.body(size: 13, color: AppColors.muted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 4),
-            Text(
-              '${t('th_first_seen')}: ${firstSeen != null ? firstSeen.toLocal().toString().split(' ').first : '—'} · ${t('th_last_seen')}: ${lastSeen != null ? lastSeen.toLocal() : '—'}',
-              style: AppFonts.mono(size: 10.5),
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: OutlinedButton(
-                  onPressed: () => _removeDevice(d['id'] as String, email),
-                  child: Text(t('remove'))),
-            ),
-          ],
-        );
-      },
-    );
+    if (_devices.isEmpty) return _empty(t('no_devices'), ArcIcon.phone);
+    return _list(_devices.length, (i) {
+      final d = _devices[i];
+      final email = _emailByUser[d['user_id'] as String] ?? '—';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.phone, accent: AppColors.teal),
+        title: email,
+        titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+        subtitle: d['device_label'] as String? ?? '—',
+        meta: [
+          '${t('th_first_seen')}: ${_date(d['first_seen'] as String?)}',
+          '${t('th_last_seen')}: ${_date(d['last_seen'] as String?, time: true)}',
+        ],
+        actions: [
+          DashButton(t('remove'),
+              danger: true,
+              icon: ArcIcon.trash,
+              onPressed: () => _removeDevice(d['id'] as String, email)),
+        ],
+      );
+    });
   }
 
   Widget _buildDiscountCodes(String Function(String) t) {
-    if (_discountCodes.isEmpty) return _empty('No discount codes yet.');
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _discountCodes.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final c = _discountCodes[i];
-        final courseId = c['course_id'];
-        final course = _allCourses.firstWhere((cc) => cc['id'] == courseId,
-            orElse: () => {});
-        final teacherName =
-            (_profileByUser[course['teacher_id']]?['full_name'] as String?) ??
-                '—';
-        final expired = DateTime.tryParse(c['expires_at'] as String? ?? '')
-                ?.isBefore(DateTime.now()) ??
-            true;
-        final status = c['is_active'] != true
-            ? 'inactive'
-            : (expired ? 'expired' : 'active');
-        final discount = c['discount_type'] == 'percent'
-            ? '${c['discount_value']}%'
-            : '${c['discount_value']} IQD';
-        return _AdminCard(children: [
-          Row(children: [
-            Expanded(
-                child: Text(c['code'] as String? ?? '—',
-                    style: AppFonts.mono(size: 14, weight: FontWeight.w700))),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.teal),
-                  borderRadius: BorderRadius.circular(999)),
-              child: Text(status.toUpperCase(),
-                  style: AppFonts.mono(size: 9.5, color: AppColors.teal)),
-            ),
-          ]),
-          const SizedBox(height: 4),
-          Text('${course['title'] ?? '—'} · $teacherName',
-              style: AppFonts.body(size: 13, color: AppColors.muted)),
-          const SizedBox(height: 4),
-          Text('$discount · ${c['used_count']}/${c['max_uses']} used',
-              style: AppFonts.mono(size: 10.5)),
-        ]);
-      },
-    );
+    if (_discountCodes.isEmpty) {
+      return _empty(t('no_discount_codes'), ArcIcon.tag);
+    }
+    return _list(_discountCodes.length, (i) {
+      final c = _discountCodes[i];
+      final courseId = c['course_id'];
+      final course = _allCourses.firstWhere((cc) => cc['id'] == courseId,
+          orElse: () => {});
+      final teacherName =
+          (_profileByUser[course['teacher_id']]?['full_name'] as String?) ??
+              '—';
+      final expired = DateTime.tryParse(c['expires_at'] as String? ?? '')
+              ?.isBefore(DateTime.now()) ??
+          true;
+      final status = c['is_active'] != true
+          ? 'inactive'
+          : (expired ? 'expired' : 'active');
+      final discount = c['discount_type'] == 'percent'
+          ? '${c['discount_value']}%'
+          : '${c['discount_value']} IQD';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.tag, accent: AppColors.byline),
+        title: c['code'] as String? ?? '—',
+        titleStyle: AppFonts.code(size: 15),
+        subtitle: '${course['title'] ?? '—'} · $teacherName',
+        trailing: StatusPill(t('st_$status'),
+            tone: status == 'active' ? StatusTone.good : StatusTone.bad),
+        meta: ['$discount · ${c['used_count']}/${c['max_uses']} ${t('codes_used')}'],
+      );
+    });
   }
 
   Widget _buildErrorLog(String Function(String) t) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         if (_errorLogs.isNotEmpty)
           Align(
-              alignment: AlignmentDirectional.centerEnd,
-              child: OutlinedButton(
-                  onPressed: _clearErrorLog, child: const Text('Clear all'))),
+            alignment: AlignmentDirectional.centerEnd,
+            child: DashButton(t('btn_clear_all'),
+                danger: true, icon: ArcIcon.trash, onPressed: _clearErrorLog),
+          ),
         const SizedBox(height: 8),
         if (_errorLogs.isEmpty)
-          Text('No errors logged. Good sign.',
-              style: AppFonts.body(color: AppColors.muted))
+          DashEmpty(icon: ArcIcon.check, message: t('no_errors'))
         else
           for (final e in _errorLogs) ...[
-            _AdminCard(children: [
-              Text(e['message'] as String? ?? '—',
-                  style: AppFonts.body(size: 13, weight: FontWeight.w600),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
-              Text(
-                  '${e['page'] ?? '—'} · ${e['user_id'] != null ? (_emailByUser[e['user_id']] ?? e['user_id']) : '—'}',
-                  style: AppFonts.mono(size: 10.5, color: AppColors.muted)),
-              const SizedBox(height: 4),
-              Text(
-                  DateTime.tryParse(e['created_at'] as String? ?? '')
-                          ?.toLocal()
-                          .toString() ??
-                      '—',
-                  style: AppFonts.mono(size: 10.5, color: AppColors.muted2)),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                  onPressed: () => _dismissError(e['id'] as String),
-                  child: const Text('Dismiss')),
-            ]),
+            DashCard(
+              leading: DashIconBadge(icon: ArcIcon.alert, accent: AppColors.error),
+              title: e['message'] as String? ?? '—',
+              titleStyle: AppFonts.body(size: 13, weight: FontWeight.w600),
+              meta: [
+                '${e['page'] ?? '—'} · ${e['user_id'] != null ? (_emailByUser[e['user_id']] ?? e['user_id']) : '—'}',
+                _date(e['created_at'] as String?, time: true),
+              ],
+              actions: [
+                DashButton(t('btn_dismiss'),
+                    icon: ArcIcon.check,
+                    onPressed: () => _dismissError(e['id'] as String)),
+              ],
+            ),
             const SizedBox(height: 10),
           ],
       ],
@@ -1175,145 +1117,64 @@ class _AdminScreenState extends State<AdminScreen> {
   Widget _buildMyPayment(String Function(String) t) {
     if (!_payLoaded) return const Center(child: CircularProgressIndicator());
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        Text(
-          'Shown to students at checkout for any course where "Pay to teacher" is off.',
-          style: AppFonts.body(size: 12.5, color: AppColors.muted),
-        ),
-        const SizedBox(height: 16),
-        ValueListenableBuilder<String>(
-          valueListenable: _payMethodCtrl,
-          builder: (context, value, _) => Row(children: [
-            Expanded(
-              child: RadioListTile<String>(
-                value: 'zain',
-                groupValue: value,
-                title: Text(t('zain_cash')),
-                onChanged: (v) => _payMethodCtrl.value = v!,
-              ),
+        DashFormPanel(
+          title: t('my_payment_number'),
+          icon: ArcIcon.wallet,
+          children: [
+            Text(t('my_payment_hint'),
+                style: AppFonts.body(size: 12.5, color: AppColors.muted)),
+            const SizedBox(height: 12),
+            ValueListenableBuilder<String>(
+              valueListenable: _payMethodCtrl,
+              builder: (context, value, _) => Row(children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    value: 'zain',
+                    groupValue: value,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(t('zain_cash')),
+                    onChanged: (v) => _payMethodCtrl.value = v!,
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<String>(
+                    value: 'qi',
+                    groupValue: value,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(t('qi_card')),
+                    onChanged: (v) => _payMethodCtrl.value = v!,
+                  ),
+                ),
+              ]),
             ),
-            Expanded(
-              child: RadioListTile<String>(
-                value: 'qi',
-                groupValue: value,
-                title: Text(t('qi_card')),
-                onChanged: (v) => _payMethodCtrl.value = v!,
-              ),
-            ),
-          ]),
+            TextField(
+                controller: _payDetailCtrl,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
+            if (_payError != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_payError!,
+                      style: AppFonts.body(size: 12, color: AppColors.error))),
+            if (_payOk != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(_payOk!,
+                      style: AppFonts.body(size: 12, color: AppColors.teal))),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _saveMyPayment, child: Text(t('save'))),
+          ],
         ),
-        TextField(
-            controller: _payDetailCtrl,
-            decoration: const InputDecoration(labelText: '07XX XXX XXXX')),
-        if (_payError != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_payError!,
-                  style: AppFonts.body(size: 12, color: AppColors.red))),
-        if (_payOk != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_payOk!,
-                  style: AppFonts.body(size: 12, color: AppColors.teal))),
-        const SizedBox(height: 16),
-        ElevatedButton(onPressed: _saveMyPayment, child: Text(t('save'))),
       ],
     );
   }
 
-  Widget _empty(String message) => ListView(children: [
-        Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(message, style: AppFonts.body(color: AppColors.muted)))
-      ]);
-}
-
-class _StatCardData {
-  final IconData icon;
-  final String number;
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  _StatCardData(this.icon, this.number, this.label, this.color, this.onTap);
-}
-
-class _StatCard extends StatelessWidget {
-  final _StatCardData data;
-  const _StatCard({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-        onTap: data.onTap,
-        padding: const EdgeInsets.all(14),
-        borderRadius: BorderRadius.circular(16),
-        child: Row(children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                color: data.color.withOpacity(0.16),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(data.icon, color: data.color, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(data.number, style: AppFonts.heading(size: 20)),
-                Text(data.label,
-                    style: AppFonts.mono(size: 9.5, color: AppColors.muted2),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ]),
-    );
-  }
-}
-
-class _AdminCard extends StatelessWidget {
-  final List<Widget> children;
-  const _AdminCard({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: children),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final bool isActive;
-  final String activeLabel;
-  final String pendingLabel;
-  const _StatusChip(
-      {required this.isActive,
-      required this.activeLabel,
-      required this.pendingLabel});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.teal),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        (isActive ? activeLabel : pendingLabel).toUpperCase(),
-        style:
-            AppFonts.mono(size: 9.5, color: AppColors.teal, letterSpacing: 0.5),
-      ),
-    );
-  }
+  Widget _empty(String message, ArcIcon icon) => ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        children: [DashEmpty(icon: icon, message: message)],
+      );
 }
 
 /// Shows a payment-proof screenshot in-app via WebView instead of handing
@@ -1381,6 +1242,60 @@ class _ProofViewerScreenState extends State<_ProofViewerScreen> {
         children: [
           WebViewWidget(controller: _controller),
           if (_loading) const Center(child: CircularProgressIndicator()),
+        ],
+      ),
+    );
+  }
+}
+
+/// An invite code in a monospace box with a copy button beside it.
+class _InviteCode extends StatelessWidget {
+  final String code;
+  const _InviteCode({required this.code});
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(AppStrings.instance.t('copied')),
+        duration: const Duration(seconds: 2)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.teal.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SelectableText(
+              code,
+              maxLines: 1,
+              textDirection: TextDirection.ltr,
+              style: AppFonts.code(size: 12.5, color: AppColors.text),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => _copy(context),
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              backgroundColor: AppColors.teal,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const ArcIconView(ArcIcon.review, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(AppStrings.instance.t('btn_copy')),
+            ]),
+          ),
         ],
       ),
     );

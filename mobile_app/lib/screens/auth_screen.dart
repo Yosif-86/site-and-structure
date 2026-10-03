@@ -224,7 +224,7 @@ class _AuthScreenState extends State<AuthScreen>
       });
       return;
     }
-    final inviteToken = _inviteCtrl.text.trim();
+    final inviteToken = _inviteCtrl.text.trim().toLowerCase();
     if (inviteToken.isNotEmpty) {
       await SupabaseService.instance.redeemTeacherInvite(inviteToken);
     }
@@ -250,7 +250,7 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Future<void> _checkInvite() async {
-    final token = _inviteCtrl.text.trim();
+    final token = _inviteCtrl.text.trim().toLowerCase();
     if (token.isEmpty) return;
     setState(() {
       _checkingInvite = true;
@@ -320,12 +320,6 @@ class _AuthScreenState extends State<AuthScreen>
 
   @override
   Widget build(BuildContext context) {
-    final linkLabel = _mode == _AuthMode.signup
-        ? _t('auth_login_title')
-        : _t('sign_up');
-    final showTopLink =
-        _mode == _AuthMode.login || _mode == _AuthMode.signup;
-
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Directionality(
@@ -349,22 +343,6 @@ class _AuthScreenState extends State<AuthScreen>
                             color: _ink,
                             onPressed: () => Navigator.of(context).maybePop(),
                           ),
-                          const Spacer(),
-                          if (showTopLink)
-                            TextButton(
-                              onPressed: () => _switchMode(
-                                  _mode == _AuthMode.signup
-                                      ? _AuthMode.login
-                                      : _AuthMode.signup),
-                              child: Text(linkLabel,
-                                  style: AppFonts.body(
-                                          size: 14,
-                                          color: _ink,
-                                          weight: FontWeight.w600)
-                                      .copyWith(
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: _ink)),
-                            ),
                         ],
                       ),
                     )),
@@ -689,6 +667,22 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
+  /// "No account? Create one" / "Have an account? Sign in" under the form.
+  Widget _switchLine(String prompt, String action, _AuthMode target) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 22),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(prompt, style: AppFonts.body(size: 14, color: _soft)),
+          const SizedBox(width: 6),
+          _textLink(action, () => _switchMode(target),
+              color: _amber, size: 14.5),
+        ],
+      ),
+    );
+  }
+
   // ---- forms ----
 
   Widget _loginForm() {
@@ -759,6 +753,7 @@ class _AuthScreenState extends State<AuthScreen>
           _reveal(5, _primaryButton(_t('auth_login_title'), _submitLogin)),
           _reveal(6, _orDivider()),
           _reveal(7, _googleButton()),
+          _reveal(8, _switchLine(_t('no_account'), _t('sign_up'), _AuthMode.signup)),
         ],
       ),
     );
@@ -819,7 +814,7 @@ class _AuthScreenState extends State<AuthScreen>
                 Expanded(
                   child: TextField(
                     controller: _inviteCtrl,
-                    textCapitalization: TextCapitalization.characters,
+                    autocorrect: false,
                     textDirection: TextDirection.ltr,
                     cursorColor: _glow,
                     style: AppFonts.body(size: 15, color: _ink),
@@ -862,6 +857,7 @@ class _AuthScreenState extends State<AuthScreen>
           _primaryButton(_t('auth_signup_title'), _submitSignup),
           _orDivider(),
           _googleButton(),
+          _switchLine(_t('have_account'), _t('auth_login_title'), _AuthMode.login),
         ],
       ),
     );

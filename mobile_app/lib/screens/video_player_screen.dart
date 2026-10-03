@@ -11,6 +11,8 @@ import '../services/api_service.dart';
 import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/ambient_background.dart';
+import '../widgets/arc_icons.dart';
 import '../widgets/watermark_overlay.dart';
 
 /// Port of watchLecture()/moveWatermark() in course.html, plus the
@@ -389,19 +391,129 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
           if (mounted) Navigator.of(context).pop();
         },
         child: Scaffold(
-          backgroundColor: Colors.black,
-          appBar: _isFullscreen
-              ? null
-              : AppBar(backgroundColor: Colors.black, title: Text(widget.title, overflow: TextOverflow.ellipsis)),
-          body: Center(child: _buildPlayer()),
+          backgroundColor: _isFullscreen ? Colors.black : const Color(0xFF14120F),
+          body: _isFullscreen ? Center(child: _buildPlayer()) : _buildPortrait(),
         ),
       ),
     );
   }
 
+  /// Portrait layout: the blueprint sheet, a glass header with the lesson
+  /// number and title, the framed video, and the course's lessons below.
+  Widget _buildPortrait() {
+    final ar = AppStrings.instance.isAr;
+    final t = AppStrings.instance.t;
+    final idx = widget.playlist.indexWhere((l) => l.id == widget.lectureId);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Stack(
+        children: [
+          const Positioned.fill(
+              child: BlueprintBackdrop(dark: true, focus: Alignment(0, -0.6))),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: Column(
+                  children: [
+                    Directionality(
+                      textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+                        child: Row(
+                          children: [
+                            _GlassCircleButton(
+                              icon: ArcIcon.back,
+                              size: 42,
+                              onTap: () => Navigator.of(context).maybePop(),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (idx >= 0)
+                                    Text(
+                                      t('lesson_of')
+                                          .replaceAll('{n}', '${idx + 1}')
+                                          .replaceAll('{total}', '${widget.playlist.length}'),
+                                      style: AppFonts.eyebrow(color: const Color(0xFFF2B544)),
+                                    ),
+                                  Text(widget.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppFonts.body(
+                                          size: 16,
+                                          weight: FontWeight.w700,
+                                          color: const Color(0xFFFEE4BF))),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                          boxShadow: [
+                            BoxShadow(
+                                color: const Color(0xFFE8622C).withValues(alpha: 0.16),
+                                blurRadius: 36,
+                                offset: const Offset(0, 10)),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: _buildPlayer(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (widget.playlist.isNotEmpty)
+                      Expanded(
+                        child: Directionality(
+                          textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+                          child: _LessonPanel(
+                            playlist: widget.playlist,
+                            currentLectureId: widget.lectureId,
+                            isUnlocked: widget.isUnlocked,
+                            onSelect: _playLecture,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPlayer() {
-    if (_loading) return const CircularProgressIndicator();
-    if (_error != null) return Text(_error!, style: TextStyle(color: AppColors.muted), textAlign: TextAlign.center);
+    if (_loading || _error != null) {
+      return AspectRatio(
+        aspectRatio: 16 / 9,
+        child: ColoredBox(
+          color: Colors.black,
+          child: Center(
+            child: _loading
+                ? const CircularProgressIndicator()
+                : Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(_error!,
+                        style: TextStyle(color: AppColors.muted),
+                        textAlign: TextAlign.center),
+                  ),
+          ),
+        ),
+      );
+    }
 
     final videoArea = AspectRatio(
       aspectRatio: _hlsController?.value.aspectRatio ?? 16 / 9,
@@ -444,13 +556,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _SideButton(
-                    icon: Icons.skip_previous_rounded,
+                    icon: ArcIcon.skipPrev,
                     enabled: _prevLecture != null && widget.isUnlocked(_prevLecture!),
                     onTap: _prevLecture == null ? null : () => _playLecture(_prevLecture!),
                   ),
                   const SizedBox(width: 18),
                   _SideButton(
-                    icon: Icons.replay_10,
+                    icon: ArcIcon.rewind,
                     enabled: true,
                     onTap: () => _seekBy(const Duration(seconds: -10)),
                   ),
@@ -468,13 +580,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       return GestureDetector(
                         onTap: _togglePlayback,
                         child: Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.45)),
-                          child: Icon(
-                            ended ? Icons.replay : (value.isPlaying ? Icons.pause : Icons.play_arrow),
-                            color: Colors.white,
-                            size: 36,
+                          width: 66,
+                          height: 66,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFF2B544), Color(0xFFE8622C), Color(0xFFB8461A)],
+                            ),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1.2),
+                            boxShadow: [
+                              BoxShadow(color: const Color(0xFFE8622C).withValues(alpha: 0.5), blurRadius: 22),
+                            ],
+                          ),
+                          child: Center(
+                            child: ArcIconView(
+                              ended ? ArcIcon.replay : (value.isPlaying ? ArcIcon.pause : ArcIcon.play),
+                              color: Colors.white,
+                              size: 30,
+                              stroke: 2.2,
+                            ),
                           ),
                         ),
                       );
@@ -482,20 +608,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   ),
                   const SizedBox(width: 18),
                   _SideButton(
-                    icon: Icons.forward_10,
+                    icon: ArcIcon.forward,
                     enabled: true,
                     onTap: () => _seekBy(const Duration(seconds: 10)),
                   ),
                   const SizedBox(width: 18),
                   _SideButton(
-                    icon: Icons.skip_next_rounded,
+                    icon: ArcIcon.skipNext,
                     enabled: _nextLecture != null && widget.isUnlocked(_nextLecture!),
                     onTap: _nextLecture == null ? null : () => _playLecture(_nextLecture!),
                   ),
                 ],
               ),
             ),
-            if (!_hlsController!.value.isPlaying && widget.playlist.isNotEmpty)
+            // Portrait lists the lessons under the video; the overlay list
+            // is only needed when the video fills the screen.
+            if (_isFullscreen && !_hlsController!.value.isPlaying && widget.playlist.isNotEmpty)
               Positioned(
                 right: 8,
                 top: 8,
@@ -504,7 +632,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   onTap: () => setState(() => _showEpisodeList = !_showEpisodeList),
                 ),
               ),
-            if (_showEpisodeList)
+            if (_showEpisodeList && _isFullscreen)
               Positioned(
                 right: 8,
                 top: 48,
@@ -600,10 +728,21 @@ class _GestureLayerState extends State<_GestureLayer> {
                     alignment: _seekForward ? Alignment.centerRight : Alignment.centerLeft,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 28),
-                      child: Icon(
-                        _seekForward ? Icons.forward_10 : Icons.replay_10,
-                        color: Colors.white,
-                        size: 40,
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black.withValues(alpha: 0.4),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+                        ),
+                        child: Center(
+                          child: ArcIconView(
+                            _seekForward ? ArcIcon.forward : ArcIcon.rewind,
+                            color: Colors.white,
+                            size: 34,
+                          ),
+                        ),
                       ),
                     ),
                   )
@@ -616,7 +755,7 @@ class _GestureLayerState extends State<_GestureLayer> {
 }
 
 class _SideButton extends StatelessWidget {
-  final IconData icon;
+  final ArcIcon icon;
   final bool enabled;
   final VoidCallback? onTap;
   const _SideButton({required this.icon, required this.enabled, required this.onTap});
@@ -627,12 +766,7 @@ class _SideButton extends StatelessWidget {
       onTap: onTap,
       child: Opacity(
         opacity: onTap == null ? 0.25 : (enabled ? 1 : 0.4),
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.35)),
-          child: Icon(icon, color: Colors.white, size: 26),
-        ),
+        child: _GlassCircleButton(icon: icon, size: 46, onTap: null),
       ),
     );
   }
@@ -661,7 +795,7 @@ class _EpisodeListButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(open ? Icons.close : Icons.playlist_play, color: Colors.white, size: 18),
+                ArcIconView(open ? ArcIcon.close : ArcIcon.playlist, color: Colors.white, size: 17),
                 const SizedBox(width: 4),
                 Text(AppStrings.instance.t('episodes'), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
               ],
@@ -717,8 +851,8 @@ class _EpisodeList extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
-                    Icon(
-                      isCurrent ? Icons.play_arrow : (unlocked ? Icons.play_circle_outline : Icons.lock_outline),
+                    ArcIconView(
+                      isCurrent ? ArcIcon.play : (unlocked ? ArcIcon.lessons : ArcIcon.lock),
                       color: isCurrent ? AppColors.red : Colors.white70,
                       size: 16,
                     ),
@@ -815,7 +949,7 @@ class _ControlBar extends StatelessWidget {
               Row(
                 children: [
                   IconButton(
-                    icon: Icon(ended ? Icons.replay : (value.isPlaying ? Icons.pause : Icons.play_arrow), color: Colors.white),
+                    icon: ArcIconView(ended ? ArcIcon.replay : (value.isPlaying ? ArcIcon.pause : ArcIcon.play), color: Colors.white, size: 22),
                     onPressed: () {
                       onInteract();
                       if (ended) {
@@ -830,7 +964,7 @@ class _ControlBar extends StatelessWidget {
                   ),
                   Text(
                     '${_formatDuration(value.position)} / ${_formatDuration(value.duration)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()]),
                   ),
                   const Spacer(),
                   PopupMenuButton<double>(
@@ -843,13 +977,7 @@ class _ControlBar extends StatelessWidget {
                               child: Text('${speed}x', style: const TextStyle(color: Colors.white)),
                             ))
                         .toList(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      child: Text(
-                        '${value.playbackSpeed}x',
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                    child: _Pill('${value.playbackSpeed}x'),
                   ),
                   PopupMenuButton<String>(
                     initialValue: currentQuality,
@@ -861,16 +989,10 @@ class _ControlBar extends StatelessWidget {
                               child: Text(q == 'auto' ? 'Auto' : q, style: const TextStyle(color: Colors.white)),
                             ))
                         .toList(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      child: Text(
-                        currentQuality == 'auto' ? 'Auto' : currentQuality,
-                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
-                    ),
+                    child: _Pill(currentQuality == 'auto' ? 'Auto' : currentQuality),
                   ),
                   IconButton(
-                    icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
+                    icon: ArcIconView(isFullscreen ? ArcIcon.fullscreenExit : ArcIcon.fullscreen, color: Colors.white, size: 22),
                     onPressed: () { onInteract(); onToggleFullscreen(); },
                   ),
                 ],
@@ -878,6 +1000,206 @@ class _ControlBar extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Frosted round button used for the player's side controls and the back
+/// button above the video.
+class _GlassCircleButton extends StatelessWidget {
+  final ArcIcon icon;
+  final double size;
+  final VoidCallback? onTap;
+  const _GlassCircleButton({required this.icon, this.size = 44, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final button = ClipOval(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.32),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+          ),
+          child: Center(
+              child: ArcIconView(icon, color: Colors.white, size: size * 0.5)),
+        ),
+      ),
+    );
+    return onTap == null
+        ? button
+        : GestureDetector(onTap: onTap, child: button);
+  }
+}
+
+/// Small glass label for the speed / quality menus.
+class _Pill extends StatelessWidget {
+  final String label;
+  const _Pill(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+      ),
+      child: Text(label,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+/// The course's lessons under the video (portrait): numbered rows, the
+/// current one highlighted, locked ones dimmed.
+class _LessonPanel extends StatelessWidget {
+  final List<Lecture> playlist;
+  final String currentLectureId;
+  final bool Function(Lecture) isUnlocked;
+  final void Function(Lecture) onSelect;
+  const _LessonPanel({
+    required this.playlist,
+    required this.currentLectureId,
+    required this.isUnlocked,
+    required this.onSelect,
+  });
+
+  static const _cream = Color(0xFFFEE4BF);
+  static const _orange = Color(0xFFE8622C);
+  static const _soft = Color(0xFFAFA492);
+
+  String? _dur(int? s) {
+    if (s == null || s <= 0) return null;
+    final m = s ~/ 60, r = s % 60;
+    return '$m:${r.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final ar = AppStrings.instance.isAr;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0x80262218),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0x29F3EDE4)),
+            ),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Row(children: [
+                    Container(
+                      width: 4,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0xFFF2B544), _orange],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(t('course_lessons'),
+                        style: AppFonts.body(
+                            size: 15, weight: FontWeight.w700, color: _cream)),
+                    const Spacer(),
+                    Text('${playlist.length}',
+                        style: AppFonts.code(size: 12, color: _soft)),
+                  ]),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                    itemCount: playlist.length,
+                    itemBuilder: (context, i) => _row(context, i, t, ar),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, int i, String Function(String) t, bool ar) {
+    final l = playlist[i];
+    final current = l.id == currentLectureId;
+    final unlocked = isUnlocked(l);
+    final dur = _dur(l.durationSeconds);
+    final sub = current ? t('now_playing') : dur;
+    return Opacity(
+      opacity: unlocked ? 1 : 0.5,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: unlocked && !current ? () => onSelect(l) : null,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: current ? _orange.withValues(alpha: 0.16) : Colors.transparent,
+            border: Border.all(
+                color: current ? _orange.withValues(alpha: 0.4) : Colors.transparent),
+          ),
+          child: Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(11),
+                color: current ? _orange : Colors.white.withValues(alpha: 0.06),
+              ),
+              child: current
+                  ? const ArcIconView(ArcIcon.play, color: Colors.white, size: 16)
+                  : Text((i + 1).toString().padLeft(2, '0'),
+                      style: AppFonts.code(size: 12.5, color: _soft)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l.localizedTitle(ar),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppFonts.body(
+                          size: 13.5,
+                          weight: current ? FontWeight.w700 : FontWeight.w500,
+                          color: current ? _orange : _cream)),
+                  if (sub != null)
+                    Text(sub,
+                        style: AppFonts.body(
+                            size: 11.5, color: const Color(0xFF7D7362))),
+                ],
+              ),
+            ),
+            if (!unlocked)
+              const ArcIconView(ArcIcon.lock, color: _soft, size: 18)
+            else if (l.isFree && !current)
+              Text(t('free_tag'),
+                  style: AppFonts.body(size: 11, color: const Color(0xFF6FA8A0))),
+          ]),
+        ),
       ),
     );
   }
