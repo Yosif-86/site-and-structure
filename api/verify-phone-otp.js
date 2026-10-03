@@ -56,7 +56,7 @@ module.exports = async (req, res) => {
 
   const { data: row } = await admin
     .from('phone_otp_codes')
-    .select('code_hash, attempts, expires_at')
+    .select('code_hash, attempts, expires_at, phone')
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -86,7 +86,25 @@ module.exports = async (req, res) => {
     return;
   }
 
-  await admin.from('profiles').update({ phone_verified: true }).eq('id', userId);
+  // The number the code went to is the one that is now verified -- store it
+  // on the account (local 07... form), unless someone else claimed it since.
+  const { data: taken } = await admin.rpc('phone_taken_by_other', {
+    p_phone: row.phone,
+    p_user: userId
+  });
+  if (taken === true) {
+    res.status(409).json({ error: 'err_phone_taken' });
+    return;
+  }
+  const localPhone = row.phone && row.phone.startsWith('964') ? '0' + row.phone.slice(3) : row.phone;
+  const { error: updErr } = await admin
+    .from('profiles')
+    .update({ phone_verified: true, ...(localPhone ? { phone: localPhone } : {}) })
+    .eq('id', userId);
+  if (updErr) {
+    res.status(409).json({ error: 'err_phone_taken' });
+    return;
+  }
   await admin.from('phone_otp_codes').delete().eq('user_id', userId);
 
   res.status(200).json({ ok: true });

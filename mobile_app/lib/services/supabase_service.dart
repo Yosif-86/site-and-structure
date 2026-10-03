@@ -22,7 +22,7 @@ const String kApiBaseUrl = 'https://site-and-structure.vercel.app';
 // phone-verify step entirely (no request to send-phone-otp is ever made)
 // until this flips back to true. Flip it, rebuild, and every new signup
 // goes through phone verification again.
-const bool kPhoneOtpEnabled = false;
+const bool kPhoneOtpEnabled = true;
 
 // Paused: see _requiresLoginEmailOtp's doc comment. Flip back on once the
 // email-link flow (or a proper code, after custom SMTP is set up) has been
@@ -497,12 +497,23 @@ class SupabaseService extends ChangeNotifier {
     if (!SignupRules.isAllowedEmailDomain(email)) return 'err_email_domain';
     if (!SignupRules.isStrongPassword(password.trim())) return 'err_pass_weak';
     try {
+      // One account per phone number: checked before the account exists, so
+      // a taken number never leaves a half-created account behind.
+      final free = await client
+          .rpc('is_phone_available', params: {'p_phone': normalizedPhone})
+          .timeout(const Duration(seconds: 15));
+      if (free != true) return 'err_phone_taken';
       final res = await client.auth.signUp(
         email: email.trim(),
         password: password.trim(),
         data: {'full_name': name.trim(), 'phone': normalizedPhone},
       );
       final user = res.user;
+      // An email that already has an account comes back as a user with no
+      // identities (Supabase hides it rather than erroring).
+      if (user != null && (user.identities?.isEmpty ?? false)) {
+        return 'err_email_taken';
+      }
       final accessToken = res.session?.accessToken;
       if (user == null || accessToken == null) return 'Sign up failed.';
 

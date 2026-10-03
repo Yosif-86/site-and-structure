@@ -80,6 +80,16 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // One account per number -- refuse before paying for an SMS.
+  const { data: taken } = await admin.rpc('phone_taken_by_other', {
+    p_phone: normalized,
+    p_user: userId
+  });
+  if (taken === true) {
+    res.status(409).json({ error: 'err_phone_taken' });
+    return;
+  }
+
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = crypto.createHash('sha256').update(code).digest('hex');
 

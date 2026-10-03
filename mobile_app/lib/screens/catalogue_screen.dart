@@ -19,6 +19,7 @@ import '../widgets/glass_card.dart';
 import '../widgets/glass_scaffold.dart';
 import '../widgets/skeleton_card.dart';
 import 'auth_screen.dart';
+import 'complete_profile_screen.dart';
 import 'course_detail_screen.dart';
 import 'explore_screen.dart';
 import 'my_courses_screen.dart';
@@ -26,7 +27,6 @@ import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'teacher_screen.dart';
-import 'verify_phone_screen.dart';
 
 /// App shell: a fixed glass top bar (logo + avatar), the swipeable tabs
 /// (Home / My Courses / Profile / Settings), and the floating glass bottom
@@ -49,7 +49,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   bool _paymentGateShown = false;
   // null = not checked yet (or logged out) -- only an explicit false blocks
   // the app, so this never flashes the block screen while still loading.
-  bool? _phoneVerified;
+  /// True when this account must (re)confirm a phone before using the app:
+  /// it has no phone at all, or it signed up after phone verification was
+  /// switched on and hasn't verified yet. Older accounts that already have
+  /// a number keep working as before.
+  bool _needsPhone = false;
+  bool _phoneGateShown = false;
+  static final _phoneRuleSince = DateTime.utc(2026, 10, 3);
   String? _fullName;
   String? _avatarUrl;
 
@@ -127,7 +133,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
       if (mounted) {
         setState(() {
           _isTeacher = false;
-          _phoneVerified = null;
+          _needsPhone = false;
           _fullName = null;
           _avatarUrl = null;
         });
@@ -138,14 +144,21 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
       final prof = await SupabaseService.instance.client
           .from('profiles')
           .select(
-              'is_teacher, phone_verified, full_name, avatar_url, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number')
+              'is_teacher, phone, phone_verified, full_name, avatar_url, teacher_photo_url, teacher_zaincash_phone, teacher_qi_account_number')
           .eq('id', user.id)
           .maybeSingle();
       if (!mounted) return;
       final isTeacher = prof?['is_teacher'] == true;
       setState(() {
         _isTeacher = isTeacher;
-        _phoneVerified = prof?['phone_verified'] == true;
+        final hasPhone =
+            ((prof?['phone'] as String?)?.trim().isNotEmpty ?? false);
+        final verified = prof?['phone_verified'] == true;
+        final created = DateTime.tryParse(user.createdAt);
+        final newAccount =
+            created != null && !created.isBefore(_phoneRuleSince);
+        _needsPhone =
+            kPhoneOtpEnabled && (!hasPhone || (newAccount && !verified));
         _fullName = prof?['full_name'] as String?;
         // Teachers edit their public teacher photo, not avatar_url -- same
         // split ProfileScreen uses.
@@ -159,6 +172,21 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
               ((prof?['teacher_qi_account_number'] as String?)?.trim().isNotEmpty ?? false);
       // Only from the top of the stack: a sign-in screen that is about to
       // pop itself must not take this route with it. didPopNext re-checks.
+      final onTop = mounted && (ModalRoute.of(context)?.isCurrent ?? false);
+      // Phone first (name + number + SMS code), then the teacher payment step.
+      if (_needsPhone) {
+        if (!_phoneGateShown && onTop) {
+          _phoneGateShown = true;
+          Navigator.of(context)
+              .push(MaterialPageRoute(
+                  builder: (_) => const CompleteProfileScreen()))
+              .whenComplete(() {
+            _phoneGateShown = false;
+            _loadProfile();
+          });
+        }
+        return;
+      }
       if (isTeacher &&
           !hasPayment &&
           !_paymentGateShown &&
@@ -177,8 +205,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   }
 
   Future<void> _openVerifyPhone() async {
-    await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const VerifyPhoneScreen()));
+    await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const CompleteProfileScreen()));
     _loadProfile();
   }
 
@@ -287,7 +315,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
     final loggedIn = SupabaseService.instance.isLoggedIn;
-    final gated = kPhoneOtpEnabled && loggedIn && _phoneVerified == false;
+    final gated = loggedIn && _needsPhone;
 
     return Directionality(
       textDirection:
