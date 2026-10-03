@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { deviceId, deviceLabel } = req.body || {};
+  const { deviceId, deviceLabel, legacyDeviceId } = req.body || {};
   if (!deviceId || typeof deviceId !== 'string' || deviceId.length > 200) {
     res.status(400).json({ error: 'Missing deviceId' });
     return;
@@ -87,6 +87,26 @@ module.exports = async (req, res) => {
       const n = Number(prof.max_devices);
       if (Number.isInteger(n) && n >= 1 && n <= 5) maxDevices = n;
       existingToken = prof.active_session_token || null;
+    }
+  }
+
+  // The app switched device ids (Build.ID -> ANDROID_ID, see getDeviceId in
+  // supabase_service.dart). Move this account's slot from the old id to the
+  // new one, once, so the same phone isn't counted as a second device.
+  if (typeof legacyDeviceId === 'string' && legacyDeviceId.length <= 200 &&
+      legacyDeviceId !== deviceId) {
+    const { data: already } = await admin
+      .from('trusted_devices')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('device_id', deviceId)
+      .maybeSingle();
+    if (!already) {
+      await admin
+        .from('trusted_devices')
+        .update({ device_id: deviceId })
+        .eq('user_id', userId)
+        .eq('device_id', legacyDeviceId);
     }
   }
 

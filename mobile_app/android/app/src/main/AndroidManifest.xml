@@ -9,7 +9,9 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowAudioPlaybackCapture="false"
-        android:requestLegacyExternalStorage="true">
+        android:requestLegacyExternalStorage="true"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
         <!-- FLAG_SECURE (set at runtime in MainActivity/ScreenSecurity while a
              lecture is playing) only blocks the VIDEO half of a screen
              recording; Android's AudioPlaybackCapture API (used by most

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' show HttpException, Platform;
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
+import 'package:android_id/android_id.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -92,11 +93,46 @@ class SupabaseService extends ChangeNotifier {
   /// and could cap out users who are already logged in. Only a device with
   /// no cached value (a genuinely fresh or post-uninstall install) computes
   /// the new stable id, which is exactly the case this is meant to fix.
+  ///
+  /// Android now uses ANDROID_ID ("aid-..."): unique per device and stable
+  /// across reinstalls of the same app. The old "android-<Build.ID>" value
+  /// was the OS build number -- identical on every device running the same
+  /// Android version and different after every OS update -- so it both let
+  /// devices share a slot and made a reinstalled phone look brand new. The
+  /// old value is reported as [legacyDeviceId] so check-device can move the
+  /// existing slot over instead of counting the device twice.
+  String? legacyDeviceId;
+  bool _deviceIdMigrated = false;
+
   Future<String> getDeviceId() async {
     String? cached;
     try {
       cached = await _secureStorage.read(key: _deviceIdKey);
     } catch (_) {}
+    if (!kIsWeb && Platform.isAndroid) {
+      String? aid;
+      try {
+        aid = await const AndroidId().getId();
+      } catch (_) {}
+      if (aid != null && aid.isNotEmpty) {
+        final id = 'aid-$aid';
+        if (cached != id) {
+          String? legacy = cached;
+          if (legacy == null) {
+            try {
+              final info = await DeviceInfoPlugin().androidInfo;
+              if (info.id.isNotEmpty) legacy = 'android-${info.id}';
+            } catch (_) {}
+          }
+          legacyDeviceId = legacy;
+          _deviceIdMigrated = true;
+          try {
+            await _secureStorage.write(key: _deviceIdKey, value: id);
+          } catch (_) {}
+        }
+        return id;
+      }
+    }
     if (cached != null) return cached;
 
     String? id;
@@ -116,7 +152,9 @@ class SupabaseService extends ChangeNotifier {
       }
     }
     id ??= const Uuid().v4();
-    await _secureStorage.write(key: _deviceIdKey, value: id);
+    try {
+      await _secureStorage.write(key: _deviceIdKey, value: id);
+    } catch (_) {}
     return id;
   }
 
@@ -129,7 +167,12 @@ class SupabaseService extends ChangeNotifier {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $accessToken',
       },
-      body: jsonEncode({'deviceId': deviceId, 'deviceLabel': 'Flutter app'}),
+      body: jsonEncode({
+        'deviceId': deviceId,
+        'deviceLabel': 'Flutter app',
+        if (legacyDeviceId != null && legacyDeviceId != deviceId)
+          'legacyDeviceId': legacyDeviceId,
+      }),
     )
         .timeout(const Duration(seconds: 20));
     if (res.statusCode != 200) {
@@ -757,6 +800,20 @@ class SupabaseService extends ChangeNotifier {
   /// the session-watch loop (mirrors updateAuthUI() calling startSessionWatch
   /// on the website whenever a session is found).
   void resumeSessionWatchIfLoggedIn() {
-    if (isLoggedIn) _startSessionWatch();
+    if (!isLoggedIn) return;
+    _startSessionWatch();
+    // Already signed in from before the device-id change: re-register this
+    // device under its new id now (the server moves the old slot), so video
+    // playback -- which checks the device id -- keeps working without a
+    // fresh sign-in.
+    unawaited(() async {
+      await getDeviceId();
+      final access = client.auth.currentSession?.accessToken;
+      if (_deviceIdMigrated && access != null) {
+        try {
+          await _isDeviceAllowed(access);
+        } catch (_) {}
+      }
+    }());
   }
 }
