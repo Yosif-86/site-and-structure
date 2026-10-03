@@ -55,6 +55,7 @@ enum ArcIcon {
   close,
   download,
   copy,
+  bell,
 }
 
 class ArcIconView extends StatelessWidget {
@@ -343,6 +344,10 @@ const _icons = <ArcIcon, List<_Shape>>{
   ArcIcon.playlist: [
     _Shape.path('M4 7 H16 M4 12 H16 M4 17 H11'),
     _Shape.path('M15 14.4 L20.4 17.4 L15 20.4 Z', fill: _Fill.solid),
+  ],
+  ArcIcon.bell: [
+    _Shape.path('M6 16.6 V11 A6 6 0 0 1 18 11 V16.6 L19.6 18.4 H4.4 Z', fill: _Fill.active),
+    _Shape.path('M10 20.6 Q12 22.2 14 20.6'),
   ],
   ArcIcon.download: [
     _Shape.path('M12 4 V14.5 M7.5 10 L12 14.5 L16.5 10'),

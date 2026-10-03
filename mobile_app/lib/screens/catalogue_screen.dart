@@ -21,6 +21,7 @@ import 'auth_screen.dart';
 import 'course_detail_screen.dart';
 import 'explore_screen.dart';
 import 'my_courses_screen.dart';
+import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 import 'teacher_screen.dart';
@@ -566,6 +567,10 @@ class _TopBar extends StatelessWidget {
         children: [
           const BrandTitle(),
           const Spacer(),
+          if (loggedIn) ...[
+            const NotificationBell(),
+            const SizedBox(width: 10),
+          ],
           Semantics(
             button: true,
             label: loggedIn ? t('nav_profile') : t('log_in'),

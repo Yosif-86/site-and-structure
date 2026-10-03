@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
+import '../services/payment_rules.dart';
 import '../services/resumable_upload.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -36,8 +37,15 @@ class TeacherScreen extends StatefulWidget {
   /// (with at least one method) lands on Home.
   final bool mandatoryPayment;
 
+  /// Opens straight on a section (from a notification): 'payments' or
+  /// 'courses'.
+  final String? openView;
+
   const TeacherScreen(
-      {super.key, this.openPaymentInfo = false, this.mandatoryPayment = false});
+      {super.key,
+      this.openPaymentInfo = false,
+      this.mandatoryPayment = false,
+      this.openView});
 
   @override
   State<TeacherScreen> createState() => _TeacherScreenState();
@@ -227,6 +235,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
         _checking = false;
         _isTeacher = isTeacher;
         if (isTeacher && widget.openPaymentInfo) _view = _TView.profile;
+        if (isTeacher && widget.openView == 'payments') _view = _TView.payments;
+        if (isTeacher && widget.openView == 'courses') _view = _TView.courses;
       });
       if (isTeacher) {
         await _loadCourses();
@@ -280,12 +290,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
         .eq('status', 'active');
     final rows = (enrollments as List).cast<Map<String, dynamic>>();
     final uniqueStudents = {for (final e in rows) e['user_id']}.length;
-    final priceBySlug = {
-      for (final c in _myCourses)
-        c['slug'] as String: (num.tryParse('${c['price']}') ?? 0)
-    };
-    final earnings = rows.fold<num>(
-        0, (sum, e) => sum + (priceBySlug[e['course_slug']] ?? 0));
+    final courseBySlug = {for (final c in _myCourses) c['slug'] as String: c};
+    final earnings = rows.fold<num>(0, (sum, e) {
+      final c = courseBySlug[e['course_slug']];
+      if (c == null || c['is_free'] == true) return sum;
+      final price = PaymentRules.parsePrice(c['price']);
+      return sum +
+          PaymentRules.split(
+                  price: price,
+                  paid: price,
+                  directToTeacher: c['pay_to_teacher'] == true)
+              .teacher;
+    });
     if (!mounted) return;
     setState(() {
       _statStudents = uniqueStudents;
@@ -316,10 +332,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   void _openCourseEdit(Map<String, dynamic> c) {
     _activeCourse = c;
-    _cTitle.text = c['title'] as String? ?? '';
-    _cDescription.text = c['description'] as String? ?? '';
-    _cPrice.text = '${c['price'] ?? 0}';
-    _cLearning.text = ((c['learning_points'] as List?) ?? const [])
+    // A published course with an edit waiting: reopen the proposed version.
+    final pending = c['edit_status'] == 'pending_review'
+        ? (c['pending_edit'] as Map?)?.cast<String, dynamic>()
+        : null;
+    final src = {...c, ...?pending};
+    _cTitle.text = src['title'] as String? ?? '';
+    _cDescription.text = src['description'] as String? ?? '';
+    _cPrice.text = '${src['price'] ?? 0}';
+    _cLearning.text = ((src['learning_points'] as List?) ?? const [])
         .whereType<String>()
         .join('\n');
     _cThumbFile = null;
@@ -336,7 +357,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       return;
     }
     final description = _cDescription.text.trim();
-    final price = num.tryParse(_cPrice.text.trim()) ?? 0;
+    final price = PaymentRules.parsePrice(_cPrice.text);
     // Same caps the DB check constraint enforces (add-course-learning-points
     // .sql): at most 12 points, each at most 200 characters.
     final learningPoints = _cLearning.text
@@ -358,7 +379,21 @@ class _TeacherScreenState extends State<TeacherScreen> {
             .upload(path, File(_cThumbFile!.path));
         thumbnailUrl = sb.storage.from('course-thumbnails').getPublicUrl(path);
       }
-      if (_activeCourse != null) {
+      if (_activeCourse != null && _activeCourse!['status'] == 'published') {
+        // Live course: the change waits for the admin; students keep seeing
+        // the current version until it's approved.
+        await sb.from('courses').update({
+          'pending_edit': {
+            'title': title,
+            'description': description,
+            'price': price,
+            'thumbnail_url': thumbnailUrl,
+            'learning_points': learningPoints,
+          },
+          'edit_status': 'pending_review',
+        }).eq('id', _activeCourse!['id']);
+        _showError(t('edit_request_sent'));
+      } else if (_activeCourse != null) {
         await sb.from('courses').update({
           'title': title,
           'description': description,
@@ -587,6 +622,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _dFormError = t('err_value_required'));
       return;
     }
+    final price = PaymentRules.parsePrice(_activeCourse?['price']);
+    final tooBig = _dType == 'percent'
+        ? value > PaymentRules.maxDiscountRate * 100
+        : price > 0 && value > price * PaymentRules.maxDiscountRate;
+    if (tooBig) {
+      setState(() => _dFormError = t('err_discount_too_large'));
+      return;
+    }
     final maxUses = int.tryParse(_dMaxUses.text.trim()) ?? 1;
     if (_dExpires == null) {
       setState(() => _dFormError = t('err_expires_required'));
@@ -612,7 +655,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _dValue.clear();
       await _loadCodes();
     } catch (e) {
-      setState(() => _dFormError = '${t('err_save_failed')}$e');
+      setState(() => _dFormError = '$e'.contains('discount_too_large')
+          ? t('err_discount_too_large')
+          : t('err_save_failed'));
     }
   }
 
@@ -664,6 +709,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
         _pQiAccount.text.trim().isNotEmpty;
     if (!hasMethod) {
       setState(() => _pFormError = t('err_payment_method_required'));
+      return;
+    }
+    if (_pZaincashPhone.text.trim().isNotEmpty &&
+        !PaymentRules.isValidZain(_pZaincashPhone.text)) {
+      setState(() => _pFormError = t('err_invalid_zain'));
+      return;
+    }
+    if (_pQiAccount.text.trim().isNotEmpty &&
+        !PaymentRules.isValidQi(_pQiAccount.text)) {
+      setState(() => _pFormError = t('err_invalid_qi'));
       return;
     }
     try {
@@ -925,9 +980,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 child: _CourseCard(
                   course: _myCourses[i],
                   t: t,
-                  onEdit: _myCourses[i]['status'] == 'draft'
-                      ? () => _openCourseEdit(_myCourses[i])
-                      : null,
+                  onEdit: () => _openCourseEdit(_myCourses[i]),
                   onCurriculum: () => _openCurriculum(_myCourses[i]),
                   onCodes: () => _openCodes(_myCourses[i]),
                   onSubmit: _myCourses[i]['status'] == 'draft'
@@ -1009,7 +1062,34 @@ class _TeacherScreenState extends State<TeacherScreen> {
             TextField(
                 controller: _cPrice,
                 keyboardType: TextInputType.number,
+                inputFormatters: PaymentRules.numberInput,
                 decoration: InputDecoration(labelText: t('label_price'))),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _cPrice,
+              builder: (context, v, _) {
+                final price = PaymentRules.parsePrice(v.text);
+                if (price <= 0) return const SizedBox.shrink();
+                final s = PaymentRules.split(price: price, paid: price);
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Row(children: [
+                    Expanded(
+                      child: _SplitChip(
+                          label: t('split_platform'),
+                          value: s.platform,
+                          color: AppColors.muted),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _SplitChip(
+                          label: t('split_yours'),
+                          value: s.teacher,
+                          color: AppColors.teal),
+                    ),
+                  ]),
+                );
+              },
+            ),
             const SizedBox(height: 12),
             FilePickBox(
               file: _cThumbFile,
@@ -1185,6 +1265,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
           title: t('create_code'),
           icon: ArcIcon.tag,
           children: [
+            Text(t('discount_cap_hint'),
+                style: AppFonts.body(size: 12, color: AppColors.muted)),
+            const SizedBox(height: 12),
             TextField(
                 controller: _dCode,
                 textCapitalization: TextCapitalization.characters,
@@ -1257,6 +1340,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
             TextField(
                 controller: _pZaincashPhone,
                 textDirection: TextDirection.ltr,
+                keyboardType: TextInputType.number,
+                inputFormatters: PaymentRules.numberInput,
                 decoration: InputDecoration(
                     labelText: t('label_zaincash_phone'),
                     hintText: '07XX XXX XXXX')),
@@ -1264,6 +1349,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
             TextField(
                 controller: _pQiAccount,
                 textDirection: TextDirection.ltr,
+                keyboardType: TextInputType.number,
+                inputFormatters: PaymentRules.numberInput,
                 decoration: InputDecoration(
                     labelText: t('label_qi_account'),
                     hintText: 'XXXX XXXX XXXX XXXX')),
@@ -1363,6 +1450,17 @@ class _CourseCard extends StatelessWidget {
           ? t('card_free')
           : '${course['price'] ?? '—'}',
       trailing: StatusPill(t('status_$status'), tone: tone),
+      extra: [
+        if (course['edit_status'] == 'pending_review') ...[
+          const SizedBox(height: 10),
+          StatusPill(t('edit_pending'), tone: StatusTone.warn),
+        ] else if (course['edit_status'] == 'rejected' &&
+            (course['edit_reject_reason'] as String?)?.isNotEmpty == true) ...[
+          const SizedBox(height: 10),
+          Text('${t('edit_rejected')}: ${course['edit_reject_reason']}',
+              style: AppFonts.body(size: 12, color: AppColors.error)),
+        ],
+      ],
       actions: [
         if (onSubmit != null)
           DashButton(t('submit_for_review'),
@@ -1433,6 +1531,35 @@ class _UploadProgressPill extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Platform 20%: 2,000" / "Your share: 8,000" under the price field.
+class _SplitChip extends StatelessWidget {
+  final String label;
+  final int value;
+  final Color color;
+  const _SplitChip(
+      {required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: color.withValues(alpha: 0.10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppFonts.body(size: 11, color: AppColors.muted)),
+          const SizedBox(height: 2),
+          Text('$value IQD', style: AppFonts.code(size: 14, color: color)),
+        ],
       ),
     );
   }

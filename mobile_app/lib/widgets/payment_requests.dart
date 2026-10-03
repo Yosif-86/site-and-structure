@@ -7,10 +7,11 @@ import 'dashboard_kit.dart';
 
 /// Asks why a payment is being rejected. Quick picks plus free text; the
 /// reason is shown to the student. Returns null if cancelled.
-Future<String?> askRejectReason(BuildContext context) {
+Future<String?> askRejectReason(BuildContext context,
+    {String? title, String? sub, List<String>? presets}) {
   final t = AppStrings.instance.t;
   final ctrl = TextEditingController();
-  final presets = [
+  presets ??= [
     t('reject_amount_mismatch'),
     t('reject_proof_unclear'),
     t('reject_not_received'),
@@ -19,21 +20,21 @@ Future<String?> askRejectReason(BuildContext context) {
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
-        title: Text(t('reject_title'),
+        title: Text(title ?? t('reject_title'),
             style: AppFonts.body(size: 18, weight: FontWeight.w700)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(t('reject_sub'),
+              Text(sub ?? t('reject_sub'),
                   style: AppFonts.body(size: 13, color: AppColors.muted)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final p in presets)
+                  for (final p in presets!)
                     ChoiceChip(
                       label: Text(p),
                       selected: ctrl.text == p,

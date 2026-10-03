@@ -6,10 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
+import '../services/payment_rules.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
+import '../widgets/course_card.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
@@ -26,7 +28,10 @@ import '../widgets/glass_scaffold.dart';
 /// only there to bounce a non-admin back out quickly, not to authorize
 /// anything.
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key});
+  /// Opens straight on a section (from a notification): 'payments',
+  /// 'review' or 'editRequests'.
+  final String? openView;
+  const AdminScreen({super.key, this.openView});
 
   @override
   State<AdminScreen> createState() => _AdminScreenState();
@@ -48,6 +53,7 @@ enum _View {
   errorLog,
   myPayment,
   payments,
+  editRequests,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -57,7 +63,12 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _isAdmin = false;
   bool _loading = false;
   String? _error;
-  _View _view = _View.dashboard;
+  late _View _view = switch (widget.openView) {
+    'payments' => _View.payments,
+    'review' => _View.review,
+    'editRequests' => _View.editRequests,
+    _ => _View.dashboard,
+  };
 
   // Raw data, loaded once and reused across every drill-in view — mirrors
   // admin.html's single IIFE that kicks off every load* function up front.
@@ -139,9 +150,9 @@ class _AdminScreenState extends State<AdminScreen> {
       final sb = SupabaseService.instance.client;
       final results = await Future.wait([
         sb.from('courses').select(
-            'id, slug, title, price, is_free, teacher_id, pay_to_teacher, status'),
+            'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
         sb.from('profiles').select(
-            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url'),
+            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
         sb
             .from('login_events')
             .select('user_id, email, created_at')
@@ -473,6 +484,14 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() => _payError = t('err_payment_method_required'));
       return;
     }
+    if (zain.isNotEmpty && !PaymentRules.isValidZain(zain)) {
+      setState(() => _payError = t('err_invalid_zain'));
+      return;
+    }
+    if (qi.isNotEmpty && !PaymentRules.isValidQi(qi)) {
+      setState(() => _payError = t('err_invalid_qi'));
+      return;
+    }
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -588,6 +607,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('my_payment_number');
       case _View.payments:
         return t('payment_requests');
+      case _View.editRequests:
+        return t('edit_requests');
       case _View.dashboard:
         return t('nav_admin');
     }
@@ -640,6 +661,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.errorLog => _buildErrorLog(t),
         _View.myPayment => _buildMyPayment(t),
         _View.payments => _buildPayments(t),
+        _View.editRequests => _buildEditRequests(t),
       },
     );
   }
@@ -664,8 +686,11 @@ class _AdminScreenState extends State<AdminScreen> {
   Widget _buildDashboard(String Function(String) t) {
     final revenue = _activeEnrollments.fold<int>(0, (sum, e) {
       final c = _courseBySlug[e['course_slug']];
-      if (c == null || c['is_free'] == true) return sum;
-      return sum + _parsePrice(c['price']);
+      // The platform's own 20% (direct-payment courses earn it nothing).
+      if (c == null || c['is_free'] == true || c['pay_to_teacher'] == true) {
+        return sum;
+      }
+      return sum + (_parsePrice(c['price']) * PaymentRules.platformRate).round();
     });
     final now = DateTime.now();
     final activeInvitesCount = _invites
@@ -716,7 +741,7 @@ class _AdminScreenState extends State<AdminScreen> {
             stats: [
               ('$revenue', t('est_revenue')),
               ('$activeStudents', t('active_students')),
-              ('${_pendingReview.length + myPendingPayments}',
+              ('${_pendingReview.length + myPendingPayments + _editRequests.length}',
                   t('dash_needs_attention')),
             ],
           ),
@@ -738,6 +763,9 @@ class _AdminScreenState extends State<AdminScreen> {
           tile(ArcIcon.review, '${_pendingReview.length}', t('course_review'),
               AppColors.red, _View.review,
               alert: _pendingReview.isNotEmpty),
+          tile(ArcIcon.edit, '${_editRequests.length}', t('edit_requests'),
+              const Color(0xFFE0A030), _View.editRequests,
+              alert: _editRequests.isNotEmpty),
           tile(ArcIcon.video, '${_pendingUploads.length}',
               t('pending_lectures'), AppColors.byline, _View.uploads,
               alert: _pendingUploads.isNotEmpty),
@@ -842,76 +870,226 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildRevenue(String Function(String) t) {
+    // Per course: what students paid (after discounts), the platform's 20%
+    // of the full price on each, and the teacher's share of the rest. A
+    // direct-payment course (allowed teachers only) is the teacher's in full.
     final rows = <Map<String, dynamic>>[];
-    int totalRevenue = 0, totalTeacher = 0, totalMine = 0;
+    int totalCollected = 0, totalPlatform = 0, totalTeacher = 0, totalDirect = 0;
+    final owedByTeacher = <String, int>{};
     for (final c in _publishedCourses) {
       if (c['is_free'] == true) continue;
-      final priceNum = _parsePrice(c['price']);
-      if (priceNum <= 0) continue;
+      final price = PaymentRules.parsePrice(c['price']);
+      if (price <= 0) continue;
+      final direct = c['pay_to_teacher'] == true;
       final enrolled = _activeEnrollments
           .where((e) => e['course_slug'] == c['slug'])
           .toList();
-      int revenue = 0, discountedCount = 0;
+      int paidSum = 0, platform = 0, teacher = 0, discountedCount = 0;
       for (final e in enrolled) {
         final dc = _redemptionsByCourseUser['${c['id']}|${e['user_id']}'];
-        int amt = priceNum;
+        int paid = price;
         if (dc != null) {
           discountedCount++;
-          final type = dc['discount_type'];
           final value = (dc['discount_value'] as num?) ?? 0;
-          amt = type == 'percent'
-              ? (priceNum * (1 - value / 100)).round()
-              : (priceNum - value).round();
-          if (amt < 0) amt = 0;
+          paid = dc['discount_type'] == 'percent'
+              ? (price * (1 - value / 100)).round()
+              : (price - value).round();
+          if (paid < 0) paid = 0;
         }
-        revenue += amt;
+        final s = PaymentRules.split(
+            price: price, paid: paid, directToTeacher: direct);
+        paidSum += paid;
+        platform += s.platform;
+        teacher += s.teacher;
       }
-      final teacherAmt = c['pay_to_teacher'] == true ? revenue : 0;
-      final mineAmt = c['pay_to_teacher'] == true ? 0 : revenue;
-      totalRevenue += revenue;
-      totalTeacher += teacherAmt;
-      totalMine += mineAmt;
+      if (direct) {
+        totalDirect += paidSum;
+      } else {
+        totalCollected += paidSum;
+        totalPlatform += platform;
+        totalTeacher += teacher;
+        final tid = c['teacher_id'] as String?;
+        if (tid != null && teacher > 0) {
+          owedByTeacher[tid] = (owedByTeacher[tid] ?? 0) + teacher;
+        }
+      }
       rows.add({
         'c': c,
+        'price': price,
+        'direct': direct,
         'students': enrolled.length,
         'discounted': discountedCount,
-        'revenue': revenue,
-        'teacherAmt': teacherAmt,
-        'mineAmt': mineAmt
+        'paid': paidSum,
+        'platform': platform,
+        'teacher': teacher,
       });
     }
-    rows.sort((a, b) => (b['revenue'] as int).compareTo(a['revenue'] as int));
+    rows.sort((a, b) => (b['paid'] as int).compareTo(a['paid'] as int));
 
     if (rows.isEmpty) return _empty(t('no_revenue'), ArcIcon.money);
+    String name(String? id) =>
+        (_profileByUser[id]?['full_name'] as String?) ?? '—';
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         DashHero(
           title: t('rev_total'),
-          subtitle: t('est_revenue'),
+          subtitle: t('rev_rule'),
           stats: [
-            ('$totalRevenue', t('rev_revenue')),
-            ('$totalTeacher', t('rev_teacher')),
-            ('$totalMine', t('rev_mine')),
+            ('$totalCollected', t('rev_collected')),
+            ('$totalPlatform', t('rev_platform_cut')),
+            ('$totalTeacher', t('rev_teacher_payouts')),
           ],
         ),
-        const SizedBox(height: 12),
+        if (owedByTeacher.isNotEmpty) ...[
+          DashSection(t('rev_owed_to_teachers')),
+          for (final e in owedByTeacher.entries) ...[
+            DashCard(
+              leading: DashAvatar(name: name(e.key)),
+              title: name(e.key),
+              subtitle: t('rev_owed_sub'),
+              trailing: Text('${e.value}',
+                  style: AppFonts.code(size: 15, color: AppColors.teal)),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+        if (totalDirect > 0) ...[
+          const SizedBox(height: 4),
+          Text('${t('rev_direct_note')} $totalDirect',
+              style: AppFonts.body(size: 12, color: AppColors.muted2)),
+        ],
+        DashSection(t('rev_by_course')),
         for (final r in rows) ...[
           DashCard(
             leading: DashIconBadge(icon: ArcIcon.money, accent: AppColors.red),
             title: (r['c']['title'] as String?) ?? '—',
             subtitle:
-                '${_profileByUser[r['c']['teacher_id']]?['full_name'] ?? '—'} · ${r['students']} ${t('rev_students')}${r['discounted'] > 0 ? ' (${r['discounted']} ${t('rev_discounted')})' : ''}',
-            trailing: Text('${r['revenue']}',
-                style: AppFonts.code(size: 15, color: AppColors.red)),
+                '${name(r['c']['teacher_id'] as String?)} · ${r['students']} ${t('rev_students')}${r['discounted'] > 0 ? ' (${r['discounted']} ${t('rev_discounted')})' : ''}',
+            trailing: r['direct'] == true
+                ? StatusPill(t('rev_direct'), tone: StatusTone.neutral)
+                : Text('${r['paid']}',
+                    style: AppFonts.code(size: 15, color: AppColors.red)),
             meta: [
-              '${t('rev_teacher')}: ${r['teacherAmt']} · ${t('rev_mine')}: ${r['mineAmt']}'
+              '${t('rev_price')}: ${r['price']}',
+              r['direct'] == true
+                  ? '${t('rev_teacher')}: ${r['teacher']} (${t('rev_no_cut')})'
+                  : '${t('rev_platform_cut')}: ${r['platform']} · ${t('rev_teacher')}: ${r['teacher']}',
             ],
           ),
           const SizedBox(height: 10),
         ],
       ],
     );
+  }
+
+  List<Map<String, dynamic>> get _editRequests => _allCourses
+      .where((c) => c['edit_status'] == 'pending_review' && c['pending_edit'] is Map)
+      .toList();
+
+  Future<void> _approveEdit(Map<String, dynamic> c) async {
+    final t = AppStrings.instance.t;
+    final edit = (c['pending_edit'] as Map).cast<String, dynamic>();
+    final price = PaymentRules.parsePrice(edit['price'] ?? c['price']);
+    try {
+      await SupabaseService.instance.client.from('courses').update({
+        if (edit.containsKey('title')) 'title': edit['title'],
+        if (edit.containsKey('description')) 'description': edit['description'],
+        if (edit.containsKey('price')) 'price': price,
+        if (edit.containsKey('price')) 'is_free': price == 0,
+        if (edit.containsKey('thumbnail_url')) 'thumbnail_url': edit['thumbnail_url'],
+        if (edit.containsKey('learning_points'))
+          'learning_points': edit['learning_points'],
+        'pending_edit': null,
+        'edit_status': 'approved',
+        'edit_reject_reason': null,
+      }).eq('id', c['id']);
+      await _loadAll();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
+  Future<void> _rejectEdit(Map<String, dynamic> c) async {
+    final t = AppStrings.instance.t;
+    final reason = await askRejectReason(context,
+        title: t('edit_reject_title'),
+        sub: t('edit_reject_sub'),
+        presets: [
+          t('edit_reject_price'),
+          t('edit_reject_content'),
+          t('edit_reject_image'),
+        ]);
+    if (reason == null) return;
+    try {
+      await SupabaseService.instance.client.from('courses').update({
+        'pending_edit': null,
+        'edit_status': 'rejected',
+        'edit_reject_reason': reason,
+      }).eq('id', c['id']);
+      await _loadAll();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
+  Widget _buildEditRequests(String Function(String) t) {
+    final list = _editRequests;
+    if (list.isEmpty) return _empty(t('no_edit_requests'), ArcIcon.edit);
+    String text(dynamic v) => v is List ? v.join('\n') : '${v ?? ''}';
+    return _list(list.length, (i) {
+      final c = list[i];
+      final edit = (c['pending_edit'] as Map).cast<String, dynamic>();
+      final changes = <Widget>[];
+      void field(String key, String label) {
+        if (!edit.containsKey(key)) return;
+        final before = key == 'price'
+            ? '${PaymentRules.parsePrice(c[key])}'
+            : text(c[key]);
+        final after = key == 'price'
+            ? '${PaymentRules.parsePrice(edit[key])}'
+            : text(edit[key]);
+        if (before.trim() == after.trim()) return;
+        changes.add(_ChangeRow(label: label, before: before, after: after));
+      }
+      field('title', t('field_title'));
+      field('description', t('field_description'));
+      field('price', t('field_price'));
+      field('learning_points', t('field_learning_points'));
+      final thumbChanged = edit.containsKey('thumbnail_url') &&
+          edit['thumbnail_url'] != c['thumbnail_url'];
+      if (thumbChanged) {
+        changes.add(_ThumbChange(
+            label: t('field_thumbnail'),
+            before: c['thumbnail_url'] as String?,
+            after: edit['thumbnail_url'] as String?));
+      }
+      return DashCard(
+        leading: SizedBox(
+          width: 64,
+          height: 48,
+          child: CourseThumb(url: c['thumbnail_url'] as String?, radius: 10),
+        ),
+        title: c['title'] as String? ?? '—',
+        subtitle:
+            (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—',
+        trailing: StatusPill(t('edit_pending'), tone: StatusTone.warn),
+        extra: [
+          const SizedBox(height: 12),
+          if (changes.isEmpty)
+            Text(t('no_edit_requests'),
+                style: AppFonts.body(size: 12, color: AppColors.muted2))
+          else
+            ...changes,
+        ],
+        actions: [
+          DashButton(t('btn_approve_edit'),
+              primary: true, icon: ArcIcon.check, onPressed: () => _approveEdit(c)),
+          DashButton(t('btn_reject'),
+              danger: true, icon: ArcIcon.close, onPressed: () => _rejectEdit(c)),
+        ],
+      );
+    });
   }
 
   List<Map<String, dynamic>> get _pendingPayments {
@@ -1023,6 +1201,8 @@ class _AdminScreenState extends State<AdminScreen> {
         title: title,
         subtitle: '$teacherName · ${_priceLabel(c, t)}',
         extra: [
+          // Direct payment is a per-teacher privilege (direct_payment_allowed).
+          if (_profileByUser[c['teacher_id']]?['direct_payment_allowed'] == true) ...[
           const SizedBox(height: 8),
           InkWell(
             borderRadius: BorderRadius.circular(10),
@@ -1035,6 +1215,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   style: AppFonts.body(size: 13, color: AppColors.muted)),
             ]),
           ),
+          ],
         ],
         actions: [
           DashButton(t('btn_publish'),
@@ -1251,7 +1432,8 @@ class _AdminScreenState extends State<AdminScreen> {
             TextField(
                 controller: _payZainCtrl,
                 textDirection: TextDirection.ltr,
-                keyboardType: TextInputType.phone,
+                keyboardType: TextInputType.number,
+                inputFormatters: PaymentRules.numberInput,
                 decoration: InputDecoration(
                     labelText: t('label_zaincash_phone'),
                     hintText: '07XX XXX XXXX')),
@@ -1259,6 +1441,8 @@ class _AdminScreenState extends State<AdminScreen> {
             TextField(
                 controller: _payQiCtrl,
                 textDirection: TextDirection.ltr,
+                keyboardType: TextInputType.number,
+                inputFormatters: PaymentRules.numberInput,
                 decoration: InputDecoration(
                     labelText: t('label_qi_account'),
                     hintText: 'XXXX XXXX XXXX XXXX')),
@@ -1399,6 +1583,103 @@ class _PendingBanner extends StatelessWidget {
             ArcIconView(ArcIcon.chevron, size: 18, color: amber),
           ]),
         ),
+      ),
+    );
+  }
+}
+
+/// One changed field in an edit request: label, then before (struck,
+/// muted) and after (highlighted).
+class _ChangeRow extends StatelessWidget {
+  final String label;
+  final String before;
+  final String after;
+  const _ChangeRow(
+      {required this.label, required this.before, required this.after});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    Widget box(String tag, String text, Color c, {bool strike = false}) =>
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            color: c.withValues(alpha: 0.08),
+            border: Border.all(color: c.withValues(alpha: 0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tag,
+                  style: AppFonts.body(
+                      size: 10.5, weight: FontWeight.w700, color: c)),
+              const SizedBox(height: 3),
+              Text(text.isEmpty ? '—' : text,
+                  style: AppFonts.body(
+                          size: 13,
+                          color: strike ? AppColors.muted : AppColors.text)
+                      .copyWith(
+                          decoration:
+                              strike ? TextDecoration.lineThrough : null)),
+            ],
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppFonts.body(size: 13, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          box(t('before'), before, AppColors.muted, strike: true),
+          const SizedBox(height: 6),
+          box(t('after'), after, AppColors.teal),
+        ],
+      ),
+    );
+  }
+}
+
+/// Old and new course image side by side.
+class _ThumbChange extends StatelessWidget {
+  final String label;
+  final String? before;
+  final String? after;
+  const _ThumbChange({required this.label, this.before, this.after});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    Widget img(String tag, String? url, Color c) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tag,
+                  style: AppFonts.body(
+                      size: 10.5, weight: FontWeight.w700, color: c)),
+              const SizedBox(height: 4),
+              AspectRatio(
+                aspectRatio: 16 / 10,
+                child: CourseThumb(url: url, radius: 12),
+              ),
+            ],
+          ),
+        );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: AppFonts.body(size: 13, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Row(children: [
+            img(t('before'), before, AppColors.muted),
+            const SizedBox(width: 10),
+            img(t('after'), after, AppColors.teal),
+          ]),
+        ],
       ),
     );
   }

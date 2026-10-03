@@ -12,6 +12,7 @@ import '../models/course.dart';
 import '../models/lecture.dart';
 import '../services/error_reporter.dart';
 import '../services/learning_service.dart';
+import '../services/payment_rules.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/course_card.dart';
@@ -1294,6 +1295,14 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       setState(() => _error = t('err_choose_payment'));
       return;
     }
+    final valid = _method == 'zain'
+        ? PaymentRules.isValidZain(_detailCtrl.text)
+        : PaymentRules.isValidQi(_detailCtrl.text);
+    if (!valid) {
+      setState(() => _error =
+          t(_method == 'zain' ? 'err_invalid_zain' : 'err_invalid_qi'));
+      return;
+    }
     if (_proof == null) {
       setState(() => _error = t('err_upload_proof'));
       return;
@@ -1453,6 +1462,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                         TextField(
                             controller: _detailCtrl,
                             textDirection: TextDirection.ltr,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: PaymentRules.numberInput,
                             decoration:
                                 InputDecoration(labelText: t('pay_label'))),
                         const SizedBox(height: 12),

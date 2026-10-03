@@ -8,6 +8,7 @@ import 'screens/auth_screen.dart';
 import 'screens/catalogue_screen.dart';
 import 'screens/set_new_password_screen.dart';
 import 'services/error_reporter.dart';
+import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'theme.dart';
 import 'widgets/blueprint_splash.dart';
@@ -35,6 +36,8 @@ Future<void> main() async {
         _showSetNewPasswordScreen, _showLinkExpiredDialog);
     SupabaseService.instance.resumeSessionWatchIfLoggedIn();
     SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
+    // Starts the live notifications stream (and follows sign-in/out).
+    NotificationService.instance;
     runApp(const SiteAndStructureApp());
   }, _reportError);
 }
