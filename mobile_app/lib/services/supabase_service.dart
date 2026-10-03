@@ -509,7 +509,13 @@ class SupabaseService extends ChangeNotifier {
       await client.from('profiles').insert(
           {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
 
-      final allowed = await _isDeviceAllowed(accessToken);
+      bool allowed;
+      try {
+        allowed = await _isDeviceAllowed(accessToken);
+      } catch (_) {
+        await client.auth.signOut().catchError((_) {});
+        return 'err_login_network';
+      }
       if (!allowed) {
         await client.auth.signOut();
         return 'err_device_limit';
@@ -519,6 +525,8 @@ class SupabaseService extends ChangeNotifier {
       return null;
     } on AuthException catch (e) {
       return e.message;
+    } catch (_) {
+      return 'err_login_network';
     }
   }
 
@@ -599,7 +607,10 @@ class SupabaseService extends ChangeNotifier {
         completer.complete(const LoginResult(success: true));
       } catch (e) {
         _awaitingEmailLinkConfirmation = false;
-        completer.complete(const LoginResult(error: 'Login failed.'));
+        // Google accepted the account but the device check (or profile
+        // setup) failed: never leave a half-signed-in session behind.
+        await client.auth.signOut().catchError((_) {});
+        completer.complete(const LoginResult(error: 'err_login_network'));
       }
     }, onError: (Object e) {
       // A failed Google/email-link return (expired, already used). Without
