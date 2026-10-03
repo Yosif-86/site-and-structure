@@ -168,6 +168,51 @@ async function handleWrite(request, env, url) {
   }
 }
 
+// Files the automatic conversion job (GitHub Actions) may touch: the
+// uploaded source and the HLS output scripts/transcode-to-hls.sh produces.
+const CONVERT_PATH = /^videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(source\.mp4|master\.m3u8|enc\.key|(480p|720p|1080p)\/(index\.m3u8|seg_\d{3,5}\.ts))$/i;
+
+function sameSecret(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * Conversion job access, authorized by the CONVERT_KEY secret (header
+ * x-convert-key), shared only with the GitHub Actions workflow:
+ *   GET    /convert/videos/<id>/source.mp4   download the uploaded source
+ *   PUT    /convert/videos/<id>/<hls file>   write one converted file
+ *   DELETE /convert/videos/<id>/source.mp4   remove the source afterwards
+ */
+async function handleConvert(request, env, url) {
+  if (!env.CONVERT_KEY || !sameSecret(request.headers.get('x-convert-key') || '', env.CONVERT_KEY)) {
+    return json({ error: 'Forbidden' }, 403);
+  }
+  const key = url.pathname.slice('/convert/'.length);
+  if (!CONVERT_PATH.test(key)) return json({ error: 'Bad path' }, 400);
+  const isSource = key.endsWith('/source.mp4');
+  const bucket = env.VIDEOS_BUCKET;
+
+  if (request.method === 'GET' && isSource) {
+    const object = await bucket.get(key);
+    if (!object) return json({ error: 'Not found' }, 404);
+    return new Response(object.body, { headers: { 'content-type': 'video/mp4' } });
+  }
+  if (request.method === 'PUT' && !isSource) {
+    await bucket.put(key, request.body, {
+      httpMetadata: { contentType: contentTypeFor(key) },
+    });
+    return json({ ok: true });
+  }
+  if (request.method === 'DELETE' && isSource) {
+    await bucket.delete(key);
+    return json({ ok: true });
+  }
+  return json({ error: 'Not allowed' }, 405);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
@@ -179,6 +224,9 @@ export default {
 
     if (path.startsWith('/upload/') || path.startsWith('/delete/')) {
       return handleWrite(request, env, url);
+    }
+    if (path.startsWith('/convert/')) {
+      return handleConvert(request, env, url);
     }
     const token = url.searchParams.get('token');
     const expires = url.searchParams.get('expires');

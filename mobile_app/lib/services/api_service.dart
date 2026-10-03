@@ -55,6 +55,25 @@ class ApiService {
     return OtpResult(ok: true);
   }
 
+  /// Starts the background 480p/720p/1080p conversion of a lecture the
+  /// admin just approved (api/convert-lecture.js). Best effort: if it fails
+  /// the lecture simply stays a single 1080p video.
+  static Future<void> startLectureConversion(
+      String lectureId, String accessToken) async {
+    try {
+      await http
+          .post(
+            Uri.parse('$kApiBaseUrl/api/convert-lecture'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: jsonEncode({'lectureId': lectureId}),
+          )
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {}
+  }
+
   static Future<VideoUrlResult> getVideoUrl(
       String lectureId, String accessToken, {bool preview = false}) async {
     final deviceId = await SupabaseService.instance.getDeviceId();

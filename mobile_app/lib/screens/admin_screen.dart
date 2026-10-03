@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
+import '../services/api_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
 import '../services/supabase_service.dart';
@@ -1312,6 +1313,14 @@ class _AdminScreenState extends State<AdminScreen> {
         'r2_path': pending.substring(3),
         'pending_upload_path': null,
       }).eq('id', l['id']);
+      // Live now as the 1080p upload; the multi-quality version replaces
+      // it by itself when the background conversion finishes.
+      final token =
+          SupabaseService.instance.client.auth.currentSession?.accessToken;
+      if (token != null) {
+        ApiService.startLectureConversion(l['id'] as String, token);
+      }
+      _showError(t('lecture_published_converting'));
       await _loadAll();
     } catch (_) {
       _showError(t('err_generic_failed'));

@@ -1,0 +1,85 @@
+# Converts an approved lecture (one 1080p MP4 uploaded from the teacher app)
+# into 480p / 720p / 1080p encrypted HLS, then switches the lecture over.
+# Started by api/convert-lecture.js when the admin approves a lecture; can
+# also be run by hand from the Actions tab with a lecture id.
+#
+# Needs one repository secret: CONVERT_KEY (same value as the Worker secret
+# of that name). The lecture keeps playing as the MP4 the whole time; if
+# anything fails, nothing changes for students.
+name: Convert lecture to multi-quality
+
+on:
+  workflow_dispatch:
+    inputs:
+      lecture_id:
+        description: Lecture id (uuid)
+        required: true
+
+concurrency:
+  group: convert-${{ inputs.lecture_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      WORKER: https://site-structure-videos.siteandstructure.workers.dev
+      SUPABASE_URL: https://qdarzhzttjpkgfihupgp.supabase.co
+      SUPABASE_ANON: sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q
+      LECTURE: ${{ inputs.lecture_id }}
+      CONVERT_KEY: ${{ secrets.CONVERT_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check input
+        run: |
+          [[ "$LECTURE" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo "bad lecture id"; exit 1; }
+          [ -n "$CONVERT_KEY" ] || { echo "CONVERT_KEY secret missing"; exit 1; }
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -y && sudo apt-get install -y ffmpeg
+
+      - name: Download the uploaded video
+        run: |
+          curl -fsSL --retry 5 --retry-delay 5 \
+            -H "x-convert-key: $CONVERT_KEY" \
+            "$WORKER/convert/videos/$LECTURE/source.mp4" -o source.mp4
+          ls -lh source.mp4
+
+      - name: Convert to 480p / 720p / 1080p HLS
+        run: bash scripts/transcode-to-hls.sh source.mp4 "$LECTURE"
+
+      - name: Upload to R2
+        run: |
+          cd "hls-out/$LECTURE"
+          put() {
+            curl -fsS --retry 5 --retry-delay 3 -X PUT \
+              -H "x-convert-key: $CONVERT_KEY" \
+              --data-binary @"$1" \
+              "$WORKER/convert/videos/$LECTURE/$1" > /dev/null
+          }
+          export -f put
+          # Segments and rendition playlists first (8 at a time), the master
+          # playlist last, so nothing points at files that aren't there yet.
+          find . -type f \( -name '*.ts' -o -name 'index.m3u8' -o -name 'enc.key' \) \
+            | sed 's|^\./||' | xargs -P 8 -I{} bash -c 'put "$@"' _ {}
+          put master.m3u8
+          echo "uploaded $(find . -type f | wc -l) files"
+
+      - name: Switch the lecture to multi-quality
+        run: |
+          DURATION=$(cat "hls-out/$LECTURE/duration.txt" 2>/dev/null || echo 0)
+          RESULT=$(curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/finish_lecture_conversion" \
+            -H "apikey: $SUPABASE_ANON" -H "Content-Type: application/json" \
+            -d "{\"p_lecture_id\":\"$LECTURE\",\"p_key\":\"$CONVERT_KEY\",\"p_duration\":${DURATION:-0}}")
+          echo "switch result: $RESULT"
+          [ "$RESULT" = "true" ] || { echo "lecture not switched (not approved, or already converted)"; exit 1; }
+
+      - name: Remove the uploaded MP4
+        run: |
+          curl -fsS --retry 3 -X DELETE -H "x-convert-key: $CONVERT_KEY" \
+            "$WORKER/convert/videos/$LECTURE/source.mp4"
