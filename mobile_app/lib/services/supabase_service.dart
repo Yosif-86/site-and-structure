@@ -27,7 +27,12 @@ const bool kPhoneOtpEnabled = true;
 // Paused: see _requiresLoginEmailOtp's doc comment. Flip back on once the
 // email-link flow (or a proper code, after custom SMTP is set up) has been
 // verified against a real inbox.
-const bool kTeacherAdminEmailOtpEnabled = false;
+const bool kTeacherAdminEmailOtpEnabled = true;
+
+/// Every account must sign in again this long after signing in, however
+/// actively it uses the app (session timeout).
+const Duration kSessionMaxAge = Duration(days: 5);
+const String _signedInAtKey = 'ss_signed_in_at';
 
 const String kSupabaseUrl = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const String kSupabaseAnonKey =
@@ -233,6 +238,7 @@ class SupabaseService extends ChangeNotifier {
       // match -- without this the user is "kicked" mid-way through typing
       // their new password.
       if (_inPasswordRecovery) return;
+      if (await enforceSessionLimit()) return;
       try {
       var myToken = await getSessionToken();
       if (myToken == null) {
@@ -292,7 +298,46 @@ class SupabaseService extends ChangeNotifier {
   /// Port of logLoginEvent() in index.html — same IP-geolocation lookup and
   /// >10km-from-last-login flagging, so mobile logins show up in the admin
   /// dashboard's flagged-logins view exactly like web ones do.
+  /// Starts the 5-day sign-in clock. Called from _logLoginEvent, which every
+  /// successful sign-in path (password, Google, email link, sign-up) runs.
+  Future<void> _markSignedIn() async {
+    try {
+      await _secureStorage.write(
+          key: _signedInAtKey, value: DateTime.now().toUtc().toIso8601String());
+    } catch (_) {}
+  }
+
+  /// Signs the user out once kSessionMaxAge has passed since they
+  /// signed in. A session from before this rule existed starts its
+  /// clock now. Returns true if it signed the user out.
+  Future<bool> enforceSessionLimit() async {
+    final user = currentUser;
+    if (user == null || _inPasswordRecovery) return false;
+    String? raw;
+    try {
+      raw = await _secureStorage.read(key: _signedInAtKey);
+    } catch (_) {}
+    final at = DateTime.tryParse(raw ?? '');
+    if (at == null) {
+      await _markSignedIn();
+      return false;
+    }
+    if (DateTime.now().toUtc().difference(at) < kSessionMaxAge) {
+      return false;
+    }
+    await logout();
+    try {
+      await _secureStorage.delete(key: _signedInAtKey);
+    } catch (_) {}
+    onSessionExpired?.call();
+    return true;
+  }
+
+  /// Shown when the 5-day session ends (set from main.dart).
+  void Function()? onSessionExpired;
+
   Future<void> _logLoginEvent(String userId, String email) async {
+    unawaited(_markSignedIn());
     Map<String, dynamic> geo = {};
     try {
       final res = await http
@@ -793,7 +838,11 @@ class SupabaseService extends ChangeNotifier {
 
   Future<void> logout() async {
     stopSessionWatch();
-    await _secureStorage.delete(key: _sessionTokenKey);
+    _sessionTokenMemory = null;
+    try {
+      await _secureStorage.delete(key: _sessionTokenKey);
+      await _secureStorage.delete(key: _signedInAtKey);
+    } catch (_) {}
     await client.auth.signOut();
     notifyListeners();
   }
@@ -824,6 +873,7 @@ class SupabaseService extends ChangeNotifier {
   void resumeSessionWatchIfLoggedIn() {
     if (!isLoggedIn) return;
     _startSessionWatch();
+    unawaited(enforceSessionLimit());
     // Already signed in from before the device-id change: re-register this
     // device under its new id now (the server moves the old slot), so video
     // playback -- which checks the device id -- keeps working without a

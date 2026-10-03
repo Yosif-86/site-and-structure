@@ -454,6 +454,7 @@ class AppStrings extends ChangeNotifier {
     'now_playing': 'يُعرض الآن',
     'course_lessons': 'دروس الدورة',
     'locked_lesson': 'مقفل',
+    'session_expired': 'لحماية الحساب، انتهت جلسة الدخول بعد 5 أيام. سجّل الدخول مجددًا.',
     'err_phone_taken': 'رقم الهاتف هذا مستخدم في حساب آخر. استخدم رقمًا مختلفًا أو سجّل الدخول بحسابك.',
     'err_email_taken': 'هذا البريد الإلكتروني مسجّل مسبقًا. سجّل الدخول بدلًا من ذلك.',
     'err_name_required': 'أدخل اسمك الكامل.',

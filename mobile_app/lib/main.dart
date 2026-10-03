@@ -36,6 +36,7 @@ Future<void> main() async {
         _showSetNewPasswordScreen, _showLinkExpiredDialog);
     SupabaseService.instance.resumeSessionWatchIfLoggedIn();
     SupabaseService.instance.onForcedLogout = _showForcedLogoutDialog;
+    SupabaseService.instance.onSessionExpired = _showSessionExpiredDialog;
     // Starts the live notifications stream (and follows sign-in/out).
     NotificationService.instance;
     runApp(const SiteAndStructureApp());
@@ -76,6 +77,28 @@ void _showLinkExpiredDialog() {
       actions: [
         TextButton(
             onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))
+      ],
+    ),
+  );
+}
+
+void _showSessionExpiredDialog() {
+  final context = navigatorKey.currentContext;
+  if (context == null) return;
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppColors.panel,
+      content: Text(AppStrings.instance.t('session_expired'),
+          style: TextStyle(color: AppColors.text)),
+      actions: [
+        TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (_) => const AuthScreen()));
+            },
+            child: Text(AppStrings.instance.t('log_in'))),
       ],
     ),
   );
