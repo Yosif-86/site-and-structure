@@ -6,7 +6,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
+import '../services/live_refresh.dart';
 import '../services/payment_rules.dart';
+import '../services/r2_upload.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
@@ -16,6 +18,7 @@ import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
+import 'video_player_screen.dart';
 import '../widgets/glass_scaffold.dart';
 
 /// Port of admin.html's dashboard: a landing view of clickable stat cards,
@@ -67,6 +70,7 @@ class _AdminScreenState extends State<AdminScreen> {
     'payments' => _View.payments,
     'review' => _View.review,
     'editRequests' => _View.editRequests,
+    'uploads' => _View.uploads,
     _ => _View.dashboard,
   };
 
@@ -97,14 +101,20 @@ class _AdminScreenState extends State<AdminScreen> {
   String? _payError;
   String? _payOk;
 
+  // Payments, course submissions, edits and uploads appear without a pull.
+  late final _live = LiveRefresh(
+      tables: const ['enrollments', 'courses', 'lectures'], onChange: _loadAll);
+
   @override
   void initState() {
     super.initState();
     _init();
+    _live.start();
   }
 
   @override
   void dispose() {
+    _live.stop();
     _payZainCtrl.dispose();
     _payQiCtrl.dispose();
     super.dispose();
@@ -176,7 +186,7 @@ class _AdminScreenState extends State<AdminScreen> {
             .order('created_at', ascending: false),
         sb
             .from('lectures')
-            .select('id, title, course_id, pending_upload_path')
+            .select('id, title, course_id, pending_upload_path, duration_seconds')
             .not('pending_upload_path', 'is', null)
             .order('order_index'),
         sb
@@ -1293,18 +1303,88 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  Future<void> _approveLecture(Map<String, dynamic> l) async {
+    final t = AppStrings.instance.t;
+    final pending = (l['pending_upload_path'] as String?) ?? '';
+    if (!pending.startsWith('r2:')) return;
+    try {
+      await SupabaseService.instance.client.from('lectures').update({
+        'r2_path': pending.substring(3),
+        'pending_upload_path': null,
+      }).eq('id', l['id']);
+      await _loadAll();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
+  Future<void> _rejectLecture(Map<String, dynamic> l) async {
+    final t = AppStrings.instance.t;
+    final reason = await askRejectReason(context,
+        title: t('lecture_reject_title'),
+        sub: t('lecture_reject_sub'),
+        presets: [
+          t('lecture_reject_quality'),
+          t('lecture_reject_content'),
+          t('lecture_reject_wrong'),
+        ]);
+    if (reason == null) return;
+    try {
+      final id = l['id'] as String;
+      if (((l['pending_upload_path'] as String?) ?? '').startsWith('r2:')) {
+        await R2Upload.deleteObject(id);
+      }
+      await SupabaseService.instance.client.rpc('reject_lecture',
+          params: {'p_lecture_id': id, 'p_reason': reason});
+      await _loadAll();
+    } catch (_) {
+      _showError(t('err_generic_failed'));
+    }
+  }
+
   Widget _buildUploads(String Function(String) t) {
     if (_pendingUploads.isEmpty) return _empty(t('no_uploads'), ArcIcon.video);
     return _list(_pendingUploads.length, (i) {
       final l = _pendingUploads[i];
+      final course = _allCourses.firstWhere((c) => c['id'] == l['course_id'],
+          orElse: () => <String, dynamic>{});
+      final teacher =
+          (_profileByUser[course['teacher_id']]?['full_name'] as String?) ?? '—';
+      final isR2 = ((l['pending_upload_path'] as String?) ?? '').startsWith('r2:');
+      final secs = (l['duration_seconds'] as num?)?.toInt();
+      final dur = secs == null
+          ? null
+          : '${secs ~/ 60}:${(secs % 60).toString().padLeft(2, '0')}';
       return DashCard(
         leading: DashIconBadge(icon: ArcIcon.video, accent: AppColors.byline),
         title: l['title'] as String? ?? '—',
-        meta: ['ID: ${l['id']}', '${l['pending_upload_path']}'],
+        subtitle: '${course['title'] ?? '—'} · $teacher',
+        trailing: StatusPill(t('lecture_pending_review'), tone: StatusTone.warn),
+        meta: [if (dur != null) dur],
         extra: [
-          const SizedBox(height: 8),
-          Text(t('uploads_hint'),
-              style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+          if (!isR2) ...[
+            const SizedBox(height: 8),
+            Text(t('legacy_upload_hint'),
+                style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+          ],
+        ],
+        actions: [
+          if (isR2) ...[
+            DashButton(t('btn_approve_publish'),
+                primary: true,
+                icon: ArcIcon.check,
+                onPressed: () => _approveLecture(l)),
+            DashButton(t('btn_preview'),
+                icon: ArcIcon.play,
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => VideoPlayerScreen(
+                          lectureId: l['id'] as String,
+                          title: l['title'] as String? ?? '',
+                          preview: true,
+                        )))),
+          ],
+          DashButton(t('btn_reject'),
+              danger: true, icon: ArcIcon.close, onPressed: () => _rejectLecture(l)),
         ],
       );
     });

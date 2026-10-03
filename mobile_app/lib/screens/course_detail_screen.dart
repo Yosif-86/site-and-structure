@@ -11,6 +11,7 @@ import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../models/lecture.dart';
 import '../services/error_reporter.dart';
+import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/payment_rules.dart';
 import '../services/supabase_service.dart';
@@ -50,10 +51,21 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   String? _error;
   int _tab = 0; // 0 = overview, 1 = curriculum
 
+  // An approved payment unlocks the course on screen the moment it happens.
+  late final _live = LiveRefresh(
+      tables: const ['enrollments', 'lectures', 'courses'], onChange: _load);
+
   @override
   void initState() {
     super.initState();
     _load();
+    _live.start();
+  }
+
+  @override
+  void dispose() {
+    _live.stop();
+    super.dispose();
   }
 
   Future<void> _load() async {

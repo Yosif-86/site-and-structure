@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { lectureId, deviceId, sessionToken } = req.body || {};
+  const { lectureId, deviceId, sessionToken, preview } = req.body || {};
   if (!lectureId) {
     res.status(400).json({ error: 'Missing lectureId' });
     return;
@@ -82,7 +82,7 @@ module.exports = async (req, res) => {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('active_session_token')
+    .select('active_session_token, is_admin')
     .eq('id', userId)
     .maybeSingle();
   if (!profile || profile.active_session_token !== sessionToken) {
@@ -92,16 +92,24 @@ module.exports = async (req, res) => {
 
   const { data: lecture, error: lectureErr } = await admin
     .from('lectures')
-    .select('id, course_id, r2_path, is_free')
+    .select('id, course_id, r2_path, is_free, pending_upload_path')
     .eq('id', lectureId)
     .maybeSingle();
 
-  if (lectureErr || !lecture || !lecture.r2_path) {
+  // Admin previewing an uploaded lecture before approving it: plays the
+  // pending R2 file ("r2:videos/<id>/source.mp4") instead of the live one.
+  const pendingR2 = (lecture?.pending_upload_path || '').startsWith('r2:')
+    ? lecture.pending_upload_path.slice(3)
+    : null;
+  const isPreview = preview === true && profile.is_admin === true && !!pendingR2;
+  const objectPath = isPreview ? pendingR2 : lecture?.r2_path;
+
+  if (lectureErr || !lecture || !objectPath) {
     res.status(404).json({ error: 'Video not available' });
     return;
   }
 
-  if (!lecture.is_free) {
+  if (!lecture.is_free && !isPreview) {
     const { data: course } = await admin
       .from('courses')
       .select('slug')
@@ -139,8 +147,20 @@ module.exports = async (req, res) => {
   // expiry. The real anti-sharing gate is the device/session check above,
   // which runs every time a URL is minted — this expiry just bounds how
   // long a copied URL could be replayed after that check passed.
-  const folderPrefix = `/${lecture.r2_path.replace(/^\/+/, '')}`;
   const expires = Math.floor(Date.now() / 1000) + 6 * 3600; // 6 hours
+
+  // A single MP4 uploaded from the teacher's phone (videos/<id>/source.mp4):
+  // same folder-scoped token, pointing straight at the file.
+  const cleanPath = objectPath.replace(/^\/+/, '');
+  if (cleanPath.endsWith('.mp4')) {
+    const prefix = '/' + cleanPath.split('/').slice(0, 2).join('/');
+    const mp4Token = crypto.createHash('sha256').update(r2SecurityKey + prefix + userId + expires).digest('hex');
+    const mp4Url = `${r2WorkerBaseUrl.replace(/\/+$/, '')}/${cleanPath}?token=${mp4Token}&expires=${expires}&uid=${encodeURIComponent(userId)}`;
+    res.status(200).json({ url: mp4Url, type: 'mp4' });
+    return;
+  }
+
+  const folderPrefix = `/${cleanPath}`;
   const token = crypto.createHash('sha256').update(r2SecurityKey + folderPrefix + userId + expires).digest('hex');
   const url = `${r2WorkerBaseUrl.replace(/\/+$/, '')}${folderPrefix}/master.m3u8?token=${token}&expires=${expires}&uid=${encodeURIComponent(userId)}`;
   res.status(200).json({ url, type: 'hls' });

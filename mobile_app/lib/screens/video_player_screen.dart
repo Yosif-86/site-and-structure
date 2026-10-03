@@ -31,12 +31,16 @@ class VideoPlayerScreen extends StatefulWidget {
   /// an active enrollment) — governs whether prev/next/episode-list entries
   /// are tappable.
   final bool Function(Lecture) isUnlocked;
+
+  /// Admin previewing an uploaded lecture before approving it.
+  final bool preview;
   const VideoPlayerScreen({
     super.key,
     required this.lectureId,
     required this.title,
     this.playlist = const [],
     this.isUnlocked = _alwaysUnlocked,
+    this.preview = false,
   });
 
   static bool _alwaysUnlocked(Lecture _) => true;
@@ -55,6 +59,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   Timer? _progressTimer;
   bool _autoplayTriggered = false;
   String? _hlsMasterUrl;
+  // Lectures uploaded from the teacher app are one 1080p MP4 (no renditions).
+  bool _isMp4 = false;
   String _currentQuality = 'auto';
   static const _qualities = ['auto', '480p', '720p', '1080p'];
 
@@ -117,7 +123,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       return;
     }
     try {
-      var result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken)
+      var result = await ApiService.getVideoUrl(widget.lectureId, session.accessToken,
+              preview: widget.preview)
           .timeout(const Duration(seconds: 15));
       // An access token that expired while this screen was sitting idle (or
       // was minted just before a session refresh elsewhere in the app)
@@ -128,7 +135,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         final refreshed = await SupabaseService.instance.client.auth.refreshSession();
         final newSession = refreshed.session;
         if (newSession != null) {
-          result = await ApiService.getVideoUrl(widget.lectureId, newSession.accessToken)
+          result = await ApiService.getVideoUrl(widget.lectureId, newSession.accessToken,
+                  preview: widget.preview)
               .timeout(const Duration(seconds: 15));
         }
       }
@@ -139,6 +147,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
 
       _hlsMasterUrl = result.url!;
+      _isMp4 = result.type == 'mp4';
       final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
       await controller.initialize().timeout(const Duration(seconds: 20));
       final resumeAt = await _loadResumePosition();
@@ -186,6 +195,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final controller = _hlsController;
     final user = SupabaseService.instance.currentUser;
     if (controller == null || user == null || !controller.value.isInitialized) return;
+    if (widget.preview) return;
     final position = controller.value.position;
     final duration = controller.value.duration;
     if (duration <= Duration.zero) return;
@@ -652,7 +662,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 isFullscreen: _isFullscreen,
                 onToggleFullscreen: _toggleFullscreen,
                 currentQuality: _currentQuality,
-                qualities: _qualities,
+                qualities: _isMp4 ? const [] : _qualities,
                 onQualityChanged: _switchQuality,
                 // Any bottom-bar interaction can change playback state (the
                 // play/pause button most directly), and this parent widget
@@ -979,6 +989,7 @@ class _ControlBar extends StatelessWidget {
                         .toList(),
                     child: _Pill('${value.playbackSpeed}x'),
                   ),
+                  if (qualities.isNotEmpty)
                   PopupMenuButton<String>(
                     initialValue: currentQuality,
                     onSelected: (q) { onInteract(); onQualityChanged(q); },

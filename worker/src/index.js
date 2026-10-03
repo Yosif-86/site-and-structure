@@ -33,6 +33,7 @@ async function sha256Hex(input) {
 function contentTypeFor(path) {
   if (path.endsWith('.m3u8')) return 'application/vnd.apple.mpegurl';
   if (path.endsWith('.ts')) return 'video/mp2t';
+  if (path.endsWith('.mp4')) return 'video/mp4';
   return 'application/octet-stream';
 }
 
@@ -78,13 +79,93 @@ function signPlaylist(text, token, expires, uid) {
 function corsHeaders() {
   const headers = new Headers();
   headers.set('access-control-allow-origin', '*');
-  headers.set('access-control-allow-methods', 'GET, HEAD, OPTIONS');
-  headers.set('access-control-allow-headers', 'range');
+  headers.set('access-control-allow-methods', 'GET, HEAD, PUT, POST, DELETE, OPTIONS');
+  headers.set('access-control-allow-headers', 'range, content-type');
+  headers.set('access-control-expose-headers', 'content-range, content-length, accept-ranges');
   return headers;
 }
 
 function errorResponse(message, status) {
   return new Response(message, { status, headers: corsHeaders() });
+}
+
+function json(body, status = 200) {
+  const headers = corsHeaders();
+  headers.set('content-type', 'application/json');
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+const UPLOAD_KEY = /^videos\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/source\.mp4$/i;
+
+/**
+ * Lecture uploads from the teacher app, written through this Worker's own
+ * R2 binding so no R2 API keys are needed anywhere else.
+ *
+ *   /upload/<key>?op=create            POST  -> { uploadId }
+ *   /upload/<key>?op=part&uploadId&partNumber   PUT body=bytes -> { partNumber, etag }
+ *   /upload/<key>?op=complete&uploadId POST  body=[{partNumber, etag}] -> { size }
+ *   /upload/<key>?op=abort&uploadId    POST  -> { ok }
+ *   /delete/<key>                      POST  -> { ok }   (admin rejecting a lecture)
+ *
+ * Every call carries token/expires/uid minted by api/r2-upload.js:
+ * token = sha256(SECURITY_KEY + action + ':' + key + uid + expires), so a
+ * token only ever works for one action on one object.
+ */
+async function handleWrite(request, env, url) {
+  const [, action, ...rest] = url.pathname.split('/');
+  const key = rest.join('/');
+  if (!UPLOAD_KEY.test(key)) return json({ error: 'Bad key' }, 400);
+
+  const token = url.searchParams.get('token');
+  const expires = url.searchParams.get('expires');
+  const uid = url.searchParams.get('uid');
+  if (!token || !expires || !uid) return json({ error: 'Missing token' }, 403);
+  if (!(Number(expires) > Math.floor(Date.now() / 1000))) {
+    return json({ error: 'Token expired' }, 403);
+  }
+  const expected = await sha256Hex(env.SECURITY_KEY + action + ':' + key + uid + expires);
+  if (expected !== token) return json({ error: 'Invalid token' }, 403);
+
+  const bucket = env.VIDEOS_BUCKET;
+  if (action === 'delete') {
+    await bucket.delete(key);
+    return json({ ok: true });
+  }
+
+  const op = url.searchParams.get('op');
+  const uploadId = url.searchParams.get('uploadId');
+  try {
+    if (op === 'create') {
+      const mpu = await bucket.createMultipartUpload(key, {
+        httpMetadata: { contentType: 'video/mp4' },
+      });
+      return json({ uploadId: mpu.uploadId });
+    }
+    if (!uploadId) return json({ error: 'Missing uploadId' }, 400);
+    const mpu = bucket.resumeMultipartUpload(key, uploadId);
+    if (op === 'part') {
+      const partNumber = Number(url.searchParams.get('partNumber'));
+      if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+        return json({ error: 'Bad partNumber' }, 400);
+      }
+      const part = await mpu.uploadPart(partNumber, await request.arrayBuffer());
+      return json({ partNumber: part.partNumber, etag: part.etag });
+    }
+    if (op === 'complete') {
+      const parts = await request.json();
+      const object = await mpu.complete(
+        parts.map((p) => ({ partNumber: Number(p.partNumber), etag: String(p.etag) })),
+      );
+      return json({ size: object.size });
+    }
+    if (op === 'abort') {
+      await mpu.abort();
+      return json({ ok: true });
+    }
+    return json({ error: 'Unknown op' }, 400);
+  } catch (e) {
+    return json({ error: 'R2 error', detail: String((e && e.message) || e) }, 500);
+  }
 }
 
 export default {
@@ -95,6 +176,10 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname; // e.g. /videos/<lectureId>/480p/index.m3u8
+
+    if (path.startsWith('/upload/') || path.startsWith('/delete/')) {
+      return handleWrite(request, env, url);
+    }
     const token = url.searchParams.get('token');
     const expires = url.searchParams.get('expires');
     const uid = url.searchParams.get('uid');
@@ -115,6 +200,31 @@ export default {
     }
 
     const objectKey = path.replace(/^\/+/, ''); // R2 keys have no leading slash
+
+    // A single MP4 (lectures uploaded from the teacher app) is streamed with
+    // byte ranges, so the player can seek without downloading from the start.
+    if (path.endsWith('.mp4')) {
+      const mp4 = await env.VIDEOS_BUCKET.get(objectKey, { range: request.headers });
+      if (!mp4) {
+        return errorResponse('Not found', 404);
+      }
+      const h = corsHeaders();
+      h.set('cache-control', 'private, max-age=60');
+      h.set('accept-ranges', 'bytes');
+      h.set('x-content-type-options', 'nosniff');
+      h.set('content-type', 'video/mp4');
+      const range = mp4.range;
+      if (request.headers.has('range') && range) {
+        const start = range.offset ?? (mp4.size - range.suffix);
+        const length = range.length ?? (mp4.size - start);
+        h.set('content-range', `bytes ${start}-${start + length - 1}/${mp4.size}`);
+        h.set('content-length', String(length));
+        return new Response(mp4.body, { status: 206, headers: h });
+      }
+      h.set('content-length', String(mp4.size));
+      return new Response(mp4.body, { headers: h });
+    }
+
     const object = await env.VIDEOS_BUCKET.get(objectKey);
     if (!object) {
       return errorResponse('Not found', 404);

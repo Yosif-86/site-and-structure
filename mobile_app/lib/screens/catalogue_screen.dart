@@ -6,6 +6,7 @@ import '../i18n/strings.dart';
 import '../main.dart' show routeObserver;
 import '../models/course.dart';
 import '../services/error_reporter.dart';
+import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -60,12 +61,22 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   final _myCoursesKey = GlobalKey<MyCoursesScreenState>();
   int _currentPage = 0;
 
+  // New courses, approvals and progress land on Home and My Courses live.
+  late final _live = LiveRefresh(
+    tables: const ['courses', 'enrollments', 'lectures'],
+    onChange: () async {
+      await Future.wait([_load(), _loadMyLearning()]);
+      _myCoursesKey.currentState?.reload();
+    },
+  );
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadProfile();
     _loadMyLearning();
+    _live.start();
     AppStrings.instance.addListener(_onLangChange);
     SupabaseService.instance.addListener(_onAuthChange);
     AppTheme.instance.addListener(_onThemeChange);
@@ -84,6 +95,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
 
   @override
   void dispose() {
+    _live.stop();
     routeObserver.unsubscribe(this);
     AppStrings.instance.removeListener(_onLangChange);
     SupabaseService.instance.removeListener(_onAuthChange);

@@ -3,11 +3,14 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
+import '../services/live_refresh.dart';
 import '../services/payment_rules.dart';
-import '../services/resumable_upload.dart';
+import '../services/r2_upload.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
@@ -175,7 +178,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
   // 0.0-1.0 while a video is uploading, null the rest of the time — drives
   // the circular progress pill in place of the Add button.
   double? _lUploadProgress;
-  ResumableUpload? _upload;
+  R2Upload? _upload;
+  String _lUploadPhase = 'upload'; // 'prepare' (downscaling) | 'upload'
+  bool _uploadBusy = false;
+  bool _uploadCancelled = false;
 
   // Discount code form state.
   final _dCode = TextEditingController();
@@ -193,14 +199,29 @@ class _TeacherScreenState extends State<TeacherScreen> {
   String? _pFormError;
   String? _pSavedMsg;
 
+  // Approvals, new payment requests and published lectures show up live.
+  late final _live = LiveRefresh(
+    tables: const ['enrollments', 'courses', 'lectures'],
+    onChange: () async {
+      if (!_isTeacher) return;
+      await _loadCourses();
+      await _loadPaymentRequests();
+      if (_view == _TView.curriculum && _activeCourse != null) {
+        await _loadLectures();
+      }
+    },
+  );
+
   @override
   void initState() {
     super.initState();
     _init();
+    _live.start();
   }
 
   @override
   void dispose() {
+    _live.stop();
     _cTitle.dispose();
     _cDescription.dispose();
     _cPrice.dispose();
@@ -503,20 +524,52 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _lFormError = t('err_video_required'));
       return;
     }
+    File? compressed;
     try {
       final sb = SupabaseService.instance.client;
-      final user = SupabaseService.instance.currentUser!;
-      final path =
-          '${user.id}/${_activeCourse!['id']}/${DateTime.now().millisecondsSinceEpoch}-${_lVideoFile!.name}';
-      setState(() => _lUploadProgress = 0);
-      // Read the runtime off the local file before uploading, so the course
-      // page can show real lecture/course durations from the first moment
-      // the lecture exists (not only after someone has watched it).
-      final durationSeconds = await _readVideoDuration(File(_lVideoFile!.path));
-      final upload = _upload = ResumableUpload(
-        bucket: 'lecture-uploads',
-        objectPath: path,
-        file: File(_lVideoFile!.path),
+      final lectureId = const Uuid().v4();
+      setState(() {
+        _lUploadProgress = 0;
+        _lUploadPhase = 'prepare';
+        _uploadBusy = true;
+      });
+      // Size and runtime off the local file first: the runtime shows on the
+      // course page from the start, the size decides whether to downscale.
+      final info = await _readVideoInfo(File(_lVideoFile!.path));
+      var source = File(_lVideoFile!.path);
+      // Lectures stream at up to 1080p: anything larger (4K phone footage)
+      // is re-encoded on the phone before upload, which also makes the
+      // upload several times smaller.
+      if (info.shortSide > 1080) {
+        final sub = VideoCompress.compressProgress$.subscribe((p) {
+          if (mounted) setState(() => _lUploadProgress = (p / 100).clamp(0, 1));
+        });
+        try {
+          final out = await VideoCompress.compressVideo(
+            source.path,
+            quality: VideoQuality.Res1920x1080Quality,
+            includeAudio: true,
+            deleteOrigin: false,
+          );
+          if (_uploadCancelled) throw const UploadCancelled();
+          if (out?.file == null) throw Exception('compress failed');
+          compressed = out!.file!;
+          source = compressed;
+        } finally {
+          sub.unsubscribe();
+        }
+      }
+      if (_uploadCancelled) throw const UploadCancelled();
+      if (mounted) {
+        setState(() {
+          _lUploadPhase = 'upload';
+          _lUploadProgress = 0;
+        });
+      }
+      final upload = _upload = R2Upload(
+        courseId: _activeCourse!['id'] as String,
+        lectureId: lectureId,
+        file: source,
       );
       await upload.start((p) {
         if (mounted) setState(() => _lUploadProgress = p);
@@ -527,41 +580,49 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   .map((l) => (l['order_index'] as num?) ?? 0)
                   .reduce((a, b) => a > b ? a : b) +
               1);
+      // Pending until the admin approves it (only an admin can set r2_path,
+      // which is what makes it playable).
       await sb.from('lectures').insert({
+        'id': lectureId,
         'course_id': _activeCourse!['id'],
         'title': title,
         'is_free': _lIsFree,
         'order_index': orderIndex,
-        'pending_upload_path': path,
-        if (durationSeconds != null) 'duration_seconds': durationSeconds,
+        'pending_upload_path': 'r2:${upload.key}',
+        if (info.seconds != null) 'duration_seconds': info.seconds,
       });
       _lTitle.clear();
       _lVideoFile = null;
       _lIsFree = false;
+      _showError(t('lecture_sent_for_review'));
       await _loadLectures();
     } on UploadCancelled {
       if (mounted) _showError(t('upload_cancelled'));
-    } on UploadTooLarge {
-      if (mounted) setState(() => _lFormError = t('err_video_too_large'));
     } catch (e) {
       if (mounted) setState(() => _lFormError = t('err_video_upload_failed'));
     } finally {
       _upload = null;
+      _uploadBusy = false;
+      _uploadCancelled = false;
+      if (compressed != null) {
+        compressed.delete().catchError((_) => compressed!);
+      }
       if (mounted) setState(() => _lUploadProgress = null);
     }
   }
 
-  /// Local video length in whole seconds, or null if it can't be read. Never
-  /// throws -- a missing duration just means the course page falls back to
-  /// the watch-data backfill, not a failed upload.
-  Future<int?> _readVideoDuration(File file) async {
+  /// Local video runtime (seconds) and the shorter side of its frame (the
+  /// "1080" in 1080p, whatever the orientation). Never throws.
+  Future<({int? seconds, int shortSide})> _readVideoInfo(File file) async {
     final controller = VideoPlayerController.file(file);
     try {
       await controller.initialize().timeout(const Duration(seconds: 15));
       final seconds = controller.value.duration.inSeconds;
-      return seconds > 0 ? seconds : null;
+      final size = controller.value.size;
+      final short = size.width < size.height ? size.width : size.height;
+      return (seconds: seconds > 0 ? seconds : null, shortSide: short.round());
     } catch (_) {
-      return null;
+      return (seconds: null, shortSide: 0);
     } finally {
       await controller.dispose();
     }
@@ -811,11 +872,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   /// Asks first, then stops the running lecture upload.
   Future<bool> _confirmCancelUpload() async {
-    if (_upload == null) return true;
+    if (!_uploadBusy) return true;
     final t = AppStrings.instance.t;
     final ok = await _confirm(t('confirm_cancel_upload'),
         confirmLabel: t('btn_cancel_upload'));
-    if (ok) _upload?.cancel();
+    if (ok) {
+      _uploadCancelled = true;
+      VideoCompress.cancelCompression();
+      _upload?.cancel();
+    }
     return ok;
   }
 
@@ -859,7 +924,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         body: PopScope(
           // System back: blocked during the mandatory payment step, and
           // asks before abandoning a lecture upload.
-          canPop: !widget.mandatoryPayment && _upload == null,
+          canPop: !widget.mandatoryPayment && !_uploadBusy,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || widget.mandatoryPayment) return;
             if (await _confirmCancelUpload() && mounted) {
@@ -1147,12 +1212,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
               video: true,
               emptyLabel: t('label_video_file'),
               onPick: () async {
-                if (_upload != null) return;
+                if (_uploadBusy) return;
                 final picked =
                     await ImagePicker().pickVideo(source: ImageSource.gallery);
                 if (picked != null) setState(() => _lVideoFile = picked);
               },
-              onRemove: _upload != null
+              onRemove: _uploadBusy
                   ? null
                   : () => setState(() => _lVideoFile = null),
             ),
@@ -1181,7 +1246,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   children: [
                     _UploadProgressPill(
                         progress: _lUploadProgress!,
-                        label: t('uploading_video')),
+                        label: _lUploadPhase == 'prepare'
+                            ? t('preparing_video')
+                            : t('uploading_video')),
                     DashButton(t('btn_cancel_upload'),
                         danger: true,
                         icon: ArcIcon.close,
@@ -1215,7 +1282,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       title: l['title'] as String? ?? '—',
       titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
       trailing: StatusPill(
-          live ? t('status_live') : t('status_pending_upload'),
+          live ? t('status_live') : t('lecture_pending_review'),
           tone: live ? StatusTone.good : StatusTone.warn),
       meta: [if (l['is_free'] == true) t('free_tag')],
       metaColor: AppColors.teal,

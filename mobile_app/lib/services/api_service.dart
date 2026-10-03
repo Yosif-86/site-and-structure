@@ -56,7 +56,7 @@ class ApiService {
   }
 
   static Future<VideoUrlResult> getVideoUrl(
-      String lectureId, String accessToken) async {
+      String lectureId, String accessToken, {bool preview = false}) async {
     final deviceId = await SupabaseService.instance.getDeviceId();
     final sessionToken = await SupabaseService.instance.getSessionToken();
     final res = await http.post(
@@ -68,7 +68,8 @@ class ApiService {
       body: jsonEncode({
         'lectureId': lectureId,
         'deviceId': deviceId,
-        'sessionToken': sessionToken
+        'sessionToken': sessionToken,
+        if (preview) 'preview': true,
       }),
     );
     final body = jsonDecode(res.body) as Map<String, dynamic>;

@@ -28,6 +28,9 @@ class NotificationsScreen extends StatelessWidget {
         'edit_request' => (ArcIcon.edit, const Color(0xFFE0A030)),
         'edit_approved' => (ArcIcon.check, AppColors.teal),
         'edit_rejected' => (ArcIcon.close, AppColors.error),
+        'lecture_review' => (ArcIcon.video, const Color(0xFFE0A030)),
+        'lecture_published' => (ArcIcon.video, AppColors.teal),
+        'lecture_rejected' => (ArcIcon.video, AppColors.error),
         _ => (ArcIcon.bell, AppColors.muted),
       };
 
@@ -45,6 +48,11 @@ class NotificationsScreen extends StatelessWidget {
         return const AdminScreen(openView: 'review');
       case 'edit_request':
         return const AdminScreen(openView: 'editRequests');
+      case 'lecture_review':
+        return const AdminScreen(openView: 'uploads');
+      case 'lecture_published':
+      case 'lecture_rejected':
+        return const TeacherScreen(openView: 'courses');
       case 'course_published':
       case 'course_returned':
       case 'edit_approved':
