@@ -36,12 +36,20 @@ class VerifyPhoneScreen extends StatefulWidget {
 class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   static const _digitCount = 6;
 
+  // Last code sent, kept across screen instances so leaving and coming back
+  // doesn't send (and pay for) another SMS inside the cooldown.
+  static String? _lastSentPhone;
+  static DateTime? _lastSentAt;
+
   String? _phone;
-  final _digitCtrls =
-      List.generate(_digitCount, (_) => TextEditingController());
-  final _digitFocus = List.generate(_digitCount, (_) => FocusNode());
+  // One hidden field drawn as 6 boxes: paste and SMS autofill fill all of
+  // them, and backspace works on every keyboard.
+  final _codeCtrl = TextEditingController();
+  final _codeFocus = FocusNode();
 
   bool _sending = true;
+  bool _inFlight = false;
+  bool _savingPhone = false;
   bool _verifying = false;
   bool _editingPhone = false;
   final _phoneEditCtrl = TextEditingController();
@@ -54,6 +62,9 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   @override
   void initState() {
     super.initState();
+    _codeFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     _init();
   }
 
@@ -82,12 +93,8 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   void dispose() {
     _cooldownTimer?.cancel();
     _phoneEditCtrl.dispose();
-    for (final c in _digitCtrls) {
-      c.dispose();
-    }
-    for (final f in _digitFocus) {
-      f.dispose();
-    }
+    _codeCtrl.dispose();
+    _codeFocus.dispose();
     super.dispose();
   }
 
@@ -96,11 +103,11 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   String? get _accessToken =>
       SupabaseService.instance.client.auth.currentSession?.accessToken;
 
-  String get _code => _digitCtrls.map((c) => c.text).join();
+  String get _code => _codeCtrl.text;
 
-  void _startCooldown() {
+  void _startCooldown([int seconds = 60]) {
     _cooldownTimer?.cancel();
-    setState(() => _cooldownSeconds = 60);
+    setState(() => _cooldownSeconds = seconds);
     _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return;
       setState(() => _cooldownSeconds--);
@@ -110,28 +117,51 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
 
   Future<void> _sendCode() async {
     final token = _accessToken;
-    if (token == null || _cooldownSeconds > 0) return;
+    if (_inFlight || _cooldownSeconds > 0) return;
+    if (token == null) {
+      setState(() {
+        _sending = false;
+        _error = _t('session_expired');
+      });
+      return;
+    }
+    // A code already went to this number moments ago: reuse it.
+    final last = _lastSentAt;
+    if (last != null && _lastSentPhone == _phone) {
+      final left = 60 - DateTime.now().difference(last).inSeconds;
+      if (left > 0) {
+        setState(() {
+          _sending = false;
+          _info = _t('otp_sent');
+        });
+        _startCooldown(left);
+        _codeFocus.requestFocus();
+        return;
+      }
+    }
+    _inFlight = true;
     setState(() {
       _sending = true;
       _error = null;
       _info = null;
     });
     final result = await ApiService.sendPhoneOtp(token, phone: _phone);
+    _inFlight = false;
     if (!mounted) return;
     setState(() {
       _sending = false;
       if (result.ok) {
         _info = _t('otp_sent');
+        _lastSentPhone = _phone;
+        _lastSentAt = DateTime.now();
         _startCooldown();
       } else {
         _error = _t(result.error!);
       }
     });
     if (result.ok) {
-      for (final c in _digitCtrls) {
-        c.clear();
-      }
-      _digitFocus.first.requestFocus();
+      _codeCtrl.clear();
+      _codeFocus.requestFocus();
     }
   }
 
@@ -141,12 +171,13 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   }
 
   Future<void> _saveNewPhone() async {
-    if (_phoneEditCtrl.text.trim().isEmpty) return;
+    if (_savingPhone || _phoneEditCtrl.text.trim().isEmpty) return;
     final newPhone = SignupRules.normalizeIraqiPhone(_phoneEditCtrl.text);
     if (newPhone == null) {
       setState(() => _error = _t('err_phone_format'));
       return;
     }
+    setState(() => _savingPhone = true);
     final user = SupabaseService.instance.currentUser;
     if (user != null) {
       try {
@@ -158,11 +189,13 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
         // below regardless of whether this write succeeds.
       }
     }
+    if (!mounted) return;
     _cooldownTimer?.cancel();
     setState(() {
       _phone = newPhone;
       _editingPhone = false;
       _cooldownSeconds = 0;
+      _savingPhone = false;
     });
     await _sendCode();
   }
@@ -198,26 +231,22 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  void _onDigitChanged(int i, String value) {
-    if (_error != null) setState(() => _error = null);
-    if (value.isNotEmpty && i < _digitCount - 1) {
-      _digitFocus[i + 1].requestFocus();
-    }
-    if (_code.length == _digitCount) _verifyCode();
+  void _onCodeChanged(String value) {
+    setState(() => _error = null);
+    if (value.length == _digitCount) _verifyCode();
   }
 
-  void _onDigitBackspace(int i) {
-    if (_digitCtrls[i].text.isEmpty && i > 0) {
-      _digitFocus[i - 1].requestFocus();
-      _digitCtrls[i - 1].clear();
-    }
-  }
-
-  void _goBack(BuildContext context) {
+  Future<void> _goBack(BuildContext context) async {
     if (widget.fromSignup) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-            builder: (_) => const AuthScreen(startInSignup: true)),
+      // The account already exists and is signed in; reopening the sign-up
+      // form would only hit "phone already used". Sign out instead -- the
+      // phone check comes back on the next sign-in.
+      final nav = Navigator.of(context);
+      try {
+        await SupabaseService.instance.logout();
+      } catch (_) {}
+      nav.pushReplacement(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
       );
     } else if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
@@ -306,7 +335,8 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
               const SizedBox(width: 10),
               Expanded(
                   child: ElevatedButton(
-                      onPressed: _saveNewPhone, child: Text(_t('save')))),
+                      onPressed: _savingPhone ? null : _saveNewPhone,
+                      child: Text(_t('save')))),
             ],
           ),
         ] else
@@ -337,12 +367,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
           // flowing left-to-right instead of mirroring with the page.
           Directionality(
             textDirection: TextDirection.ltr,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (var i = 0; i < _digitCount; i++) _digitBox(i),
-              ],
-            ),
+            child: _codeBoxes(),
           ),
           const SizedBox(height: 10),
           Center(
@@ -381,40 +406,80 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
     );
   }
 
-  Widget _digitBox(int i) {
-    return SizedBox(
-      width: 46,
-      height: 56,
-      child: KeyboardListener(
-        focusNode: FocusNode(skipTraversal: true),
-        onKeyEvent: (event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.backspace) {
-            _onDigitBackspace(i);
-          }
+  /// Six boxes over one invisible field. Box width shrinks on narrow phones
+  /// (6 x 46px didn't fit a 360dp screen inside the card).
+  Widget _codeBoxes() {
+    return LayoutBuilder(builder: (context, constraints) {
+      const gap = 8.0;
+      final w = ((constraints.maxWidth - gap * (_digitCount - 1)) / _digitCount)
+          .clamp(34.0, 52.0);
+      final code = _codeCtrl.text;
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          _codeFocus.requestFocus();
+          SystemChannels.textInput.invokeMethod('TextInput.show');
         },
-        child: TextField(
-          controller: _digitCtrls[i],
-          focusNode: _digitFocus[i],
-          textAlign: TextAlign.center,
-          textAlignVertical: TextAlignVertical.center,
-          // Fill the 46x56 box so the digit is centered both ways.
-          expands: true,
-          maxLines: null,
-          maxLength: 1,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: AppFonts.heading(size: 22),
-          // The theme's 16px side padding leaves only 14px inside a 46px
-          // box, which clipped the digit and pushed it left.
-          decoration: const InputDecoration(
-            counterText: '',
-            isDense: true,
-            contentPadding: EdgeInsets.zero,
+        child: Stack(alignment: Alignment.center, children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < _digitCount; i++) ...[
+                if (i > 0) const SizedBox(width: gap),
+                _box(w, i < code.length ? code[i] : '',
+                    active: _codeFocus.hasFocus &&
+                        (i == code.length ||
+                            (i == _digitCount - 1 &&
+                                code.length == _digitCount))),
+              ],
+            ],
           ),
-          onChanged: (v) => _onDigitChanged(i, v),
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0,
+              child: TextField(
+                controller: _codeCtrl,
+                focusNode: _codeFocus,
+                autofocus: true,
+                showCursor: false,
+                enableInteractiveSelection: false,
+                keyboardType: TextInputType.number,
+                autofillHints: const [AutofillHints.oneTimeCode],
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(_digitCount),
+                ],
+                decoration: const InputDecoration(
+                  counterText: '',
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                ),
+                onChanged: _onCodeChanged,
+              ),
+            ),
+          ),
+        ]),
+      );
+    });
+  }
+
+  Widget _box(double width, String digit, {required bool active}) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: width,
+      height: 56,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: active ? AppColors.red : AppColors.muted2.withValues(alpha: 0.5),
+          width: active ? 1.6 : 1,
         ),
       ),
+      child: Text(digit, style: AppFonts.heading(size: 24)),
     );
   }
 }

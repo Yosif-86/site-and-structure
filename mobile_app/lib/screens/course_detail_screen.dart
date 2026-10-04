@@ -14,6 +14,7 @@ import '../services/error_reporter.dart';
 import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/payment_rules.dart';
+import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/course_card.dart';
@@ -1254,8 +1255,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   }
 
   Future<void> _pickProof() async {
-    final picked = await ImagePicker()
-        .pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await SafePicker.image(imageQuality: 85);
     if (picked != null) setState(() => _proof = picked);
   }
 
@@ -1476,8 +1476,15 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                             textDirection: TextDirection.ltr,
                             keyboardType: TextInputType.number,
                             inputFormatters: PaymentRules.numberInput,
-                            decoration:
-                                InputDecoration(labelText: t('pay_label'))),
+                            // The student's own account the money came from,
+                            // so the approver can match the transfer.
+                            decoration: InputDecoration(
+                                labelText: t(_method == 'qi'
+                                    ? 'pay_label_qi'
+                                    : _method == 'zain'
+                                        ? 'pay_label_zain'
+                                        : 'pay_label'),
+                                helperText: t('pay_label_helper'))),
                         const SizedBox(height: 12),
                         FilePickBox(
                           file: _proof,

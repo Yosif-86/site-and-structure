@@ -1,10 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../i18n/strings.dart';
 import '../services/deep_links.dart';
+import '../services/safe_picker.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -85,7 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = '$e';
+        _error = ErrorReporter.userMessage(e, page: 'profile');
       });
     }
   }
@@ -115,8 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = SupabaseService.instance.currentUser;
     if (user == null || _uploading) return;
 
-    final picked = await ImagePicker()
-        .pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final picked = await SafePicker.image(imageQuality: 85);
     if (picked == null) return;
 
     setState(() => _uploading = true);
@@ -137,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       widget.onProfileChanged?.call();
       _toast(t('profile_saved'));
     } catch (e) {
-      _toast('${t('err_avatar_upload_failed')}$e');
+      _toast(ErrorReporter.userMessage(e, page: 'profile'));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -660,7 +660,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       if (mounted)
         setState(() {
           _saving = false;
-          _error = '${AppStrings.instance.t('err_save_failed')}$e';
+          _error = ErrorReporter.userMessage(e, page: 'profile');
         });
     }
   }

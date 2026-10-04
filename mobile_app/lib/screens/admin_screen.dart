@@ -10,6 +10,8 @@ import '../services/live_refresh.dart';
 import '../services/api_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
+import '../services/safe_picker.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
@@ -19,6 +21,7 @@ import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
+import 'course_detail_screen.dart';
 import 'video_player_screen.dart';
 import '../widgets/glass_scaffold.dart';
 
@@ -99,6 +102,22 @@ class _AdminScreenState extends State<AdminScreen> {
   XFile? _payQrFile;
   String? _payQrUrl;
   bool _payLoaded = false;
+  // Actions in flight, keyed by row id: a second tap is ignored instead of
+  // running the same approve/upload twice.
+  final Set<String> _busy = {};
+  // Each _loadAll bumps this; an older load that finishes late is dropped
+  // so it can't overwrite newer data.
+  int _loadGen = 0;
+
+  Future<void> _once(String key, Future<void> Function() action) async {
+    if (_busy.contains(key)) return;
+    setState(() => _busy.add(key));
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busy.remove(key));
+    }
+  }
   String? _payError;
   String? _payOk;
 
@@ -138,21 +157,24 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', user.id)
           .maybeSingle();
       final isAdmin = prof?['is_admin'] == true;
+      if (!mounted) return;
       setState(() {
         _checking = false;
         _isAdmin = isAdmin;
       });
       if (isAdmin) await _loadAll();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _checking = false;
         _isAdmin = false;
-        _error = e.toString();
+        _error = ErrorReporter.userMessage(e, page: 'admin');
       });
     }
   }
 
   Future<void> _loadAll() async {
+    final gen = ++_loadGen;
     setState(() {
       _loading = true;
       _error = null;
@@ -202,7 +224,8 @@ class _AdminScreenState extends State<AdminScreen> {
             .limit(200),
         sb
             .from('discount_code_redemptions')
-            .select('discount_code_id, user_id'),
+            .select('discount_code_id, user_id')
+            .order('redeemed_at', ascending: true),
       ]);
 
       final courses = (results[0] as List).cast<Map<String, dynamic>>();
@@ -232,7 +255,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
       final myProfile = profileByUser[SupabaseService.instance.currentUser?.id];
 
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
       setState(() {
         _allCourses = courses;
         _publishedCourses =
@@ -263,14 +286,20 @@ class _AdminScreenState extends State<AdminScreen> {
         _errorLogs = errors;
         // New three-field details, seeded from the old single method/number
         // pair the first time so nothing already set is lost.
-        final oldMethod = myProfile?['teacher_payment_method'] as String?;
-        final oldDetail = myProfile?['teacher_payment_detail'] as String?;
-        _payZainCtrl.text = (myProfile?['teacher_zaincash_phone'] as String?) ??
-            (oldMethod == 'zain' ? oldDetail ?? '' : '');
-        _payQiCtrl.text = (myProfile?['teacher_qi_account_number'] as String?) ??
-            (oldMethod == 'qi' ? oldDetail ?? '' : '');
-        _payQrUrl = myProfile?['teacher_qi_qr_url'] as String?;
-        _payLoaded = true;
+        // Only on the first load: live reloads must not wipe what the admin
+        // is typing.
+        if (!_payLoaded) {
+          final oldMethod = myProfile?['teacher_payment_method'] as String?;
+          final oldDetail = myProfile?['teacher_payment_detail'] as String?;
+          _payZainCtrl.text =
+              (myProfile?['teacher_zaincash_phone'] as String?) ??
+                  (oldMethod == 'zain' ? oldDetail ?? '' : '');
+          _payQiCtrl.text =
+              (myProfile?['teacher_qi_account_number'] as String?) ??
+                  (oldMethod == 'qi' ? oldDetail ?? '' : '');
+          _payQrUrl = myProfile?['teacher_qi_qr_url'] as String?;
+          _payLoaded = true;
+        }
         _loading = false;
       });
       // Discount redemptions are only needed by the revenue view's
@@ -283,11 +312,14 @@ class _AdminScreenState extends State<AdminScreen> {
                 codes.firstWhere((c) => c['id'] == r['discount_code_id']),
       };
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || gen != _loadGen) return;
+      final msg = ErrorReporter.userMessage(e, page: 'admin');
       setState(() {
-        _error = e.toString();
+        // Data already on screen stays; only a first load shows the error page.
+        if (_allCourses.isEmpty) _error = msg;
         _loading = false;
       });
+      if (_allCourses.isNotEmpty) _showError(msg);
     }
   }
 
@@ -298,23 +330,42 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _goto(_View v) => setState(() => _view = v);
 
-  Future<void> _approve(String enrollmentId) async {
+  Future<void> _approve(String enrollmentId) => _once(enrollmentId, () async {
     final t = AppStrings.instance.t;
+    final e = _enrollments.firstWhere((x) => x['id'] == enrollmentId,
+        orElse: () => const {});
+    final uid = e['user_id'] as String?;
+    final name = (_profileByUser[uid]?['full_name'] as String?) ??
+        _emailByUser[uid] ??
+        '—';
+    final slug = e['course_slug'] as String? ?? '';
+    final course = _courseBySlug[slug];
+    final ok = await _confirm(
+        t('confirm_approve_payment')
+            .replaceAll('{name}', name)
+            .replaceAll('{course}', _courseTitle(slug))
+            .replaceAll('{price}', course == null ? '—' : _priceLabel(course, t)),
+        confirmLabel: t('btn_confirm'));
+    if (!ok) return;
     try {
       final adminId = SupabaseService.instance.currentUser?.id;
-      await SupabaseService.instance.client.from('enrollments').update({
+      final updated = await SupabaseService.instance.client.from('enrollments').update({
         'status': 'active',
         'approved_by': adminId,
         // .toUtc() matters here -- see the same fix in video_player_screen's
         // progress save for why a bare local DateTime.now() lands 3 hours
         // ahead of real UTC once Postgres reads it.
         'approved_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', enrollmentId);
+      }).eq('id', enrollmentId).select('id');
+      // Nothing updated: someone else rejected it in the meantime.
+      _showError(t((updated as List).isEmpty
+          ? 'err_request_gone'
+          : 'payment_approved'));
       await _loadAll();
-    } catch (e) {
-      _showError('${t('alert_approve_failed')}$e');
+    } catch (err) {
+      _showError(ErrorReporter.userMessage(err, page: 'admin'));
     }
-  }
+  });
 
   Future<void> _removeEnrollment(
       String enrollmentId, String title, String email) async {
@@ -330,7 +381,7 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', enrollmentId);
       await _loadAll();
     } catch (e) {
-      _showError('${t('alert_remove_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
   }
 
@@ -348,34 +399,30 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', deviceRowId)
           .select();
       if ((result as List).isEmpty) {
-        _showError(
-            '${t('alert_remove_device_failed')}blocked by database policy (0 rows removed)');
+        _showError(t('err_not_allowed'));
         return;
       }
       await _loadAll();
     } catch (e) {
-      _showError('${t('alert_remove_device_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
   }
 
-  Future<void> _publishCourse(String id) async {
-    final t = AppStrings.instance.t;
+  Future<void> _publishCourse(String id) => _once(id, () async {
     try {
       await SupabaseService.instance.client
           .from('courses')
           .update({'status': 'published'}).eq('id', id);
       await _loadAll();
     } catch (e) {
-      _showError('${t('alert_review_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
   Future<void> _rejectCourse(String id, String title) async {
     final t = AppStrings.instance.t;
     final confirmed = await _confirm(
-        t('confirm_reject_course') != 'confirm_reject_course'
-            ? t('confirm_reject_course').replaceAll('{title}', title)
-            : 'Return "$title" to draft?',
+        t('confirm_reject_course').replaceAll('{title}', title),
         confirmLabel: t('btn_confirm'));
     if (!confirmed) return;
     try {
@@ -384,7 +431,7 @@ class _AdminScreenState extends State<AdminScreen> {
           .update({'status': 'draft'}).eq('id', id);
       await _loadAll();
     } catch (e) {
-      _showError('${t('alert_review_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
   }
 
@@ -402,8 +449,10 @@ class _AdminScreenState extends State<AdminScreen> {
             'p_teacher_id': course['teacher_id'],
             'p_enabled': true,
           });
-        } catch (_) {
-          _showError(t('err_teacher_no_payment_info'));
+        } catch (e) {
+          _showError(e.toString().contains('payment')
+              ? t('err_teacher_no_payment_info')
+              : ErrorReporter.userMessage(e, page: 'admin'));
           return;
         }
       }
@@ -422,7 +471,7 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _createInvite() async {
+  Future<void> _createInvite() => _once('invite', () async {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -437,7 +486,7 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       _showError(AppStrings.instance.t('err_create_invite'));
     }
-  }
+  });
 
   Future<void> _revokeInvite(String id) async {
     final confirmed = await _confirm(
@@ -451,11 +500,11 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', id);
       await _loadAll();
     } catch (e) {
-      _showError('Failed: $e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
   }
 
-  Future<void> _dismissError(String id) async {
+  Future<void> _dismissError(String id) => _once(id, () async {
     try {
       await SupabaseService.instance.client
           .from('error_logs')
@@ -463,13 +512,13 @@ class _AdminScreenState extends State<AdminScreen> {
           .eq('id', id);
       await _loadAll();
     } catch (e) {
-      _showError('Failed: $e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
   Future<void> _clearErrorLog() async {
     final confirmed = await _confirm(
-        'Delete all error log entries? This cannot be undone.',
+        AppStrings.instance.t('confirm_clear_errors'),
         confirmLabel: AppStrings.instance.t('btn_delete'));
     if (!confirmed) return;
     try {
@@ -479,11 +528,11 @@ class _AdminScreenState extends State<AdminScreen> {
           .not('id', 'is', null);
       await _loadAll();
     } catch (e) {
-      _showError('Failed: $e');
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
   }
 
-  Future<void> _saveMyPayment() async {
+  Future<void> _saveMyPayment() => _once('my-payment', () async {
     final t = AppStrings.instance.t;
     setState(() {
       _payError = null;
@@ -518,18 +567,21 @@ class _AdminScreenState extends State<AdminScreen> {
         'teacher_qi_account_number': qi.isEmpty ? null : qi,
         if (qrUrl != null) 'teacher_qi_qr_url': qrUrl,
       }).eq('id', user.id);
+      if (!mounted) return;
       setState(() {
         if (qrUrl != null) _payQrUrl = qrUrl;
         _payQrFile = null;
         _payOk = t('saved');
       });
+      await _loadAll();
     } catch (e) {
-      setState(() => _payError = t('err_save_failed'));
+      if (mounted) {
+        setState(() => _payError = ErrorReporter.userMessage(e, page: 'admin'));
+      }
     }
-  }
+  });
 
-  Future<void> _rejectEnrollment(String id) async {
-    final t = AppStrings.instance.t;
+  Future<void> _rejectEnrollment(String id) => _once(id, () async {
     final reason = await askRejectReason(context);
     if (reason == null) return;
     try {
@@ -537,9 +589,9 @@ class _AdminScreenState extends State<AdminScreen> {
           params: {'p_enrollment_id': id, 'p_reason': reason});
       await _loadAll();
     } catch (e) {
-      _showError(t('err_generic_failed'));
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
   void _showError(String message) {
     if (!mounted) return;
@@ -583,7 +635,13 @@ class _AdminScreenState extends State<AdminScreen> {
           title:
               Text(_view == _View.dashboard ? t('nav_admin') : _viewTitle(t)),
         ),
-        body: _buildBody(t),
+        body: PopScope(
+          canPop: _view == _View.dashboard,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _goto(_View.dashboard);
+          },
+          child: _buildBody(t),
+        ),
       ),
     );
   }
@@ -795,7 +853,7 @@ class _AdminScreenState extends State<AdminScreen> {
         ]),
         DashSection(t('dash_sec_money')),
         DashGrid(children: [
-          tile(ArcIcon.review, '${_pendingPayments.length}', t('payment_requests'),
+          tile(ArcIcon.review, '$myPendingPayments', t('payment_requests'),
               const Color(0xFFE0A030), _View.payments,
               alert: myPendingPayments > 0),
           tile(ArcIcon.money, '$revenue', t('est_revenue'), AppColors.red,
@@ -813,7 +871,9 @@ class _AdminScreenState extends State<AdminScreen> {
               alert: _flagged.isNotEmpty),
           tile(ArcIcon.phone, '${_devices.length}', t('trusted_devices'),
               AppColors.teal, _View.devices),
-          tile(ArcIcon.alert, '${_errorLogs.length}', t('error_log'),
+          tile(ArcIcon.alert,
+              _errorLogs.length >= 200 ? '200+' : '${_errorLogs.length}',
+              t('error_log'),
               AppColors.error, _View.errorLog,
               alert: _errorLogs.isNotEmpty),
         ]),
@@ -848,6 +908,10 @@ class _AdminScreenState extends State<AdminScreen> {
         subtitle: teacherName,
         trailing: StatusPill(_priceLabel(c, t),
             tone: c['is_free'] == true ? StatusTone.good : StatusTone.neutral),
+        onTap: c['slug'] == null
+            ? null
+            : () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CourseDetailScreen(slug: c['slug'] as String))),
       );
     });
   }
@@ -998,12 +1062,14 @@ class _AdminScreenState extends State<AdminScreen> {
       .where((c) => c['edit_status'] == 'pending_review' && c['pending_edit'] is Map)
       .toList();
 
-  Future<void> _approveEdit(Map<String, dynamic> c) async {
+  Future<void> _approveEdit(Map<String, dynamic> c) =>
+      _once('edit-${c['id']}', () async {
     final t = AppStrings.instance.t;
     final edit = (c['pending_edit'] as Map).cast<String, dynamic>();
     final price = PaymentRules.parsePrice(edit['price'] ?? c['price']);
     try {
-      await SupabaseService.instance.client.from('courses').update({
+      final updated =
+          await SupabaseService.instance.client.from('courses').update({
         if (edit.containsKey('title')) 'title': edit['title'],
         if (edit.containsKey('description')) 'description': edit['description'],
         if (edit.containsKey('price')) 'price': price,
@@ -1014,12 +1080,17 @@ class _AdminScreenState extends State<AdminScreen> {
         'pending_edit': null,
         'edit_status': 'approved',
         'edit_reject_reason': null,
-      }).eq('id', c['id']);
+      })
+          .eq('id', c['id'])
+          // The teacher may have sent a newer edit since this screen loaded.
+          .eq('edit_status', 'pending_review')
+          .select('id');
+      if ((updated as List).isEmpty) _showError(t('err_request_gone'));
       await _loadAll();
-    } catch (_) {
-      _showError(t('err_generic_failed'));
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
   Future<void> _rejectEdit(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
@@ -1181,11 +1252,13 @@ class _AdminScreenState extends State<AdminScreen> {
             '${t('approved_by')}: ${_emailByUser[approvedBy] ?? approvedBy} · ${_date(e['approved_at'] as String?, time: true)}',
         ],
         actions: [
-          if (!isActive)
+          if (!isActive && !_teacherPaid(e))
             DashButton(t('approve'),
                 primary: true,
                 icon: ArcIcon.check,
-                onPressed: () => _approve(e['id'] as String)),
+                onPressed: _busy.contains(e['id'])
+                    ? null
+                    : () => _approve(e['id'] as String)),
           if (proofPath != null)
             DashButton(t('view_proof'),
                 icon: ArcIcon.image, onPressed: () => _viewProof(proofPath)),
@@ -1304,7 +1377,8 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Future<void> _approveLecture(Map<String, dynamic> l) async {
+  Future<void> _approveLecture(Map<String, dynamic> l) =>
+      _once(l['id'] as String, () async {
     final t = AppStrings.instance.t;
     final pending = (l['pending_upload_path'] as String?) ?? '';
     if (!pending.startsWith('r2:')) return;
@@ -1322,12 +1396,13 @@ class _AdminScreenState extends State<AdminScreen> {
       }
       _showError(t('lecture_published_converting'));
       await _loadAll();
-    } catch (_) {
-      _showError(t('err_generic_failed'));
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
-  Future<void> _rejectLecture(Map<String, dynamic> l) async {
+  Future<void> _rejectLecture(Map<String, dynamic> l) =>
+      _once(l['id'] as String, () async {
     final t = AppStrings.instance.t;
     final reason = await askRejectReason(context,
         title: t('lecture_reject_title'),
@@ -1340,16 +1415,17 @@ class _AdminScreenState extends State<AdminScreen> {
     if (reason == null) return;
     try {
       final id = l['id'] as String;
+      // Reject first: if it fails the uploaded file must still be there.
+      await SupabaseService.instance.client.rpc('reject_lecture',
+          params: {'p_lecture_id': id, 'p_reason': reason});
       if (((l['pending_upload_path'] as String?) ?? '').startsWith('r2:')) {
         await R2Upload.deleteObject(id);
       }
-      await SupabaseService.instance.client.rpc('reject_lecture',
-          params: {'p_lecture_id': id, 'p_reason': reason});
       await _loadAll();
-    } catch (_) {
-      _showError(t('err_generic_failed'));
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
     }
-  }
+  });
 
   Widget _buildUploads(String Function(String) t) {
     if (_pendingUploads.isEmpty) return _empty(t('no_uploads'), ArcIcon.video);
@@ -1408,7 +1484,9 @@ class _AdminScreenState extends State<AdminScreen> {
         title: f['email'] as String? ?? '—',
         titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
         subtitle: '${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
-        trailing: StatusPill('${f['distance_km']} km', tone: StatusTone.bad),
+        trailing: StatusPill(
+            f['distance_km'] == null ? '—' : '${f['distance_km']} ${t('km')}',
+            tone: StatusTone.bad),
         meta: [_date(f['created_at'] as String?, time: true)],
       );
     });
@@ -1545,8 +1623,7 @@ class _AdminScreenState extends State<AdminScreen> {
               emptyLabel: t('pick_qr'),
               height: 200,
               onPick: () async {
-                final picked = await ImagePicker()
-                    .pickImage(source: ImageSource.gallery, imageQuality: 90);
+                final picked = await SafePicker.image(imageQuality: 90);
                 if (picked != null) setState(() => _payQrFile = picked);
               },
               onRemove: () => setState(() => _payQrFile = null),

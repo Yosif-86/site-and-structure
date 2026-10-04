@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../i18n/strings.dart';
+import '../services/error_reporter.dart';
 import '../services/payment_rules.dart';
 import '../services/signup_rules.dart';
 import '../services/supabase_service.dart';
@@ -83,17 +85,32 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     });
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
+    if (user == null) {
+      setState(() {
+        _saving = false;
+        _error = _t('session_expired');
+      });
+      return;
+    }
     try {
       final free = await sb.rpc('is_phone_available', params: {'p_phone': phone});
       if (free != true) {
-        setState(() => _error = _t('err_phone_taken'));
+        if (mounted) setState(() => _error = _t('err_phone_taken'));
         return;
       }
+      // Upsert: an account whose profile row never got created (sign-up cut
+      // off mid-way) gets it here instead of updating nothing.
       await sb
           .from('profiles')
-          .update({'full_name': name, 'phone': phone}).eq('id', user!.id);
-    } catch (_) {
-      setState(() => _error = _t('err_phone_taken'));
+          .upsert({'id': user.id, 'full_name': name, 'phone': phone});
+    } on PostgrestException catch (e) {
+      if (mounted) {
+        setState(() => _error =
+            _t(e.code == '23505' ? 'err_phone_taken' : 'err_generic_failed'));
+      }
+      return;
+    } catch (e) {
+      if (mounted) setState(() => _error = ErrorReporter.userMessage(e));
       return;
     } finally {
       if (mounted) setState(() => _saving = false);

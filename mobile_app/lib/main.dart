@@ -10,8 +10,10 @@ import 'screens/set_new_password_screen.dart';
 import 'services/error_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
+import 'services/net_status.dart';
 import 'theme.dart';
 import 'widgets/blueprint_splash.dart';
+import 'widgets/offline_banner.dart';
 import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -39,6 +41,7 @@ Future<void> main() async {
     SupabaseService.instance.onSessionExpired = _showSessionExpiredDialog;
     // Starts the live notifications stream (and follows sign-in/out).
     NotificationService.instance;
+    NetStatus.instance.start();
     runApp(const SiteAndStructureApp());
   }, _reportError);
 }
@@ -143,7 +146,7 @@ class SiteAndStructureApp extends StatelessWidget {
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
             child: PrivacyOverlay(
-              child: child!,
+              child: OfflineBanner(child: child!),
             ),
           ),
           home: const _LaunchGate(),

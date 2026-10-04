@@ -1,8 +1,10 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../i18n/strings.dart';
+import 'net_status.dart';
 import 'supabase_service.dart';
 
 /// Routes errors to the same error_logs table the website's pages report
@@ -41,6 +43,15 @@ class ErrorReporter {
   /// What the user sees. Raw exception text (table names, Postgres detail)
   /// stays in the log, never on screen.
   static String userMessage(Object error, {String page = 'app'}) {
+    // No internet isn't an app bug: say so, and don't fill the error log.
+    if (NetStatus.isOffline(error)) {
+      NetStatus.instance.reportOffline();
+      return AppStrings.instance.t('err_offline');
+    }
+    if (error is PostgrestException) {
+      if (error.code == '23505') return AppStrings.instance.t('err_duplicate');
+      if (error.code == '42501') return AppStrings.instance.t('err_not_allowed');
+    }
     report(error, null, page: page);
     return AppStrings.instance.t('err_generic');
   }

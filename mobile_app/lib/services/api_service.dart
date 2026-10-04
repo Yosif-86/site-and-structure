@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'net_status.dart';
 import 'supabase_service.dart';
 
 class VideoUrlResult {
@@ -19,41 +20,44 @@ class OtpResult {
 }
 
 class ApiService {
-  static Future<OtpResult> sendPhoneOtp(String accessToken,
-      {String? phone}) async {
-    final res = await http.post(
-      Uri.parse('$kApiBaseUrl/api/send-phone-otp'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode({if (phone != null) 'phone': phone}),
-    );
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode != 200) {
-      return OtpResult(
-          ok: false, error: body['error'] as String? ?? 'err_otp_send_failed');
+  /// Posts to one of our /api functions and never throws: offline, timeouts,
+  /// and non-JSON error pages (e.g. a Vercel 504) all come back as an error
+  /// key the screen can show, so no spinner is left running forever.
+  static Future<OtpResult> _otpCall(String path, String accessToken,
+      Map<String, dynamic> payload, String fallbackError) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kApiBaseUrl/api/$path'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 25));
+      if (res.statusCode == 200) return OtpResult(ok: true);
+      String? err;
+      try {
+        err = (jsonDecode(res.body) as Map<String, dynamic>)['error'] as String?;
+      } catch (_) {}
+      return OtpResult(ok: false, error: err ?? fallbackError);
+    } catch (e) {
+      if (NetStatus.isOffline(e)) {
+        NetStatus.instance.reportOffline();
+        return OtpResult(ok: false, error: 'err_offline');
+      }
+      return OtpResult(ok: false, error: fallbackError);
     }
-    return OtpResult(ok: true);
   }
 
-  static Future<OtpResult> verifyPhoneOtp(
-      String accessToken, String code) async {
-    final res = await http.post(
-      Uri.parse('$kApiBaseUrl/api/verify-phone-otp'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-      },
-      body: jsonEncode({'code': code}),
-    );
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    if (res.statusCode != 200) {
-      return OtpResult(
-          ok: false, error: body['error'] as String? ?? 'err_otp_incorrect');
-    }
-    return OtpResult(ok: true);
-  }
+  static Future<OtpResult> sendPhoneOtp(String accessToken, {String? phone}) =>
+      _otpCall('send-phone-otp', accessToken,
+          {if (phone != null) 'phone': phone}, 'err_otp_send_failed');
+
+  static Future<OtpResult> verifyPhoneOtp(String accessToken, String code) =>
+      _otpCall('verify-phone-otp', accessToken, {'code': code},
+          'err_otp_verify_failed');
 
   /// Starts the background 480p/720p/1080p conversion of a lecture the
   /// admin just approved (api/convert-lecture.js). Best effort: if it fails

@@ -7,7 +7,12 @@ import '../services/supabase_service.dart';
 /// Opens a student's payment-proof screenshot (private bucket) through a
 /// 60-second signed URL. Used by admins and by teachers of pay-to-teacher
 /// courses (storage policy allows both).
+bool _proofOpening = false;
+
 Future<void> openPaymentProof(BuildContext context, String path) async {
+  // A double tap used to open two viewers.
+  if (_proofOpening) return;
+  _proofOpening = true;
   try {
     final signedUrl = await SupabaseService.instance.client.storage
         .from('payment-proofs')
@@ -19,6 +24,8 @@ Future<void> openPaymentProof(BuildContext context, String path) async {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(AppStrings.instance.t('alert_proof_failed'))));
+  } finally {
+    _proofOpening = false;
   }
 }
 

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
@@ -11,6 +12,8 @@ import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
+import '../services/safe_picker.dart';
+import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
@@ -171,7 +174,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
   static const _minPointRows = 3;
   final List<TextEditingController> _cPoints = [];
   XFile? _cThumbFile;
+  // Current cover: the pending edit's if one is waiting, else the live one.
+  String? _cThumbUrl;
   String? _cFormError;
+  // Guards the save button: a double tap used to create the course twice.
+  bool _cSaving = false;
 
   // Lecture form state.
   final _lTitle = TextEditingController();
@@ -192,6 +199,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   final _dValue = TextEditingController();
   final _dMaxUses = TextEditingController(text: '10');
   DateTime? _dExpires;
+  bool _dSaving = false;
   String? _dFormError;
 
   // Profile form state.
@@ -293,7 +301,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _myCourses = (data as List).cast<Map<String, dynamic>>();
       await _loadOverview();
     } catch (e) {
-      _showError('$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -355,6 +363,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cDescription.clear();
     _cPrice.clear();
     _setPoints(const []);
+    _cThumbUrl = null;
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
@@ -373,12 +382,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _setPoints(((src['learning_points'] as List?) ?? const [])
         .whereType<String>()
         .toList());
+    _cThumbUrl = src['thumbnail_url'] as String?;
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
   }
 
   Future<void> _saveCourse() async {
+    if (_cSaving) return;
     final t = AppStrings.instance.t;
     setState(() => _cFormError = null);
     final title = _cTitle.text.trim();
@@ -401,10 +412,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
         .take(12)
         .map((l) => l.length > 200 ? l.substring(0, 200) : l)
         .toList();
+    setState(() => _cSaving = true);
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      String? thumbnailUrl = _activeCourse?['thumbnail_url'] as String?;
+      String? thumbnailUrl = _cThumbUrl;
       if (_cThumbFile != null) {
         final path =
             '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_cThumbFile!.name}';
@@ -443,7 +455,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         }).eq('id', _activeCourse!['id']);
       } else {
         final slug =
-            '${_slugify(title)}-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).substring(6)}';
+            '${_slugify(title)}-${const Uuid().v4().substring(0, 6)}';
         await sb.from('courses').insert({
           'slug': slug,
           'title': title,
@@ -460,7 +472,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
       if (!mounted) return;
       setState(() => _view = _TView.courses);
     } catch (e) {
-      setState(() => _cFormError = '${t('err_save_failed')}$e');
+      if (mounted) setState(() => _cFormError = ErrorReporter.userMessage(e, page: 'teacher'));
+    } finally {
+      if (mounted) setState(() => _cSaving = false);
     }
   }
 
@@ -478,12 +492,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
           .update({'status': 'pending_review'}).eq('id', c['id']);
       await _loadCourses();
     } catch (e) {
-      _showError('${t('alert_generic_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
   Future<void> _deleteCourse(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
+    // Students may have paid for a published course; only the admin can
+    // take one down (the database enforces the same rule).
+    if (c['status'] == 'published') {
+      _showError(t('err_published_course_delete'));
+      return;
+    }
     final confirmed = await _confirm(t('confirm_delete_course')
         .replaceAll('{title}', c['title'] as String? ?? ''));
     if (!confirmed) return;
@@ -494,7 +514,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           .eq('id', c['id']);
       await _loadCourses();
     } catch (e) {
-      _showError('${t('alert_generic_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -521,7 +541,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(
           () => _activeLectures = (data as List).cast<Map<String, dynamic>>());
     } catch (e) {
-      _showError('$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -641,16 +661,21 @@ class _TeacherScreenState extends State<TeacherScreen> {
     }
   }
 
-  Future<void> _deleteLecture(String id) async {
+  Future<void> _deleteLecture(Map<String, dynamic> l) async {
     final t = AppStrings.instance.t;
+    final live = l['r2_path'] != null;
+    final ok = await _confirm(
+        t(live ? 'confirm_delete_live_lecture' : 'confirm_delete_lecture')
+            .replaceAll('{title}', l['title'] as String? ?? ''));
+    if (!ok) return;
     try {
       await SupabaseService.instance.client
           .from('lectures')
           .delete()
-          .eq('id', id);
+          .eq('id', l['id']);
       await _loadLectures();
     } catch (e) {
-      _showError('${t('alert_generic_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -679,11 +704,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(
           () => _activeCodes = (data as List).cast<Map<String, dynamic>>());
     } catch (e) {
-      _showError('$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
   Future<void> _addCode() async {
+    if (_dSaving) return;
     final t = AppStrings.instance.t;
     setState(() => _dFormError = null);
     final code = _dCode.text.trim().toUpperCase();
@@ -704,7 +730,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _dFormError = t('err_discount_too_large'));
       return;
     }
-    final maxUses = int.tryParse(_dMaxUses.text.trim()) ?? 1;
+    final maxUsesText = _dMaxUses.text.trim();
+    final maxUses = maxUsesText.isEmpty ? 1 : int.tryParse(maxUsesText);
+    if (maxUses == null || maxUses < 1) {
+      setState(() => _dFormError = t('err_max_uses_invalid'));
+      return;
+    }
     if (_dExpires == null) {
       setState(() => _dFormError = t('err_expires_required'));
       return;
@@ -713,6 +744,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _dFormError = t('err_expires_past'));
       return;
     }
+    setState(() => _dSaving = true);
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -728,10 +760,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _dCode.clear();
       _dValue.clear();
       await _loadCodes();
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      setState(() => _dFormError = e.code == '23505'
+          ? t('err_code_exists')
+          : e.message.contains('discount_too_large')
+              ? t('err_discount_too_large')
+              : ErrorReporter.userMessage(e, page: 'teacher'));
     } catch (e) {
-      setState(() => _dFormError = '$e'.contains('discount_too_large')
-          ? t('err_discount_too_large')
-          : t('err_save_failed'));
+      if (mounted) {
+        setState(() => _dFormError = ErrorReporter.userMessage(e, page: 'teacher'));
+      }
+    } finally {
+      if (mounted) setState(() => _dSaving = false);
     }
   }
 
@@ -746,7 +787,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           .update({'is_active': false}).eq('id', c['id']);
       await _loadCodes();
     } catch (e) {
-      _showError('${t('alert_generic_failed')}$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -769,7 +810,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         _pQiQrUrl = prof['teacher_qi_qr_url'] as String?;
       });
     } catch (e) {
-      _showError('$e');
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -825,7 +866,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       }
       setState(() => _pSavedMsg = t('saved'));
     } catch (e) {
-      setState(() => _pFormError = '${t('err_save_failed')}$e');
+      setState(() => _pFormError = ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -849,7 +890,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       if (!mounted) return;
       setState(() => _pSavedMsg = t('payment_method_deleted'));
     } catch (e) {
-      setState(() => _pFormError = '${t('err_save_failed')}$e');
+      setState(() => _pFormError = ErrorReporter.userMessage(e, page: 'teacher'));
     }
   }
 
@@ -937,10 +978,21 @@ class _TeacherScreenState extends State<TeacherScreen> {
         body: PopScope(
           // System back: blocked during the mandatory payment step, and
           // asks before abandoning a lecture upload.
-          canPop: !widget.mandatoryPayment && !_uploadBusy,
+          // Inside a sub-view, back steps up one level (like the AppBar
+          // arrow) instead of closing the whole dashboard.
+          canPop: !widget.mandatoryPayment &&
+              !_uploadBusy &&
+              (_view == _TView.overview || widget.openPaymentInfo),
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || widget.mandatoryPayment) return;
-            if (await _confirmCancelUpload() && mounted) {
+            if (!await _confirmCancelUpload() || !mounted) return;
+            if (_view != _TView.overview && !widget.openPaymentInfo) {
+              setState(() => _view = (_view == _TView.curriculum ||
+                      _view == _TView.codes ||
+                      _view == _TView.courseEdit)
+                  ? _TView.courses
+                  : _TView.overview);
+            } else {
               Navigator.of(context).pop();
             }
           },
@@ -1064,7 +1116,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   onSubmit: _myCourses[i]['status'] == 'draft'
                       ? () => _submitForReview(_myCourses[i])
                       : null,
-                  onDelete: () => _deleteCourse(_myCourses[i]),
+                  onDelete: _myCourses[i]['status'] == 'published'
+                      ? null
+                      : () => _deleteCourse(_myCourses[i]),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1239,11 +1293,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
             const SizedBox(height: 12),
             FilePickBox(
               file: _cThumbFile,
-              existingUrl: _activeCourse?['thumbnail_url'] as String?,
+              existingUrl: _cThumbUrl,
               emptyLabel: t('label_thumbnail'),
               onPick: () async {
-                final picked = await ImagePicker()
-                    .pickImage(source: ImageSource.gallery, imageQuality: 85);
+                final picked = await SafePicker.image(imageQuality: 85);
                 if (picked != null) setState(() => _cThumbFile = picked);
               },
               onRemove: () => setState(() => _cThumbFile = null),
@@ -1253,7 +1306,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
             Row(children: [
               Expanded(
                   child: ElevatedButton(
-                      onPressed: _saveCourse, child: Text(t('save')))),
+                      onPressed: _cSaving ? null : _saveCourse,
+                      child: _cSaving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : Text(t('save')))),
               const SizedBox(width: 10),
               Expanded(
                   child: OutlinedButton(
@@ -1294,8 +1354,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               emptyLabel: t('label_video_file'),
               onPick: () async {
                 if (_uploadBusy) return;
-                final picked =
-                    await ImagePicker().pickVideo(source: ImageSource.gallery);
+                final picked = await SafePicker.video();
                 if (picked != null) setState(() => _lVideoFile = picked);
               },
               onRemove: _uploadBusy
@@ -1371,7 +1430,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         DashButton(t('btn_delete'),
             danger: true,
             icon: ArcIcon.trash,
-            onPressed: () => _deleteLecture(l['id'] as String)),
+            onPressed: () => _deleteLecture(l)),
       ],
     );
   }
@@ -1462,12 +1521,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   firstDate: DateTime.now(),
                   lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
                 );
-                if (picked != null) setState(() => _dExpires = picked);
+                // End of the picked day: picking today used to count as
+                // already expired, and every code ended a day early.
+                if (picked != null) {
+                  setState(() => _dExpires = DateTime(
+                      picked.year, picked.month, picked.day, 23, 59, 59));
+                }
               },
             ),
             _formError(_dFormError),
             const SizedBox(height: 14),
-            ElevatedButton(onPressed: _addCode, child: Text(t('btn_add'))),
+            ElevatedButton(
+                onPressed: _dSaving ? null : _addCode,
+                child: Text(t('btn_add'))),
           ],
         ),
       ],
@@ -1512,8 +1578,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               emptyLabel: t('pick_qr'),
               height: 200,
               onPick: () async {
-                final picked = await ImagePicker()
-                    .pickImage(source: ImageSource.gallery, imageQuality: 90);
+                final picked = await SafePicker.image(imageQuality: 90);
                 if (picked != null) setState(() => _pQiQrFile = picked);
               },
               onRemove: () => setState(() => _pQiQrFile = null),
@@ -1566,7 +1631,7 @@ class _CourseCard extends StatelessWidget {
   final VoidCallback onCurriculum;
   final VoidCallback onCodes;
   final VoidCallback? onSubmit;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   const _CourseCard({
     required this.course,
@@ -1575,7 +1640,7 @@ class _CourseCard extends StatelessWidget {
     required this.onCurriculum,
     required this.onCodes,
     required this.onSubmit,
-    required this.onDelete,
+    this.onDelete,
   });
 
   @override
@@ -1618,8 +1683,9 @@ class _CourseCard extends StatelessWidget {
         DashButton(t('btn_curriculum'),
             icon: ArcIcon.video, onPressed: onCurriculum),
         DashButton(t('btn_codes'), icon: ArcIcon.tag, onPressed: onCodes),
-        DashButton(t('btn_delete'),
-            danger: true, icon: ArcIcon.trash, onPressed: onDelete),
+        if (onDelete != null)
+          DashButton(t('btn_delete'),
+              danger: true, icon: ArcIcon.trash, onPressed: onDelete),
       ],
     );
   }

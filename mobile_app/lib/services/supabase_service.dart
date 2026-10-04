@@ -562,8 +562,19 @@ class SupabaseService extends ChangeNotifier {
       final accessToken = res.session?.accessToken;
       if (user == null || accessToken == null) return 'Sign up failed.';
 
-      await client.from('profiles').insert(
-          {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
+      // If this fails the auth account exists without a profile. Sign out
+      // so the user isn't left half signed-in; on the next sign-in the
+      // complete-profile step creates the profile row (it upserts).
+      try {
+        await client.from('profiles').upsert(
+            {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
+      } on PostgrestException catch (e) {
+        await client.auth.signOut().catchError((_) {});
+        return e.code == '23505' ? 'err_phone_taken' : 'err_login_network';
+      } catch (_) {
+        await client.auth.signOut().catchError((_) {});
+        return 'err_login_network';
+      }
 
       bool allowed;
       try {

@@ -8,6 +8,7 @@ import '../models/course.dart';
 import '../services/error_reporter.dart';
 import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
+import '../services/net_status.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -82,6 +83,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
     _load();
     _loadProfile();
     _loadMyLearning();
+    NetStatus.instance.online.addListener(_onNetChange);
     _live.start();
     AppStrings.instance.addListener(_onLangChange);
     SupabaseService.instance.addListener(_onAuthChange);
@@ -101,6 +103,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
 
   @override
   void dispose() {
+    NetStatus.instance.online.removeListener(_onNetChange);
     _live.stop();
     routeObserver.unsubscribe(this);
     AppStrings.instance.removeListener(_onLangChange);
@@ -208,6 +211,14 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
     await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const CompleteProfileScreen()));
     _loadProfile();
+  }
+
+  // Back online after a failed load: reload without waiting for a tap.
+  void _onNetChange() {
+    if (NetStatus.instance.online.value && _error != null) {
+      _load();
+      _loadMyLearning();
+    }
   }
 
   Future<void> _load() async {
