@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -898,55 +897,59 @@ class _AuthScreenState extends State<AuthScreen>
 
   /// Required before creating an account; both documents open in-app.
   Widget _termsCheckbox() {
-    TextSpan link(String text, Widget screen) => TextSpan(
-          text: text,
-          style: AppFonts.body(
-              size: 13.5, color: _glow, weight: FontWeight.w700),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => screen)),
+    void toggle() => setState(() {
+          _termsAccepted = !_termsAccepted;
+          if (_termsAccepted && _error == _t('err_terms_required')) {
+            _error = null;
+          }
+        });
+    final plain = AppFonts.body(size: 13.5, color: _ink);
+    final linkStyle =
+        AppFonts.body(size: 13.5, color: _glow, weight: FontWeight.w700);
+    Widget link(String text, Widget screen) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => screen)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(text, style: linkStyle),
+          ),
         );
-    return InkWell(
-      onTap: () => setState(() {
-        _termsAccepted = !_termsAccepted;
-        if (_termsAccepted && _error == _t('err_terms_required')) _error = null;
-      }),
-      borderRadius: BorderRadius.circular(8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: Checkbox(
-              value: _termsAccepted,
-              activeColor: _glow,
-              side: BorderSide(color: _ink.withValues(alpha: 0.6)),
-              onChanged: (v) => setState(() {
-                _termsAccepted = v ?? false;
-                if (_termsAccepted && _error == _t('err_terms_required')) {
-                  _error = null;
-                }
-              }),
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 28,
+          height: 28,
+          child: Checkbox(
+            value: _termsAccepted,
+            activeColor: _glow,
+            side: BorderSide(color: _ink.withValues(alpha: 0.6)),
+            onChanged: (_) => toggle(),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text.rich(TextSpan(
-                style: AppFonts.body(size: 13.5, color: _ink),
-                children: [
-                  TextSpan(text: _t('terms_agree_prefix')),
-                  link(_t('terms_title'), const TermsScreen()),
-                  TextSpan(text: _t('terms_agree_and')),
-                  link(_t('privacy_policy'), const PrivacyScreen()),
-                ],
-              )),
-            ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: toggle,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(_t('terms_agree_prefix'), style: plain),
+                ),
+              ),
+              link(_t('terms_title'), const TermsScreen()),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(_t('terms_agree_and'), style: plain),
+              ),
+              link(_t('privacy_policy'), const PrivacyScreen()),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

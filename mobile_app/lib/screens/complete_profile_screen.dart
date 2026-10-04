@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
@@ -71,6 +70,18 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   bool _termsAccepted = false;
+
+  Widget _link(String text, Widget screen) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => screen)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(text,
+              style: AppFonts.body(
+                  size: 13.5, color: AppColors.red, weight: FontWeight.w700)),
+        ),
+      );
 
   Future<void> _continue() async {
     if (_saving) return;
@@ -178,42 +189,31 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   Text(_t('complete_profile_phone_hint'),
                       style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
                   const SizedBox(height: 12),
-                  CheckboxListTile(
-                    value: _termsAccepted,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    activeColor: AppColors.red,
-                    onChanged: (v) => setState(() => _termsAccepted = v ?? false),
-                    title: Text.rich(TextSpan(
-                      style: AppFonts.body(size: 13.5),
-                      children: [
-                        TextSpan(text: _t('terms_agree_prefix')),
-                        TextSpan(
-                          text: _t('terms_title'),
-                          style: AppFonts.body(
-                              size: 13.5,
-                              color: AppColors.red,
-                              weight: FontWeight.w700),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const TermsScreen())),
+                  // Plain row (not CheckboxListTile): the tile's tap area
+                  // swallowed taps on the links.
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Checkbox(
+                      value: _termsAccepted,
+                      activeColor: AppColors.red,
+                      onChanged: (v) => setState(() => _termsAccepted = v ?? false),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(_t('terms_agree_prefix'),
+                                style: AppFonts.body(size: 13.5)),
+                            _link(_t('terms_title'), const TermsScreen()),
+                            Text(_t('terms_agree_and'),
+                                style: AppFonts.body(size: 13.5)),
+                            _link(_t('privacy_policy'), const PrivacyScreen()),
+                          ],
                         ),
-                        TextSpan(text: _t('terms_agree_and')),
-                        TextSpan(
-                          text: _t('privacy_policy'),
-                          style: AppFonts.body(
-                              size: 13.5,
-                              color: AppColors.red,
-                              weight: FontWeight.w700),
-                          recognizer: TapGestureRecognizer()
-                            ..onTap = () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const PrivacyScreen())),
-                        ),
-                      ],
-                    )),
-                  ),
+                      ),
+                    ),
+                  ]),
                   if (_error != null) ...[
                     const SizedBox(height: 10),
                     Text(_error!,
