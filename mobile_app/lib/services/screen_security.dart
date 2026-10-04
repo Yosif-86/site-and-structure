@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
+import 'supabase_service.dart';
+
 /// Talks to the native code in MainActivity.kt (Android) and AppDelegate.swift
 /// (iOS) — replaces the screen_protector package, which failed to build
 /// against current Android tooling.
@@ -31,16 +33,46 @@ class ScreenSecurity {
 
   static bool _handlerSet = false;
 
+  /// What the user is looking at, for the admin's report (set by screens
+  /// like the video player).
+  static String? currentScreen;
+  static DateTime? _lastReport;
+
+  /// Call once at start-up so capture attempts are reported app-wide.
+  static void init() => _ensureHandler();
+
   static void _ensureHandler() {
     if (kIsWeb || _handlerSet) return;
     _handlerSet = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onCapture') {
         final type = (call.arguments as Map)['type'] as String? ?? 'unknown';
+        _report(type);
         _onCapture?.call(type);
       }
       return null;
     });
+  }
+
+  /// Logs the attempt as a security event (the database notifies the
+  /// admins). At most one report every 30 seconds.
+  static Future<void> _report(String type) async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) return;
+    final now = DateTime.now();
+    if (_lastReport != null && now.difference(_lastReport!).inSeconds < 30) {
+      return;
+    }
+    _lastReport = now;
+    try {
+      await SupabaseService.instance.client.from('security_events').insert({
+        'user_id': user.id,
+        'kind': type == 'recording' ? 'screen_record' : 'screenshot',
+        'detail': {'screen': currentScreen ?? 'app'},
+      });
+    } catch (_) {
+      // Table not there yet, or offline: never disturb the user over this.
+    }
   }
 
   /// Android: turns FLAG_SECURE on, blocking screenshots/recording outright.
@@ -57,8 +89,9 @@ class ScreenSecurity {
     }
   }
 
-  /// iOS only: fires with 'screenshot' or 'recording' whenever a capture is
-  /// detected. Set to null to stop listening.
+  /// Fires with 'screenshot' or 'recording' when a capture is detected
+  /// (iOS always; Android 14+ screenshots, Android 15+ recording). Set to
+  /// null to stop listening.
   static void onCapture(void Function(String type)? callback) {
     _ensureHandler();
     _onCapture = callback;

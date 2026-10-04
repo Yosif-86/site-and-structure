@@ -11,6 +11,7 @@ import 'services/error_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'services/net_status.dart';
+import 'services/screen_security.dart';
 import 'theme.dart';
 import 'widgets/blueprint_splash.dart';
 import 'widgets/offline_banner.dart';
@@ -42,6 +43,7 @@ Future<void> main() async {
     // Starts the live notifications stream (and follows sign-in/out).
     NotificationService.instance;
     NetStatus.instance.start();
+    ScreenSecurity.init();
     runApp(const SiteAndStructureApp());
   }, _reportError);
 }

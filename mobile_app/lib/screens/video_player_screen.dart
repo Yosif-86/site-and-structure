@@ -8,6 +8,8 @@ import 'package:video_player/video_player.dart';
 import '../i18n/strings.dart';
 import '../models/lecture.dart';
 import '../services/api_service.dart';
+import '../services/error_reporter.dart';
+import '../services/net_status.dart';
 import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -49,13 +51,18 @@ class VideoPlayerScreen extends StatefulWidget {
   State<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
 }
 
-class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
+class _VideoPlayerScreenState extends State<VideoPlayerScreen>
+    with WidgetsBindingObserver {
   VideoPlayerController? _hlsController;
   bool _loading = true;
   String? _error;
   String _watermarkLabel = '';
   bool _captureNotice = false;
   bool _isFullscreen = false;
+  // Fullscreen chosen with the button (locked to landscape) rather than by
+  // turning the device. Leaving it with the button locks portrait so the
+  // screen doesn't flip straight back.
+  bool _manualFullscreen = false;
   Timer? _progressTimer;
   bool _autoplayTriggered = false;
   String? _hlsMasterUrl;
@@ -76,7 +83,38 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Let the player follow the device: turning it sideways goes fullscreen
+    // (respects the phone's own rotation lock).
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    ScreenSecurity.currentScreen = widget.title;
+    // Already held sideways when the lecture opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) => didChangeMetrics());
     _init();
+  }
+
+  bool get _deviceLandscape {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) return false;
+    final size = views.first.physicalSize;
+    return size.width > size.height;
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!mounted || _manualFullscreen) return;
+    final landscape = _deviceLandscape;
+    if (landscape && !_isFullscreen) {
+      setState(() => _isFullscreen = true);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else if (!landscape && _isFullscreen) {
+      setState(() => _isFullscreen = false);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   Future<void> _init() async {
@@ -142,7 +180,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       }
       if (result.error != null || result.url == null) {
         if (!mounted) return;
-        setState(() { _loading = false; _error = AppStrings.instance.t('err_video_unavailable'); });
+        // Keep the server's reason when it's one we can explain (other
+        // device, signed in elsewhere, not enrolled yet).
+        final reason = switch (result.error) {
+          'err_untrusted_device' => 'err_untrusted_device',
+          'err_session_kicked' => 'err_session_kicked',
+          'Not enrolled or access not yet approved' => 'err_video_not_enrolled',
+          'Too many requests, try again shortly.' =>
+            'Too many requests, try again shortly.',
+          _ => 'err_video_unavailable',
+        };
+        setState(() { _loading = false; _error = AppStrings.instance.t(reason); });
         return;
       }
 
@@ -162,7 +210,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _scheduleAutoHide();
     } catch (e) {
       if (!mounted) return;
-      setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
+      setState(() {
+        _loading = false;
+        _error = NetStatus.isOffline(e)
+            ? AppStrings.instance.t('err_offline')
+            : AppStrings.instance.t('err_video_unavailable');
+      });
+      if (!NetStatus.isOffline(e)) ErrorReporter.report(e, null, page: 'video');
     }
   }
 
@@ -236,8 +290,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     final position = old?.value.position ?? Duration.zero;
     final wasPlaying = old?.value.isPlaying ?? true;
     setState(() => _loading = true);
+    VideoPlayerController? controller;
     try {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(_urlForQuality(quality)));
+      controller = VideoPlayerController.networkUrl(Uri.parse(_urlForQuality(quality)));
       await controller.initialize().timeout(const Duration(seconds: 20));
       await controller.seekTo(position);
       if (wasPlaying) controller.play();
@@ -247,8 +302,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() { _hlsController = controller; _currentQuality = quality; _loading = false; });
       await old?.dispose();
     } catch (e) {
+      // That quality isn't available: keep playing the current one.
+      controller?.dispose();
       if (!mounted) return;
-      setState(() { _loading = false; _error = '${AppStrings.instance.t('err_video_unavailable')}\n($e)'; });
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(AppStrings.instance.t('err_quality_unavailable'))));
     }
   }
 
@@ -263,8 +322,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _toggleFullscreen() async {
-    setState(() => _isFullscreen = !_isFullscreen);
-    if (_isFullscreen) {
+    final enter = !_isFullscreen;
+    setState(() {
+      _isFullscreen = enter;
+      _manualFullscreen = enter;
+    });
+    if (enter) {
       await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
@@ -375,7 +438,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
     ScreenSecurity.onCapture(null);
-    if (_isFullscreen) _restoreSystemUi();
+    WidgetsBinding.instance.removeObserver(this);
+    ScreenSecurity.currentScreen = null;
+    _restoreSystemUi();
     super.dispose();
   }
 

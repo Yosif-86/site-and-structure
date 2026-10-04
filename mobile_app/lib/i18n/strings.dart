@@ -298,6 +298,8 @@ class AppStrings extends ChangeNotifier {
     'attention_setup': 'إعداد',
     'teacher_attention_payment_info': 'أضف معلومات الدفع حتى يستطيع الطلاب الدفع لك',
     'teacher_attention_draft_sub': 'لم تُرسل للمراجعة بعد',
+    'err_quality_unavailable': 'هذه الجودة غير متاحة لهذه المحاضرة.',
+    'err_video_not_enrolled': 'لم يتم تفعيل اشتراكك في هذه الدورة بعد.',
     'err_duplicate': 'هذا العنصر موجود مسبقًا.',
     'err_code_exists': 'هذا الكود موجود مسبقًا لهذه الدورة.',
     'err_max_uses_invalid': 'عدد مرات الاستخدام يجب أن يكون رقمًا صحيحًا 1 أو أكثر.',

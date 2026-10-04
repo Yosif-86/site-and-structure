@@ -75,20 +75,56 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
+  /// Folds Arabic spelling variants together so "انشائية" finds
+  /// "إنشائية": hamza forms of alef, taa marbuta / haa, alef maqsura / yaa,
+  /// plus diacritics and tatweel are ignored.
+  static String _normalize(String s) {
+    final b = StringBuffer();
+    for (final r in s.toLowerCase().runes) {
+      if (r >= 0x064B && r <= 0x0652) continue; // tashkeel
+      if (r == 0x0640) continue; // tatweel
+      switch (r) {
+        case 0x0623: // أ
+        case 0x0625: // إ
+        case 0x0622: // آ
+        case 0x0671: // ٱ
+          b.writeCharCode(0x0627); // ا
+        case 0x0629: // ة
+          b.writeCharCode(0x0647); // ه
+        case 0x0649: // ى
+          b.writeCharCode(0x064A); // ي
+        case 0x0624: // ؤ
+          b.writeCharCode(0x0648); // و
+        case 0x0626: // ئ
+          b.writeCharCode(0x064A); // ي
+        default:
+          b.writeCharCode(r);
+      }
+    }
+    return b.toString();
+  }
+
   List<Course> get _filtered {
     final ar = AppStrings.instance.isAr;
-    final q = _query.trim().toLowerCase();
+    final words = _normalize(_query.trim())
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
     return (_courses ?? const <Course>[]).where((c) {
       if (_filter == _PriceFilter.free && !c.isFree) return false;
       if (_filter == _PriceFilter.paid && c.isFree) return false;
-      if (q.isEmpty) return true;
-      final hay = [
+      if (words.isEmpty) return true;
+      final hay = _normalize([
         c.localizedTitle(ar),
         c.title,
         c.localizedTeacherName(ar) ?? '',
+        c.teacherName ?? '',
         c.localizedTagLabel(ar) ?? '',
-      ].join(' ').toLowerCase();
-      return hay.contains(q);
+        c.localizedDescription(ar) ?? '',
+        ...c.learningPoints,
+      ].join(' '));
+      // Every typed word must appear somewhere (in any order).
+      return words.every(hay.contains);
     }).toList();
   }
 

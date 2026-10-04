@@ -1,5 +1,7 @@
 package com.siteandstructure.site_and_structure
 
+import android.app.Activity
+import android.os.Build
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -35,6 +37,51 @@ import io.flutter.plugin.common.MethodChannel
  */
 class MainActivity : FlutterActivity() {
     private val channelName = "site_and_structure/screen_security"
+    private var channel: MethodChannel? = null
+
+    // Screenshot attempts (Android 14+) and screen recording starting
+    // (Android 15+) are reported to Dart, which logs them for the admin.
+    // FLAG_SECURE still blanks the capture itself; this only says it happened.
+    private val screenshotCallback: Any? =
+        if (Build.VERSION.SDK_INT >= 34) Activity.ScreenCaptureCallback {
+            channel?.invokeMethod("onCapture", mapOf("type" to "screenshot"))
+        } else null
+
+    private val recordingCallback: Any? =
+        if (Build.VERSION.SDK_INT >= 35) java.util.function.Consumer<Int> { state ->
+            if (state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE) {
+                channel?.invokeMethod("onCapture", mapOf("type" to "recording"))
+            }
+        } else null
+
+    override fun onStart() {
+        super.onStart()
+        if (Build.VERSION.SDK_INT >= 34) {
+            registerScreenCaptureCallback(mainExecutor,
+                screenshotCallback as Activity.ScreenCaptureCallback)
+        }
+        if (Build.VERSION.SDK_INT >= 35) {
+            @Suppress("UNCHECKED_CAST")
+            val state = windowManager.addScreenRecordingCallback(mainExecutor,
+                recordingCallback as java.util.function.Consumer<Int>)
+            if (state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE) {
+                channel?.invokeMethod("onCapture", mapOf("type" to "recording"))
+            }
+        }
+    }
+
+    override fun onStop() {
+        if (Build.VERSION.SDK_INT >= 34) {
+            unregisterScreenCaptureCallback(
+                screenshotCallback as Activity.ScreenCaptureCallback)
+        }
+        if (Build.VERSION.SDK_INT >= 35) {
+            @Suppress("UNCHECKED_CAST")
+            windowManager.removeScreenRecordingCallback(
+                recordingCallback as java.util.function.Consumer<Int>)
+        }
+        super.onStop()
+    }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,7 +99,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
+        channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        channel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "setSecure" -> result.success(null) // no-op on Android now -- see class doc
                 else -> result.notImplemented()
