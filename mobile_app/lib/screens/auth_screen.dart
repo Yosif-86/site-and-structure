@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/blueprint_logo.dart';
+import 'info_screens.dart';
 import 'teacher_screen.dart';
 import 'verify_login_otp_screen.dart';
 import 'verify_phone_screen.dart';
@@ -66,6 +68,7 @@ class _AuthScreenState extends State<AuthScreen>
   bool _showInvite = false;
   bool _checkingInvite = false;
   bool? _inviteValid;
+  bool _termsAccepted = false;
 
   @override
   void initState() {
@@ -207,6 +210,18 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Future<void> _submitSignup() async {
+    if (_loading) return;
+    if (!_termsAccepted) {
+      setState(() => _error = _t('err_terms_required'));
+      return;
+    }
+    final inviteToken = _inviteCtrl.text.trim().toLowerCase();
+    // An invite code that was checked and found invalid must not silently
+    // turn into a plain student account.
+    if (inviteToken.isNotEmpty && _inviteValid == false) {
+      setState(() => _error = _t('invite_invalid_title'));
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -217,6 +232,7 @@ class _AuthScreenState extends State<AuthScreen>
       email: _emailCtrl.text,
       password: _passCtrl.text,
     );
+    if (!mounted) return;
     if (err != null) {
       setState(() {
         _loading = false;
@@ -224,12 +240,11 @@ class _AuthScreenState extends State<AuthScreen>
       });
       return;
     }
-    final inviteToken = _inviteCtrl.text.trim().toLowerCase();
     if (inviteToken.isNotEmpty) {
       await SupabaseService.instance.redeemTeacherInvite(inviteToken);
     }
-    setState(() => _loading = false);
     if (!mounted) return;
+    setState(() => _loading = false);
     if (!kPhoneOtpEnabled) {
       if (inviteToken.isNotEmpty) {
         // Straight to payment setup instead of just closing -- a teacher
@@ -853,12 +868,68 @@ class _AuthScreenState extends State<AuthScreen>
                     style: AppFonts.body(size: 13, color: _danger)),
               ),
           ],
+          const SizedBox(height: 14),
+          _termsCheckbox(),
           _errorText(),
           const SizedBox(height: 22),
           _primaryButton(_t('auth_signup_title'), _submitSignup),
           _orDivider(),
           _googleButton(),
           _switchLine(_t('have_account'), _t('auth_login_title'), _AuthMode.login),
+        ],
+      ),
+    );
+  }
+
+  /// Required before creating an account; both documents open in-app.
+  Widget _termsCheckbox() {
+    TextSpan link(String text, Widget screen) => TextSpan(
+          text: text,
+          style: AppFonts.body(
+              size: 13.5, color: _glow, weight: FontWeight.w700),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => screen)),
+        );
+    return InkWell(
+      onTap: () => setState(() {
+        _termsAccepted = !_termsAccepted;
+        if (_termsAccepted && _error == _t('err_terms_required')) _error = null;
+      }),
+      borderRadius: BorderRadius.circular(8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 28,
+            height: 28,
+            child: Checkbox(
+              value: _termsAccepted,
+              activeColor: _glow,
+              side: BorderSide(color: _ink.withValues(alpha: 0.6)),
+              onChanged: (v) => setState(() {
+                _termsAccepted = v ?? false;
+                if (_termsAccepted && _error == _t('err_terms_required')) {
+                  _error = null;
+                }
+              }),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text.rich(TextSpan(
+                style: AppFonts.body(size: 13.5, color: _ink),
+                children: [
+                  TextSpan(text: _t('terms_agree_prefix')),
+                  link(_t('terms_title'), const TermsScreen()),
+                  TextSpan(text: _t('terms_agree_and')),
+                  link(_t('privacy_policy'), const PrivacyScreen()),
+                ],
+              )),
+            ),
+          ),
         ],
       ),
     );

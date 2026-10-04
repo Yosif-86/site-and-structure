@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
@@ -10,6 +11,7 @@ import '../theme.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/glass_scaffold.dart';
+import 'info_screens.dart';
 import 'verify_phone_screen.dart';
 
 /// Shown once after a Google sign-in (or to any account without a phone):
@@ -68,7 +70,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
     super.dispose();
   }
 
+  bool _termsAccepted = false;
+
   Future<void> _continue() async {
+    if (_saving) return;
+    if (!_termsAccepted) {
+      setState(() => _error = _t('err_terms_required'));
+      return;
+    }
     final name = _name.text.trim();
     final phone = SignupRules.normalizeIraqiPhone(_phone.text);
     if (name.isEmpty) {
@@ -100,9 +109,8 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       }
       // Upsert: an account whose profile row never got created (sign-up cut
       // off mid-way) gets it here instead of updating nothing.
-      await sb
-          .from('profiles')
-          .upsert({'id': user.id, 'full_name': name, 'phone': phone});
+      await SupabaseService.instance
+          .upsertProfileWithTerms({'id': user.id, 'full_name': name, 'phone': phone});
     } on PostgrestException catch (e) {
       if (mounted) {
         setState(() => _error =
@@ -169,6 +177,43 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                   const SizedBox(height: 6),
                   Text(_t('complete_profile_phone_hint'),
                       style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+                  const SizedBox(height: 12),
+                  CheckboxListTile(
+                    value: _termsAccepted,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    activeColor: AppColors.red,
+                    onChanged: (v) => setState(() => _termsAccepted = v ?? false),
+                    title: Text.rich(TextSpan(
+                      style: AppFonts.body(size: 13.5),
+                      children: [
+                        TextSpan(text: _t('terms_agree_prefix')),
+                        TextSpan(
+                          text: _t('terms_title'),
+                          style: AppFonts.body(
+                              size: 13.5,
+                              color: AppColors.red,
+                              weight: FontWeight.w700),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const TermsScreen())),
+                        ),
+                        TextSpan(text: _t('terms_agree_and')),
+                        TextSpan(
+                          text: _t('privacy_policy'),
+                          style: AppFonts.body(
+                              size: 13.5,
+                              color: AppColors.red,
+                              weight: FontWeight.w700),
+                          recognizer: TapGestureRecognizer()
+                            ..onTap = () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const PrivacyScreen())),
+                        ),
+                      ],
+                    )),
+                  ),
                   if (_error != null) ...[
                     const SizedBox(height: 10),
                     Text(_error!,

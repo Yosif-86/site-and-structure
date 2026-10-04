@@ -34,6 +34,10 @@ const bool kTeacherAdminEmailOtpEnabled = false;
 const Duration kSessionMaxAge = Duration(days: 5);
 const String _signedInAtKey = 'ss_signed_in_at';
 
+/// Version stored with each terms acceptance (profiles.terms_version).
+/// Bump it when the terms change in a way users must agree to again.
+const String kTermsVersion = '2026-10-05';
+
 const String kSupabaseUrl = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const String kSupabaseAnonKey =
     'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
@@ -281,7 +285,7 @@ class SupabaseService extends ChangeNotifier {
   /// Set by the UI layer to show the "kicked by another device" message.
   void Function()? onForcedLogout;
 
-  static const _flagDistanceKm = 10;
+  static const _flagDistanceKm = 150;
 
   double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371.0;
@@ -351,13 +355,14 @@ class SupabaseService extends ChangeNotifier {
     final lat = (geo['latitude'] as num?)?.toDouble();
     final lon = (geo['longitude'] as num?)?.toDouble();
     bool flagged = false;
+    String? flagReason;
     int? distanceKm;
 
     try {
       if (lat != null && lon != null) {
         final prev = await client
             .from('login_events')
-            .select('lat, lon')
+            .select('lat, lon, created_at')
             .eq('user_id', userId)
             .not('lat', 'is', null)
             .order('created_at', ascending: false)
@@ -367,11 +372,25 @@ class SupabaseService extends ChangeNotifier {
         final prevLon = (prev?['lon'] as num?)?.toDouble();
         if (prevLat != null && prevLon != null) {
           distanceKm = _distanceKm(prevLat, prevLon, lat, lon).round();
-          flagged = distanceKm > _flagDistanceKm;
+          // Impossible travel: far apart within a short time. Small jumps
+          // are normal on Iraqi mobile networks and no longer flagged.
+          final prevAt = DateTime.tryParse(prev?['created_at'] as String? ?? '');
+          final hours = prevAt == null
+              ? 999.0
+              : DateTime.now().toUtc().difference(prevAt.toUtc()).inMinutes / 60;
+          if (distanceKm > _flagDistanceKm && hours < 2) {
+            flagged = true;
+            flagReason = 'travel';
+          }
         }
       }
+      final country = geo['country_code'] as String?;
+      if (country != null && country != 'IQ') {
+        flagged = true;
+        flagReason = 'outside_iraq';
+      }
 
-      await client.from('login_events').insert({
+      final row = {
         'user_id': userId,
         'email': email,
         'user_agent':
@@ -383,7 +402,15 @@ class SupabaseService extends ChangeNotifier {
         'lon': lon,
         'flagged': flagged,
         'distance_km': distanceKm,
-      });
+      };
+      try {
+        await client
+            .from('login_events')
+            .insert({...row, if (flagReason != null) 'flag_reason': flagReason});
+      } on PostgrestException {
+        // flag_reason column not added yet (add-oct05-fixes.sql).
+        await client.from('login_events').insert(row);
+      }
     } catch (_) {
       // Audit logging must never block login itself.
     }
@@ -566,7 +593,7 @@ class SupabaseService extends ChangeNotifier {
       // so the user isn't left half signed-in; on the next sign-in the
       // complete-profile step creates the profile row (it upserts).
       try {
-        await client.from('profiles').upsert(
+        await upsertProfileWithTerms(
             {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
       } on PostgrestException catch (e) {
         await client.auth.signOut().catchError((_) {});
@@ -737,6 +764,21 @@ class SupabaseService extends ChangeNotifier {
   /// design, same as the website's redeem_teacher_invite() call -- a
   /// revoked/expired/already-used token must never undo the signup that
   /// already succeeded; it just means this account stays a normal student.
+  /// Profile upsert that also records terms acceptance. Before the
+  /// terms columns exist (add-oct05-fixes.sql) it saves without them.
+  Future<void> upsertProfileWithTerms(Map<String, dynamic> row) async {
+    try {
+      await client.from('profiles').upsert({
+        ...row,
+        'terms_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        'terms_version': kTermsVersion,
+      });
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST204' && !e.message.contains('terms_')) rethrow;
+      await client.from('profiles').upsert(row);
+    }
+  }
+
   Future<void> redeemTeacherInvite(String token) async {
     try {
       await client.rpc('redeem_teacher_invite', params: {'p_token': token});

@@ -192,7 +192,7 @@ class _AdminScreenState extends State<AdminScreen> {
         sb.from('enrollments').select('*'),
         sb
             .from('login_events')
-            .select('email, city, country, distance_km, created_at')
+            .select('*')
             .eq('flagged', true)
             .order('created_at', ascending: false)
             .limit(50),
@@ -237,6 +237,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final codes = (results[8] as List).cast<Map<String, dynamic>>();
       final errors = (results[9] as List).cast<Map<String, dynamic>>();
       final redemptions = (results[10] as List).cast<Map<String, dynamic>>();
+      final securityEvents = await _loadSecurityEvents();
 
       final emailByUser = <String, String>{};
       for (final l in logins) {
@@ -270,6 +271,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _activeEnrollments =
             enrollments.where((e) => e['status'] == 'active').toList();
         _flagged = flagged;
+        _securityEvents = securityEvents;
         final countByUser = <String, int>{};
         for (final d in devices) {
           final uid = d['user_id'] as String;
@@ -322,6 +324,57 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Map<String, Map<String, dynamic>> _redemptionsByCourseUser = {};
+  List<Map<String, dynamic>> _securityEvents = [];
+
+  /// Blocked devices, shared devices, screenshot attempts
+  /// (add-oct05-fixes.sql). Empty until that migration has run.
+  Future<List<Map<String, dynamic>>> _loadSecurityEvents() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .from('security_events')
+          .select('id, user_id, kind, detail, created_at')
+          .order('created_at', ascending: false)
+          .limit(100);
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  int get _suspiciousCount => _flagged.length + _securityEvents.length;
+
+  Future<void> _forceLogout(String userId) => _once('logout-$userId', () async {
+    final t = AppStrings.instance.t;
+    if (!await _confirm(t('confirm_force_logout'),
+        confirmLabel: t('btn_confirm'))) {
+      return;
+    }
+    try {
+      await SupabaseService.instance.client
+          .rpc('admin_force_logout', params: {'p_user_id': userId});
+      _showError(t('force_logout_done'));
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
+
+  Future<void> _resetDevices(String userId) => _once('reset-$userId', () async {
+    final t = AppStrings.instance.t;
+    if (!await _confirm(t('confirm_reset_devices'),
+        confirmLabel: t('btn_confirm'))) {
+      return;
+    }
+    try {
+      await SupabaseService.instance.client
+          .from('trusted_devices')
+          .delete()
+          .eq('user_id', userId);
+      _showError(t('reset_devices_done'));
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
 
   /// Every account's email. The function (add-oct05-fixes.sql) isn't capped
   /// like the old login_events read, which stopped at 1000 rows; that read
@@ -888,9 +941,9 @@ class _AdminScreenState extends State<AdminScreen> {
         ]),
         DashSection(t('dash_sec_security')),
         DashGrid(children: [
-          tile(ArcIcon.warning, '${_flagged.length}', t('flagged_logins'),
+          tile(ArcIcon.warning, '$_suspiciousCount', t('flagged_logins'),
               AppColors.red, _View.flagged,
-              alert: _flagged.isNotEmpty),
+              alert: _suspiciousCount > 0),
           tile(ArcIcon.phone, '${_devices.length}', t('trusted_devices'),
               AppColors.teal, _View.devices),
           tile(ArcIcon.alert,
@@ -1635,19 +1688,82 @@ class _AdminScreenState extends State<AdminScreen> {
     });
   }
 
+  /// Suspicious logins and security events in one timeline, newest first,
+  /// each with its reason and quick actions on the account.
   Widget _buildFlagged(String Function(String) t) {
-    if (_flagged.isEmpty) return _empty(t('no_flagged'), ArcIcon.warning);
-    return _list(_flagged.length, (i) {
-      final f = _flagged[i];
+    final items = <Map<String, dynamic>>[
+      for (final f in _flagged)
+        {
+          'user_id': f['user_id'],
+          'reason': switch (f['flag_reason']) {
+            'outside_iraq' => t('sec_outside_iraq'),
+            'travel' => t('sec_travel'),
+            _ => t('sec_location_change'),
+          },
+          'detail': [
+            '${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
+            if (f['distance_km'] != null) '${f['distance_km']} ${t('km')}',
+          ].join(' · '),
+          'email': f['email'],
+          'at': f['created_at'],
+          'icon': ArcIcon.warning,
+        },
+      for (final e in _securityEvents)
+        {
+          'user_id': e['user_id'],
+          'reason': switch (e['kind']) {
+            'device_blocked' => t('sec_device_blocked'),
+            'shared_device' => t('sec_shared_device'),
+            'screen_record' => t('sec_screen_record'),
+            _ => t('sec_screenshot'),
+          },
+          'detail': ((e['detail'] as Map?)?['device_label'] ??
+                  (e['detail'] as Map?)?['screen'] ??
+                  '')
+              .toString(),
+          'email': null,
+          'at': e['created_at'],
+          'icon': e['kind'] == 'screenshot' || e['kind'] == 'screen_record'
+              ? ArcIcon.image
+              : ArcIcon.phone,
+        },
+    ]..sort((a, b) =>
+        (b['at']?.toString() ?? '').compareTo(a['at']?.toString() ?? ''));
+    if (items.isEmpty) return _empty(t('no_flagged'), ArcIcon.warning);
+    return _list(items.length, (i) {
+      final it = items[i];
+      final uid = it['user_id'] as String?;
+      final name = (_profileByUser[uid]?['full_name'] as String?) ??
+          (it['email'] as String?) ??
+          _emailByUser[uid] ??
+          '—';
+      final detail = it['detail'] as String;
       return DashCard(
-        leading: DashIconBadge(icon: ArcIcon.warning, accent: AppColors.error),
-        title: f['email'] as String? ?? '—',
+        leading:
+            DashIconBadge(icon: it['icon'] as ArcIcon, accent: AppColors.error),
+        title: name,
         titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
-        subtitle: '${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
-        trailing: StatusPill(
-            f['distance_km'] == null ? '—' : '${f['distance_km']} ${t('km')}',
-            tone: StatusTone.bad),
-        meta: [_date(f['created_at'] as String?, time: true)],
+        subtitle: _emailByUser[uid] ?? (it['email'] as String?) ?? '—',
+        trailing: StatusPill(it['reason'] as String, tone: StatusTone.bad),
+        meta: [
+          if (detail.isNotEmpty) detail,
+          _date(it['at']?.toString(), time: true),
+        ],
+        actions: uid == null
+            ? const []
+            : [
+                DashButton(t('btn_force_logout'),
+                    icon: ArcIcon.logout,
+                    onPressed: _busy.contains('logout-$uid')
+                        ? null
+                        : () => _forceLogout(uid)),
+                DashButton(t('btn_reset_devices'),
+                    danger: true,
+                    icon: ArcIcon.phone,
+                    onPressed: _busy.contains('reset-$uid')
+                        ? null
+                        : () => _resetDevices(uid)),
+              ],
       );
     });
   }

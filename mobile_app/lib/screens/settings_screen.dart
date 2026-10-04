@@ -125,6 +125,28 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             FadeSlideIn(
+              delayMs: 200,
+              child: _SettingsTile(
+                icon: ArcIcon.review,
+                accent: AppColors.byline,
+                title: t('terms_title'),
+                subtitle: t('terms_sub'),
+                onTap: () => _push(context, const TermsScreen()),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeSlideIn(
+              delayMs: 220,
+              child: _SettingsTile(
+                icon: ArcIcon.support,
+                accent: AppColors.teal,
+                title: t('faq_title'),
+                subtitle: t('faq_sub'),
+                onTap: () => _push(context, const FaqScreen()),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FadeSlideIn(
               delayMs: 240,
               child: _SettingsTile(
                 icon: loggedIn ? ArcIcon.logout : ArcIcon.login,

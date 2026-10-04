@@ -151,6 +151,124 @@ class PrivacyScreen extends StatelessWidget {
   }
 }
 
+// Arabic-only app: the long texts live here rather than in strings.dart.
+const List<(String, String)> _termsSections = [
+  ('القبول',
+      'باستخدامك منصة آرك وإنشاء حساب فيها فإنك توافق على هذه الشروط. إذا لم توافق عليها فلا تستخدم المنصة.'),
+  ('الحساب',
+      'لكل شخص حساب واحد برقم هاتف واحد وبريد إلكتروني واحد. أنت مسؤول عن صحة معلوماتك وعن حماية كلمة المرور.'),
+  ('الأجهزة',
+      'يعمل الحساب على جهاز واحد فقط. محاولة فتح الحساب من جهاز آخر تُمنع وتُسجَّل، وتكرارها قد يؤدي إلى إيقاف الحساب.'),
+  ('حماية المحتوى',
+      'يُمنع مشاركة الحساب، أو تصوير المحاضرات والملفات أو تسجيلها أو نسخها أو نشرها بأي شكل. المحتوى يحمل علامة مائية باسمك ورقم هاتفك، وأي تسريب يعرّض صاحب الحساب لإيقافه نهائيًا وللمساءلة القانونية.'),
+  ('الدفع والاسترداد',
+      'يتم الدفع عبر زين كاش أو كي كارد، ويُفعَّل الاشتراك بعد التحقق من الدفعة. جميع المدفوعات نهائية وغير قابلة للاسترداد بعد تفعيل الدورة.'),
+  ('المدرّسون',
+      'المدرّس مسؤول عن محتوى دوراته وصحته. تراجع الإدارة الدورات والمحاضرات قبل نشرها، وتحتفظ المنصة بنسبة 20% من سعر كل دورة.'),
+  ('الملكية الفكرية',
+      'جميع المحاضرات والملفات ملك لأصحابها ولمنصة آرك، والاشتراك يمنحك حق المشاهدة الشخصية داخل التطبيق فقط.'),
+  ('إيقاف الحساب',
+      'يحق للمنصة إيقاف أي حساب يخالف هذه الشروط دون استرداد المبلغ.'),
+  ('التعديلات',
+      'قد نحدّث هذه الشروط، وسنُعلم المستخدمين بأي تغيير مهم.'),
+];
+
+const List<(String, String)> _faqItems = [
+  ('ما هي منصة آرك؟',
+      'منصة تعليمية هندسية تقدّم دورات مسجّلة يقدّمها مهندسون ومدرّسون مختصون.'),
+  ('كيف أشترك في دورة؟',
+      'افتح الدورة واضغط اشترك، ثم حوّل المبلغ عبر زين كاش أو كي كارد إلى الرقم الظاهر، واكتب رقم حسابك الذي دفعت منه وأرسل صورة إثبات التحويل. يُفعَّل اشتراكك بعد التحقق.'),
+  ('متى يُفعَّل اشتراكي؟',
+      'بعد مراجعة الدفعة، وسيصلك إشعار عند الموافقة أو الرفض.'),
+  ('رُفض طلب الدفع، ماذا أفعل؟',
+      'يظهر سبب الرفض في الإشعارات وفي صفحة الدورة. صحّح المشكلة وأرسل الطلب من جديد.'),
+  ('هل يمكنني استخدام حسابي على أكثر من جهاز؟',
+      'لا، الحساب يعمل على جهاز واحد فقط.'),
+  ('هل يمكن استرداد المبلغ؟',
+      'لا، جميع المدفوعات نهائية بعد تفعيل الدورة.'),
+  ('الفيديو لا يعمل أو يتقطع؟',
+      'تأكد من اتصالك بالإنترنت، وجرّب جودة أقل من زر الجودة في المشغّل.'),
+  ('لماذا لا أستطيع أخذ لقطة شاشة؟',
+      'لحماية المحتوى، التصوير والتسجيل محظوران داخل التطبيق.'),
+  ('كيف أتواصل مع الدعم؟',
+      'من الإعدادات ثم الدعم.'),
+];
+
+/// Terms of use (also linked from the sign-up checkbox).
+class TermsScreen extends StatelessWidget {
+  const TermsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return _InfoScaffold(
+      title: t('terms_title'),
+      children: [
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < _termsSections.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${i + 1}. ${_termsSections[i].$1}',
+                          style: AppFonts.heading(size: 18)),
+                      const SizedBox(height: 6),
+                      Text(_termsSections[i].$2,
+                          style: AppFonts.body(
+                              size: 13.5, color: AppColors.muted)),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Frequently asked questions, tap a question to open its answer.
+class FaqScreen extends StatelessWidget {
+  const FaqScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return _InfoScaffold(
+      title: t('faq_title'),
+      children: [
+        for (final item in _faqItems) ...[
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: Theme(
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                iconColor: AppColors.red,
+                collapsedIconColor: AppColors.muted2,
+                title: Text(item.$1,
+                    style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+                expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.$2,
+                      style: AppFonts.body(size: 13.5, color: AppColors.muted)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
 /// Shared chrome for the two static screens above.
 class _InfoScaffold extends StatelessWidget {
   final String title;
