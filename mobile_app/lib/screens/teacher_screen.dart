@@ -164,9 +164,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
   // Course edit form state.
   final _cTitle = TextEditingController();
   final _cDescription = TextEditingController();
-  final _cPrice = TextEditingController(text: '0');
-  // "What you'll learn" -- one point per line, stored as courses.learning_points.
-  final _cLearning = TextEditingController();
+  final _cPrice = TextEditingController();
+  // "What you'll learn" -- one field per point, stored as
+  // courses.learning_points. All optional; empty fields are dropped on save.
+  static const _maxPoints = 12;
+  static const _minPointRows = 3;
+  final List<TextEditingController> _cPoints = [];
   XFile? _cThumbFile;
   String? _cFormError;
 
@@ -225,7 +228,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.dispose();
     _cDescription.dispose();
     _cPrice.dispose();
-    _cLearning.dispose();
+    for (final c in _cPoints) {
+      c.dispose();
+    }
     _lTitle.dispose();
     _dCode.dispose();
     _dValue.dispose();
@@ -344,8 +349,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _activeCourse = null;
     _cTitle.clear();
     _cDescription.clear();
-    _cPrice.text = '0';
-    _cLearning.clear();
+    _cPrice.clear();
+    _setPoints(const []);
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
@@ -361,9 +366,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.text = src['title'] as String? ?? '';
     _cDescription.text = src['description'] as String? ?? '';
     _cPrice.text = '${src['price'] ?? 0}';
-    _cLearning.text = ((src['learning_points'] as List?) ?? const [])
+    _setPoints(((src['learning_points'] as List?) ?? const [])
         .whereType<String>()
-        .join('\n');
+        .toList());
     _cThumbFile = null;
     _cFormError = null;
     setState(() => _view = _TView.courseEdit);
@@ -378,12 +383,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
       return;
     }
     final description = _cDescription.text.trim();
+    // Required, but starts empty so the teacher types it fresh (0 = free).
+    if (PaymentRules.digits(_cPrice.text).isEmpty) {
+      setState(() => _cFormError = t('err_price_required'));
+      return;
+    }
     final price = PaymentRules.parsePrice(_cPrice.text);
     // Same caps the DB check constraint enforces (add-course-learning-points
     // .sql): at most 12 points, each at most 200 characters.
-    final learningPoints = _cLearning.text
-        .split('\n')
-        .map((l) => l.trim())
+    final learningPoints = _cPoints
+        .map((c) => c.text.trim())
         .where((l) => l.isNotEmpty)
         .take(12)
         .map((l) => l.length > 200 ? l.substring(0, 200) : l)
@@ -1091,6 +1100,82 @@ class _TeacherScreenState extends State<TeacherScreen> {
     );
   }
 
+  /// Rebuilds the point fields from [points], padded to [_minPointRows].
+  void _setPoints(List<String> points) {
+    for (final c in _cPoints) {
+      c.dispose();
+    }
+    _cPoints
+      ..clear()
+      ..addAll(points.take(_maxPoints).map((p) => TextEditingController(text: p)));
+    while (_cPoints.length < _minPointRows) {
+      _cPoints.add(TextEditingController());
+    }
+  }
+
+  void _addPoint() {
+    if (_cPoints.length >= _maxPoints) return;
+    setState(() => _cPoints.add(TextEditingController()));
+  }
+
+  void _removePoint(int i) {
+    setState(() {
+      if (_cPoints.length > _minPointRows) {
+        _cPoints.removeAt(i).dispose();
+      } else {
+        _cPoints[i].clear();
+      }
+    });
+  }
+
+  Widget _learningPointsEditor(String Function(String) t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(t('what_you_learn'),
+            style: AppFonts.body(size: 13.5, color: AppColors.text)),
+        const SizedBox(height: 2),
+        Text(t('learning_points_helper'),
+            style: AppFonts.body(size: 11.5, color: AppColors.muted)),
+        const SizedBox(height: 8),
+        for (var i = 0; i < _cPoints.length; i++)
+          Padding(
+            key: ObjectKey(_cPoints[i]),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _cPoints[i],
+                  maxLength: 200,
+                  textInputAction: i == _cPoints.length - 1
+                      ? TextInputAction.done
+                      : TextInputAction.next,
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: '${t('learning_point_n')} ${i + 1}',
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => _removePoint(i),
+                icon: ArcIconView(ArcIcon.close,
+                    size: 18, color: AppColors.muted2),
+              ),
+            ]),
+          ),
+        if (_cPoints.length < _maxPoints)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: _addPoint,
+              icon: ArcIconView(ArcIcon.plus, size: 16, color: AppColors.red),
+              label: Text(t('learning_point_add')),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _formError(String? msg) => msg == null
       ? const SizedBox.shrink()
       : Padding(
@@ -1114,15 +1199,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 maxLines: 4,
                 decoration: InputDecoration(labelText: t('label_description'))),
             const SizedBox(height: 12),
-            TextField(
-                controller: _cLearning,
-                minLines: 3,
-                maxLines: 8,
-                keyboardType: TextInputType.multiline,
-                decoration: InputDecoration(
-                    labelText: t('what_you_learn'),
-                    hintText: t('learning_points_hint'),
-                    helperText: t('learning_points_helper'))),
+            _learningPointsEditor(t),
             const SizedBox(height: 12),
             TextField(
                 controller: _cPrice,

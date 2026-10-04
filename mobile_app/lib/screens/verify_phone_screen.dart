@@ -397,11 +397,21 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
           controller: _digitCtrls[i],
           focusNode: _digitFocus[i],
           textAlign: TextAlign.center,
+          textAlignVertical: TextAlignVertical.center,
+          // Fill the 46x56 box so the digit is centered both ways.
+          expands: true,
+          maxLines: null,
           maxLength: 1,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           style: AppFonts.heading(size: 22),
-          decoration: const InputDecoration(counterText: ''),
+          // The theme's 16px side padding leaves only 14px inside a 46px
+          // box, which clipped the digit and pushed it left.
+          decoration: const InputDecoration(
+            counterText: '',
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
           onChanged: (v) => _onDigitChanged(i, v),
         ),
       ),
