@@ -281,11 +281,26 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Future<void> _submitGoogle() async {
+    if (_loading) return;
     setState(() {
       _loading = true;
       _error = null;
     });
-    final result = await SupabaseService.instance.signInWithGoogle();
+    // Back in the app without a session a few seconds later = the Google
+    // tab was closed; stop waiting.
+    final lifecycle = AppLifecycleListener(onResume: () {
+      Future.delayed(const Duration(seconds: 4), () {
+        if (!SupabaseService.instance.isLoggedIn) {
+          SupabaseService.instance.cancelGoogleSignIn();
+        }
+      });
+    });
+    final LoginResult result;
+    try {
+      result = await SupabaseService.instance.signInWithGoogle();
+    } finally {
+      lifecycle.dispose();
+    }
     if (!mounted) return;
     setState(() => _loading = false);
     if (result.error != null) {

@@ -18,6 +18,7 @@ import '../services/payment_rules.dart';
 import '../services/net_status.dart';
 import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
+import '../services/tap_guard.dart';
 import '../theme.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
@@ -193,6 +194,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   bool get _isActive => _enrollmentStatus == 'active';
 
   Future<void> _watchLecture(Lecture lecture) async {
+    if (!TapGuard.allow()) return;
     if (!SupabaseService.instance.isLoggedIn) {
       await Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
@@ -213,6 +215,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   }
 
   Future<void> _openEnroll() async {
+    if (!TapGuard.allow()) return;
     if (!SupabaseService.instance.isLoggedIn) {
       await Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const AuthScreen()));

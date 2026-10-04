@@ -25,6 +25,9 @@ class SettingsScreen extends StatelessWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
+  // A second confirm while the first delete is running is ignored.
+  static bool _deleting = false;
+
   Future<void> _confirmDeleteAccount(BuildContext context) async {
     final t = AppStrings.instance.t;
     final confirmed = await showDialog<bool>(
@@ -44,8 +47,14 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed != true) return;
-    final error = await SupabaseService.instance.deleteAccount();
+    if (confirmed != true || _deleting) return;
+    _deleting = true;
+    final String? error;
+    try {
+      error = await SupabaseService.instance.deleteAccount();
+    } finally {
+      _deleting = false;
+    }
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(t(error ?? 'account_deleted'))));

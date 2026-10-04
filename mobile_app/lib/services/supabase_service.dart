@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import 'net_status.dart';
 import 'signup_rules.dart';
 
 /// Same Vercel deployment the website talks to — the two API routes
@@ -746,6 +747,15 @@ class SupabaseService extends ChangeNotifier {
     );
   }
 
+  /// The user came back from the Google page without finishing: end the
+  /// attempt now instead of leaving the sign-in screen locked for minutes.
+  void cancelGoogleSignIn() {
+    final c = _oauthCompleter;
+    if (c == null || c.isCompleted) return;
+    _oauthCompleter = null;
+    c.complete(const LoginResult(error: 'err_oauth_cancelled'));
+  }
+
   /// Pre-check before showing the invite as accepted -- admin.html generates
   /// these tokens, mirrors is_teacher_invite_valid()'s use on the website.
   /// Returns null if the check itself failed (network/RPC error), distinct
@@ -896,8 +906,14 @@ class SupabaseService extends ChangeNotifier {
       await _secureStorage.delete(key: _sessionTokenKey);
       await _secureStorage.delete(key: _signedInAtKey);
     } catch (_) {}
-    await client.auth.signOut();
-    notifyListeners();
+    try {
+      // Offline, signOut clears the local session and then throws: the
+      // user is signed out on this device either way.
+      await client.auth.signOut();
+    } catch (_) {
+    } finally {
+      notifyListeners();
+    }
   }
 
   /// Permanently deletes the current user's account server-side (see
@@ -907,16 +923,26 @@ class SupabaseService extends ChangeNotifier {
   Future<String?> deleteAccount() async {
     final session = client.auth.currentSession;
     if (session == null) return 'err_delete_account_failed';
-    final res = await http.post(
-      Uri.parse('$kApiBaseUrl/api/delete-account'),
-      headers: {'Authorization': 'Bearer ${session.accessToken}'},
-    );
-    if (res.statusCode != 200) return 'err_delete_account_failed';
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kApiBaseUrl/api/delete-account'),
+            headers: {'Authorization': 'Bearer ${session.accessToken}'},
+          )
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) return 'err_delete_account_failed';
+    } catch (e) {
+      return NetStatus.isOffline(e) ? 'err_offline' : 'err_delete_account_failed';
+    }
     await clearSavedLogin();
     stopSessionWatch();
-    await _secureStorage.delete(key: _sessionTokenKey);
-    await client.auth.signOut();
-    notifyListeners();
+    try {
+      await _secureStorage.delete(key: _sessionTokenKey);
+      await client.auth.signOut();
+    } catch (_) {
+    } finally {
+      notifyListeners();
+    }
     return null;
   }
 

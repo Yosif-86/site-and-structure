@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
 import '../services/error_reporter.dart';
+import '../services/tap_guard.dart';
 import '../services/learning_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -68,6 +69,7 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
   }
 
   Future<void> _open(String slug) async {
+    if (!TapGuard.allow()) return;
     await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => CourseDetailScreen(slug: slug)));
     if (mounted) _load();

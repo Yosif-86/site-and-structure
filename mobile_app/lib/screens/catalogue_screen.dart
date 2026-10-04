@@ -10,6 +10,7 @@ import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/net_status.dart';
 import '../services/supabase_service.dart';
+import '../services/tap_guard.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/bottom_nav.dart';
@@ -273,6 +274,7 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
   }
 
   Future<void> _openCourse(String slug) async {
+    if (!TapGuard.allow()) return;
     await Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => CourseDetailScreen(slug: slug)));
     // Watching or enrolling changes progress -- refresh on the way back.

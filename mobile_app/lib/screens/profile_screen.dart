@@ -48,12 +48,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _load();
     AppTheme.instance.addListener(_onThemeChange);
+    SupabaseService.instance.addListener(_onAuthChange);
   }
 
   @override
   void dispose() {
     AppTheme.instance.removeListener(_onThemeChange);
+    SupabaseService.instance.removeListener(_onAuthChange);
     super.dispose();
+  }
+
+  // Signed in (or out) from this tab: reload instead of showing an error.
+  String? _loadedFor;
+  void _onAuthChange() {
+    final uid = SupabaseService.instance.currentUser?.id;
+    if (uid != _loadedFor && mounted) _load();
   }
 
   void _onThemeChange() {
@@ -62,6 +71,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     final user = SupabaseService.instance.currentUser;
+    _loadedFor = user?.id;
     if (user == null) {
       setState(() {
         _loading = false;
