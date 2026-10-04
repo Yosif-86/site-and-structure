@@ -26,6 +26,7 @@ import '../widgets/arc_icons.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
 import 'auth_screen.dart';
+import 'teacher_profile_screen.dart';
 import 'video_player_screen.dart';
 
 /// Port of renderPage() + openEnroll()/submitFree()/submitPay() in course.html.
@@ -314,7 +315,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             style: AppFonts.body(size: 23, weight: FontWeight.w800)),
         if (teacher != null && teacher.isNotEmpty) ...[
           const SizedBox(height: 10),
-          Row(children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: course.teacherId == null
+                ? null
+                : () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TeacherProfileScreen(
+                        teacherId: course.teacherId!, fallbackName: teacher))),
+            child: Row(children: [
             Container(
               width: 38,
               height: 38,
@@ -342,7 +350,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 ],
               ),
             ),
+            if (course.teacherId != null)
+              ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2),
           ]),
+          ),
         ],
         const SizedBox(height: 16),
         if (_enrollmentStatus == null && _rejectionReason != null) ...[

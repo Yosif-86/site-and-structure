@@ -22,6 +22,7 @@ import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
 import 'course_detail_screen.dart';
+import 'teacher_profile_screen.dart';
 import 'video_player_screen.dart';
 import '../widgets/glass_scaffold.dart';
 
@@ -61,6 +62,7 @@ enum _View {
   myPayment,
   payments,
   editRequests,
+  attention,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -663,6 +665,8 @@ class _AdminScreenState extends State<AdminScreen> {
     switch (_view) {
       case _View.courses:
         return t('published_courses');
+      case _View.attention:
+        return t('dash_needs_attention');
       case _View.teachers:
         return t('teachers');
       case _View.students:
@@ -744,6 +748,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.myPayment => _buildMyPayment(t),
         _View.payments => _buildPayments(t),
         _View.editRequests => _buildEditRequests(t),
+        _View.attention => _buildAttention(t),
       },
     );
   }
@@ -822,8 +827,13 @@ class _AdminScreenState extends State<AdminScreen> {
             stats: [
               ('$revenue', t('est_revenue')),
               ('$activeStudents', t('active_students')),
-              ('${_pendingReview.length + myPendingPayments + _editRequests.length}',
+              ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length}',
                   t('dash_needs_attention')),
+            ],
+            statTaps: [
+              () => _goto(_View.revenue),
+              () => _goto(_View.students),
+              () => _goto(_View.attention),
             ],
           ),
         ),
@@ -939,8 +949,22 @@ class _AdminScreenState extends State<AdminScreen> {
     if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);
     return _list(_teacherProfiles.length, (i) {
       final p = _teacherProfiles[i];
-      return _person(p['full_name'] as String?, _emailByUser[p['id']],
-          p['phone'] as String?);
+      final id = p['id'] as String;
+      return DashCard(
+        leading: DashAvatar(name: p['full_name'] as String?),
+        title: (p['full_name'] as String?) ?? '—',
+        subtitle: _emailByUser[id] ?? '—',
+        meta: [
+          if ((p['phone'] as String?)?.isNotEmpty ?? false) p['phone'] as String,
+          '${_allCourses.where((c) => c['teacher_id'] == id).length} ${t('stat_courses')}',
+        ],
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => TeacherProfileScreen(
+                teacherId: id,
+                fallbackName: p['full_name'] as String?,
+                adminView: true,
+                email: _emailByUser[id]))),
+      );
     });
   }
 
@@ -1180,6 +1204,75 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (_) {
       _showError(t('err_generic_failed'));
     }
+  }
+
+  /// Everything waiting on the admin, in one list. Each item opens the
+  /// screen where it's handled.
+  Widget _buildAttention(String Function(String) t) {
+    final payments =
+        _pendingPayments.where((e) => !_teacherPaid(e)).toList();
+    final total = payments.length +
+        _pendingReview.length +
+        _editRequests.length +
+        _pendingUploads.length;
+    if (total == 0) return _empty(t('attention_none'), ArcIcon.check);
+    String teacherOf(dynamic id) =>
+        (_profileByUser[id]?['full_name'] as String?) ?? '—';
+    Widget item(ArcIcon icon, Color accent, String title, String sub,
+            String pill, _View go) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: DashCard(
+            leading: DashIconBadge(icon: icon, accent: accent),
+            title: title,
+            subtitle: sub,
+            trailing: StatusPill(pill, tone: StatusTone.warn),
+            onTap: () => _goto(go),
+          ),
+        );
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        if (payments.isNotEmpty) ...[
+          DashSection('${t('payment_requests')} (${payments.length})'),
+          for (final e in payments)
+            item(
+                ArcIcon.money,
+                AppColors.teal,
+                (_profileByUser[e['user_id']]?['full_name'] as String?) ??
+                    _emailByUser[e['user_id']] ??
+                    '—',
+                '${_courseTitle(e['course_slug'] as String)} · ${_date(e['created_at'] as String?, time: true)}',
+                t('attention_payment'),
+                _View.payments),
+        ],
+        if (_pendingUploads.isNotEmpty) ...[
+          DashSection('${t('pending_lectures')} (${_pendingUploads.length})'),
+          for (final l in _pendingUploads)
+            item(
+                ArcIcon.video,
+                AppColors.red,
+                l['title'] as String? ?? '—',
+                (_allCourses.where((c) => c['id'] == l['course_id']).firstOrNull?['title']
+                        as String?) ??
+                    '—',
+                t('attention_lecture'),
+                _View.uploads),
+        ],
+        if (_pendingReview.isNotEmpty) ...[
+          DashSection('${t('course_review')} (${_pendingReview.length})'),
+          for (final c in _pendingReview)
+            item(ArcIcon.review, AppColors.byline, c['title'] as String? ?? '—',
+                teacherOf(c['teacher_id']), t('attention_course'), _View.review),
+        ],
+        if (_editRequests.isNotEmpty) ...[
+          DashSection('${t('edit_requests')} (${_editRequests.length})'),
+          for (final c in _editRequests)
+            item(ArcIcon.edit, AppColors.byline, c['title'] as String? ?? '—',
+                teacherOf(c['teacher_id']), t('attention_edit'), _View.editRequests),
+        ],
+      ],
+    );
   }
 
   Widget _buildEditRequests(String Function(String) t) {

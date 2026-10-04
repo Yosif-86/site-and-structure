@@ -15,12 +15,15 @@ class DashHero extends StatelessWidget {
   final String title;
   final String subtitle;
   final List<(String value, String label)> stats;
+  /// Optional tap per stat (same order as [stats]); null = not tappable.
+  final List<VoidCallback?> statTaps;
 
   const DashHero(
       {super.key,
       required this.title,
       required this.subtitle,
-      this.stats = const []});
+      this.stats = const [],
+      this.statTaps = const []});
 
   @override
   Widget build(BuildContext context) {
@@ -81,22 +84,37 @@ class DashHero extends StatelessWidget {
                             VerticalDivider(
                                 width: 24, thickness: 1, color: AppColors.line),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: AlignmentDirectional.centerStart,
-                                  child: Text(stats[i].$1,
-                                      style: AppFonts.heading(
-                                          size: 26, color: AppColors.text)),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(stats[i].$2,
-                                    maxLines: 2,
-                                    style: AppFonts.body(
-                                        size: 11.5, color: AppColors.muted)),
-                              ],
+                            child: InkWell(
+                              onTap: i < statTaps.length ? statTaps[i] : null,
+                              borderRadius: BorderRadius.circular(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: Text(stats[i].$1,
+                                        style: AppFonts.heading(
+                                            size: 26, color: AppColors.text)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(children: [
+                                    Flexible(
+                                      child: Text(stats[i].$2,
+                                          maxLines: 2,
+                                          style: AppFonts.body(
+                                              size: 11.5,
+                                              color: AppColors.muted)),
+                                    ),
+                                    if (i < statTaps.length &&
+                                        statTaps[i] != null) ...[
+                                      const SizedBox(width: 4),
+                                      ArcIconView(ArcIcon.chevron,
+                                          size: 12, color: AppColors.muted2),
+                                    ],
+                                  ]),
+                                ],
+                              ),
                             ),
                           ),
                         ],

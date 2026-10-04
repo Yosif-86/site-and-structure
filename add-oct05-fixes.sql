@@ -406,6 +406,46 @@ alter table public.profiles
   add column if not exists terms_version text;
 
 -- ------------------------------------------------------------
+-- 10. Public teacher profile (name, photo, bio, counts). Works for guests.
+-- ------------------------------------------------------------
+create or replace function public.get_teacher_public(p_teacher_id uuid)
+returns table(
+  full_name text,
+  photo_url text,
+  bio text,
+  specialty text,
+  instagram text,
+  telegram text,
+  course_count int,
+  student_count int
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  select p.full_name,
+         p.teacher_photo_url,
+         p.teacher_bio,
+         p.teacher_specialty,
+         p.instagram_username,
+         p.telegram_username,
+         (select count(*)::int from courses c
+           where c.teacher_id = p.id and c.status = 'published'),
+         (select count(distinct e.user_id)::int from enrollments e
+           join courses c on c.slug = e.course_slug
+           where c.teacher_id = p.id and c.status = 'published'
+             and e.status = 'active')
+  from profiles p
+  where p.id = p_teacher_id and p.is_teacher = true;
+end;
+$$;
+
+revoke all on function public.get_teacher_public(uuid) from public;
+grant execute on function public.get_teacher_public(uuid) to anon, authenticated;
+
+-- ------------------------------------------------------------
 -- Checks: each row should say true.
 -- ------------------------------------------------------------
 select 'enrollments.amount_paid' as item,

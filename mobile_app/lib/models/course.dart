@@ -7,6 +7,7 @@ class Course {
   final String? descriptionAr;
   final String? teacherName;
   final String? teacherNameAr;
+  final String? teacherId;
   final bool isFree;
   final String? price;
   final String? tagLabel;
@@ -29,6 +30,7 @@ class Course {
     this.descriptionAr,
     this.teacherName,
     this.teacherNameAr,
+    this.teacherId,
     required this.isFree,
     this.price,
     this.tagLabel,
@@ -51,6 +53,7 @@ class Course {
         descriptionAr: json['description_ar'] as String?,
         teacherName: json['teacher_name'] as String?,
         teacherNameAr: json['teacher_name_ar'] as String?,
+        teacherId: json['teacher_id'] as String?,
         isFree: json['is_free'] as bool? ?? false,
         price: json['price']?.toString(),
         tagLabel: json['tag_label'] as String?,

@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
+import '../services/notification_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
 import '../services/safe_picker.dart';
@@ -57,7 +58,7 @@ class TeacherScreen extends StatefulWidget {
   State<TeacherScreen> createState() => _TeacherScreenState();
 }
 
-enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments }
+enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention }
 
 class _TeacherScreenState extends State<TeacherScreen> {
   bool _checking = true;
@@ -1024,6 +1025,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.curriculum => _buildCurriculum(t),
       _TView.codes => _buildCodes(t),
       _TView.payments => _buildPayments(t),
+      _TView.attention => _buildAttention(t),
       _TView.profile => _buildProfile(t),
     };
   }
@@ -1064,6 +1066,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 ('${_myCourses.length}', t('stat_courses')),
                 ('$_statStudents', t('stat_students')),
                 ('$_statEarnings', t('stat_earnings')),
+                ('${_attentionCount(paymentSet)}', t('dash_needs_attention')),
+              ],
+              statTaps: [
+                () => go(_TView.courses),
+                null,
+                null,
+                () => go(_TView.attention),
               ],
             ),
           ),
@@ -1128,6 +1137,99 @@ class _TeacherScreenState extends State<TeacherScreen> {
             ],
         ],
       ),
+    );
+  }
+
+  List<Map<String, dynamic>> get _rejectedEdits => _myCourses
+      .where((c) => c['edit_status'] == 'rejected')
+      .toList();
+  List<Map<String, dynamic>> get _drafts =>
+      _myCourses.where((c) => c['status'] == 'draft').toList();
+  // Rejected lectures are deleted; their unread notification is the record.
+  List<AppNotification> get _rejectedLectures => NotificationService
+      .instance.items
+      .where((n) => n.type == 'lecture_rejected' && !n.read)
+      .toList();
+
+  int _attentionCount(bool paymentSet) =>
+      _paymentRequests.length +
+      _rejectedEdits.length +
+      _drafts.length +
+      _rejectedLectures.length +
+      (paymentSet ? 0 : 1);
+
+  /// Everything waiting on the teacher, in one list.
+  Widget _buildAttention(String Function(String) t) {
+    final paymentSet = _pZaincashPhone.text.trim().isNotEmpty ||
+        _pQiAccount.text.trim().isNotEmpty ||
+        _pQiQrUrl != null;
+    if (_attentionCount(paymentSet) == 0) {
+      return ListView(children: [
+        DashEmpty(icon: ArcIcon.check, message: t('attention_none'))
+      ]);
+    }
+    Widget item(ArcIcon icon, Color accent, String title, String sub,
+            String pill, VoidCallback onTap) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: DashCard(
+            leading: DashIconBadge(icon: icon, accent: accent),
+            title: title,
+            subtitle: sub,
+            trailing: StatusPill(pill, tone: StatusTone.warn),
+            onTap: onTap,
+          ),
+        );
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        if (!paymentSet) ...[
+          DashSection(t('settings_payment_info')),
+          item(ArcIcon.wallet, AppColors.teal, t('settings_payment_info'),
+              t('teacher_attention_payment_info'), t('attention_setup'),
+              () => setState(() => _view = _TView.profile)),
+        ],
+        if (_paymentRequests.isNotEmpty) ...[
+          DashSection('${t('payment_requests')} (${_paymentRequests.length})'),
+          for (final r in _paymentRequests)
+            item(
+                ArcIcon.money,
+                AppColors.teal,
+                (r['full_name'] as String?) ?? (r['email'] as String?) ?? '—',
+                r['course_title'] as String? ?? '—',
+                t('attention_payment'),
+                () => setState(() => _view = _TView.payments)),
+        ],
+        if (_rejectedLectures.isNotEmpty) ...[
+          DashSection(t('rejected_lectures')),
+          for (final n in _rejectedLectures)
+            item(ArcIcon.video, AppColors.red, n.title, n.body,
+                t('attention_rejected'), () {
+              NotificationService.instance.markRead(n.id);
+              final slug = n.data['course_slug'];
+              final c = _myCourses.where((x) => x['slug'] == slug).firstOrNull;
+              if (c != null) {
+                _openCurriculum(c);
+              } else {
+                setState(() {});
+              }
+            }),
+        ],
+        if (_rejectedEdits.isNotEmpty) ...[
+          DashSection(t('edit_requests')),
+          for (final c in _rejectedEdits)
+            item(ArcIcon.edit, AppColors.red, c['title'] as String? ?? '—',
+                (c['edit_reject_reason'] as String?) ?? '—',
+                t('attention_rejected'), () => _openCourseEdit(c)),
+        ],
+        if (_drafts.isNotEmpty) ...[
+          DashSection(t('attention_draft')),
+          for (final c in _drafts)
+            item(ArcIcon.courses, AppColors.byline, c['title'] as String? ?? '—',
+                t('teacher_attention_draft_sub'), t('attention_draft'),
+                () => setState(() => _view = _TView.courses)),
+        ],
+      ],
     );
   }
 
