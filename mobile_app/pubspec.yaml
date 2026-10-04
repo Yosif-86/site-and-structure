@@ -24,6 +24,8 @@ dependencies:
   audioplayers: ^6.1.0
   gal: ^2.3.0
   connectivity_plus: ^7.3.2
+  file_picker: ^10.2.4
+  pdfx: ^2.11.0
 
 dev_dependencies:
   flutter_test:

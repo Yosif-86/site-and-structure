@@ -24,6 +24,7 @@ import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
+import 'course_files.dart';
 
 /// Net-new teacher dashboard, ported from teacher.html: a dashboard-card
 /// landing (Overview) plus My courses / course edit / curriculum / discount
@@ -1456,6 +1457,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
           ],
         ),
+        const SizedBox(height: 8),
+        if (_activeCourse != null)
+          TeacherCourseFiles(
+              key: ValueKey(_activeCourse!['id']),
+              courseId: _activeCourse!['id'] as String),
       ],
     );
   }

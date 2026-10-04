@@ -446,6 +446,170 @@ revoke all on function public.get_teacher_public(uuid) from public;
 grant execute on function public.get_teacher_public(uuid) to anon, authenticated;
 
 -- ------------------------------------------------------------
+-- 11. Course files (PDF, Word, Excel, PowerPoint, photos). Teachers upload
+--     the original to course-files/raw/<course>/; a GitHub Actions job
+--     turns it into a PDF (or image) stamped with the Arc logo at
+--     course-files/view/<course>/<id>.(pdf|jpg). Students only ever read
+--     the view copy, inside the app, if enrolled (or the file is free).
+-- ------------------------------------------------------------
+create table if not exists public.course_files (
+  id uuid primary key default gen_random_uuid(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  title text not null check (length(title) between 1 and 200),
+  kind text not null check (kind in ('pdf', 'image', 'office')),
+  original_name text,
+  raw_path text,
+  view_path text,
+  view_type text check (view_type in ('pdf', 'image')),
+  status text not null default 'processing'
+    check (status in ('processing', 'published', 'failed')),
+  is_free boolean not null default false,
+  order_index integer not null default 0,
+  uploaded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists course_files_course_idx
+  on public.course_files (course_id, order_index);
+
+alter table public.course_files enable row level security;
+
+create or replace function public.can_edit_course(p_course_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin() or exists (
+    select 1 from courses where id = p_course_id and teacher_id = auth.uid());
+$$;
+
+create or replace function public.can_view_course_file(p_file_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from course_files f
+    join courses c on c.id = f.course_id
+    where f.id = p_file_id
+      and f.status = 'published'
+      and (
+        f.is_free
+        or c.teacher_id = auth.uid()
+        or public.is_admin()
+        or exists (select 1 from enrollments e
+                   where e.course_slug = c.slug and e.user_id = auth.uid()
+                     and e.status = 'active')));
+$$;
+
+drop policy if exists "Course files listed" on public.course_files;
+create policy "Course files listed" on public.course_files
+  for select using (status = 'published' or public.can_edit_course(course_id));
+
+drop policy if exists "Teachers add course files" on public.course_files;
+create policy "Teachers add course files" on public.course_files
+  for insert with check (
+    public.can_edit_course(course_id)
+    and status = 'processing' and view_path is null);
+
+drop policy if exists "Teachers rename course files" on public.course_files;
+create policy "Teachers rename course files" on public.course_files
+  for update using (public.can_edit_course(course_id))
+  with check (public.can_edit_course(course_id));
+
+drop policy if exists "Teachers delete course files" on public.course_files;
+create policy "Teachers delete course files" on public.course_files
+  for delete using (public.can_edit_course(course_id));
+
+-- Teachers may only change title / free flag / order; the processed copy
+-- and its status come from the server job alone.
+create or replace function public.trg_guard_course_file()
+returns trigger
+language plpgsql
+as $$
+begin
+  if current_setting('app.course_file_job', true) = 'on' then
+    return new;
+  end if;
+  new.view_path := old.view_path;
+  new.view_type := old.view_type;
+  new.status := old.status;
+  new.raw_path := old.raw_path;
+  new.course_id := old.course_id;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_course_file on public.course_files;
+create trigger trg_guard_course_file
+  before update on public.course_files
+  for each row execute function public.trg_guard_course_file();
+
+-- Private storage bucket.
+insert into storage.buckets (id, name, public)
+values ('course-files', 'course-files', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists "Course files: teachers upload originals" on storage.objects;
+create policy "Course files: teachers upload originals" on storage.objects
+  for insert to authenticated with check (
+    bucket_id = 'course-files'
+    and (storage.foldername(name))[1] = 'raw'
+    and public.can_edit_course(((storage.foldername(name))[2])::uuid));
+
+drop policy if exists "Course files: read processed copy" on storage.objects;
+create policy "Course files: read processed copy" on storage.objects
+  for select to authenticated using (
+    bucket_id = 'course-files'
+    and (storage.foldername(name))[1] = 'view'
+    and exists (
+      select 1 from public.course_files f
+      where f.view_path = storage.objects.name
+        and public.can_view_course_file(f.id)));
+
+drop policy if exists "Course files: teachers remove" on storage.objects;
+create policy "Course files: teachers remove" on storage.objects
+  for delete to authenticated using (
+    bucket_id = 'course-files'
+    and public.can_edit_course(((storage.foldername(name))[2])::uuid));
+
+-- Called by api/course-file.js (service role) when the job finishes.
+create or replace function public.finish_course_file(
+  p_file_id uuid, p_view_path text, p_view_type text, p_ok boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_f record;
+begin
+  perform set_config('app.course_file_job', 'on', true);
+  update course_files
+     set view_path = case when p_ok then p_view_path else null end,
+         view_type = case when p_ok then p_view_type else null end,
+         status = case when p_ok then 'published' else 'failed' end,
+         raw_path = case when p_ok then null else raw_path end
+   where id = p_file_id
+   returning course_id, title, uploaded_by into v_f;
+  if v_f.uploaded_by is not null then
+    perform notify_user(v_f.uploaded_by, 'course_file',
+      case when p_ok then 'الملف جاهز' else 'تعذرت معالجة الملف' end,
+      v_f.title,
+      jsonb_build_object('course_id', v_f.course_id));
+  end if;
+end;
+$$;
+
+revoke all on function public.finish_course_file(uuid, text, text, boolean) from public, anon, authenticated;
+grant execute on function public.finish_course_file(uuid, text, text, boolean) to service_role;
+
+-- ------------------------------------------------------------
 -- Checks: each row should say true.
 -- ------------------------------------------------------------
 select 'enrollments.amount_paid' as item,
@@ -460,5 +624,9 @@ union all select 'security_events',
 union all select 'profiles.terms_accepted_at',
   exists (select 1 from information_schema.columns
           where table_name = 'profiles' and column_name = 'terms_accepted_at')
+union all select 'course_files',
+  exists (select 1 from information_schema.tables where table_name = 'course_files')
+union all select 'course-files bucket',
+  exists (select 1 from storage.buckets where id = 'course-files')
 union all select 'admin_force_logout',
   exists (select 1 from pg_proc where proname = 'admin_force_logout');

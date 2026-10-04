@@ -27,6 +27,7 @@ import '../widgets/arc_icons.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
 import 'auth_screen.dart';
+import 'course_files.dart';
 import 'teacher_profile_screen.dart';
 import 'video_player_screen.dart';
 
@@ -42,6 +43,7 @@ class CourseDetailScreen extends StatefulWidget {
 class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Course? _course;
   List<Lecture> _lectures = [];
+  List<Map<String, dynamic>> _files = [];
   String? _enrollmentStatus; // 'active' | 'pending' | null
   /// Why the student's last payment for this course was rejected (shown
   /// until they submit again).
@@ -105,6 +107,18 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       final lectures = (lectureRows as List)
           .map((r) => Lecture.fromJson(r as Map<String, dynamic>))
           .toList();
+      var files = <Map<String, dynamic>>[];
+      try {
+        final fileRows = await sb
+            .from('course_files')
+            .select('id, title, view_path, view_type, is_free, status')
+            .eq('course_id', course.id)
+            .eq('status', 'published')
+            .order('order_index');
+        files = (fileRows as List).cast<Map<String, dynamic>>();
+      } catch (_) {
+        // course_files not added yet: no files section.
+      }
 
       String? status;
       String? rejection;
@@ -172,6 +186,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       setState(() {
         _course = course;
         _lectures = lectures;
+        _files = files;
         _enrollmentStatus = status;
         _rejectionReason = rejection;
         _completedLectureIds = completedIds;
@@ -421,7 +436,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           onSelect: (i) => setState(() => _tab = i),
         ),
         const SizedBox(height: 14),
-        if (_tab == 0) ..._buildOverview(course) else ..._buildCurriculum(),
+        if (_tab == 0) ..._buildOverview(course) else ...[
+          ..._buildCurriculum(),
+          CourseFilesSection(
+            files: _files,
+            unlocked: _isActive,
+            onLocked: _openEnroll,
+          ),
+        ],
       ],
     );
   }
