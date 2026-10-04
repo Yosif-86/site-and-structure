@@ -21,7 +21,11 @@ class UploadCancelled implements Exception {
 /// each part retries on a weak connection, and [cancel] aborts cleanly.
 class R2Upload {
   static const _partSize = 8 * 1024 * 1024; // R2 needs equal parts >= 5 MB
-  static const _retries = 3;
+  // A part gets 7 tries with growing waits (about 2.5 minutes in total), so
+  // a phone switching networks or a short dead zone doesn't fail the whole
+  // upload.
+  static const _retries = 7;
+  static const _backoff = [3, 6, 12, 20, 40, 60];
 
   final String courseId;
   final String lectureId;
@@ -48,7 +52,12 @@ class R2Upload {
     if (_cancelled) throw const UploadCancelled();
   }
 
-  Future<void> _authorize() async {
+  Future<void> _authorize({bool refresh = false}) async {
+    if (refresh) {
+      try {
+        await SupabaseService.instance.client.auth.refreshSession();
+      } catch (_) {}
+    }
     final token =
         SupabaseService.instance.client.auth.currentSession?.accessToken;
     final res = await _client.post(
@@ -114,6 +123,13 @@ class R2Upload {
       }
     } on http.ClientException {
       if (_cancelled) throw const UploadCancelled();
+      _abort();
+      rethrow;
+    } on UploadCancelled {
+      rethrow;
+    } catch (_) {
+      // Failed for good: free the parts already stored in R2.
+      _abort();
       rethrow;
     } finally {
       await raf.close();
@@ -125,23 +141,30 @@ class R2Upload {
     for (var attempt = 1;; attempt++) {
       _check();
       try {
-        final res = await _client.put(
-          _uri({
-            'op': 'part',
-            'uploadId': _uploadId!,
-            'partNumber': '$partNumber',
-          }),
-          headers: {'Content-Type': 'application/octet-stream'},
-          body: bytes,
-        );
+        final res = await _client
+            .put(
+              _uri({
+                'op': 'part',
+                'uploadId': _uploadId!,
+                'partNumber': '$partNumber',
+              }),
+              headers: {'Content-Type': 'application/octet-stream'},
+              body: bytes,
+            )
+            .timeout(const Duration(minutes: 5));
         if (res.statusCode == 200) {
           return (jsonDecode(res.body) as Map)['etag'] as String;
+        }
+        // Upload permission expired (very long upload): get a fresh one.
+        if (res.statusCode == 401 || res.statusCode == 403) {
+          await _authorize(refresh: true);
         }
         throw HttpException('part $partNumber failed (${res.statusCode})');
       } catch (e) {
         if (_cancelled) throw const UploadCancelled();
         if (attempt >= _retries) rethrow;
-        await Future.delayed(Duration(seconds: 2 * attempt));
+        await Future.delayed(
+            Duration(seconds: _backoff[(attempt - 1).clamp(0, _backoff.length - 1)]));
       }
     }
   }

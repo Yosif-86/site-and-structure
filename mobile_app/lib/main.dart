@@ -12,12 +12,15 @@ import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'services/net_status.dart';
 import 'services/screen_security.dart';
+import 'services/upload_manager.dart';
 import 'theme.dart';
 import 'widgets/blueprint_splash.dart';
 import 'widgets/offline_banner.dart';
+import 'widgets/upload_pill.dart';
 import 'widgets/privacy_overlay.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
+final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
 /// Lets Home notice when a screen above it closes (see CatalogueScreen).
 final routeObserver = RouteObserver<PageRoute<dynamic>>();
@@ -44,6 +47,8 @@ Future<void> main() async {
     NotificationService.instance;
     NetStatus.instance.start();
     ScreenSecurity.init();
+    UploadManager.instance.onMessage = (m) => messengerKey.currentState
+        ?.showSnackBar(SnackBar(content: Text(m)));
     runApp(const SiteAndStructureApp());
   }, _reportError);
 }
@@ -136,6 +141,7 @@ class SiteAndStructureApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           navigatorKey: navigatorKey,
+          scaffoldMessengerKey: messengerKey,
           navigatorObservers: [routeObserver],
           title: AppStrings.instance.t('app_name'),
           debugShowCheckedModeBanner: false,
@@ -148,7 +154,7 @@ class SiteAndStructureApp extends StatelessWidget {
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
             child: PrivacyOverlay(
-              child: OfflineBanner(child: child!),
+              child: OfflineBanner(child: UploadPill(child: child!)),
             ),
           ),
           home: const _LaunchGate(),

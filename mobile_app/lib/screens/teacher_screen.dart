@@ -5,14 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
-import 'package:video_compress/video_compress.dart';
 import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
 import '../services/notification_service.dart';
 import '../services/payment_rules.dart';
-import '../services/r2_upload.dart';
+import '../services/upload_manager.dart';
 import '../services/safe_picker.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
@@ -186,13 +185,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
   XFile? _lVideoFile;
   bool _lIsFree = false;
   String? _lFormError;
-  // 0.0-1.0 while a video is uploading, null the rest of the time — drives
-  // the circular progress pill in place of the Add button.
-  double? _lUploadProgress;
-  R2Upload? _upload;
-  String _lUploadPhase = 'upload'; // 'prepare' (downscaling) | 'upload'
-  bool _uploadBusy = false;
-  bool _uploadCancelled = false;
+  // Reading the picked video's length before handing it to the uploader.
+  bool _lPreparing = false;
 
   // Discount code form state.
   final _dCode = TextEditingController();
@@ -550,6 +544,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   }
 
   Future<void> _addLecture() async {
+    if (_lPreparing) return;
     final t = AppStrings.instance.t;
     setState(() => _lFormError = null);
     final title = _lTitle.text.trim();
@@ -561,91 +556,28 @@ class _TeacherScreenState extends State<TeacherScreen> {
       setState(() => _lFormError = t('err_video_required'));
       return;
     }
-    File? compressed;
-    try {
-      final sb = SupabaseService.instance.client;
-      final lectureId = const Uuid().v4();
-      setState(() {
-        _lUploadProgress = 0;
-        _lUploadPhase = 'prepare';
-        _uploadBusy = true;
-      });
-      // Size and runtime off the local file first: the runtime shows on the
-      // course page from the start, the size decides whether to downscale.
-      final info = await _readVideoInfo(File(_lVideoFile!.path));
-      var source = File(_lVideoFile!.path);
-      // Lectures stream at up to 1080p: anything larger (4K phone footage)
-      // is re-encoded on the phone before upload, which also makes the
-      // upload several times smaller.
-      if (info.shortSide > 1080) {
-        final sub = VideoCompress.compressProgress$.subscribe((p) {
-          if (mounted) setState(() => _lUploadProgress = (p / 100).clamp(0, 1));
-        });
-        try {
-          final out = await VideoCompress.compressVideo(
-            source.path,
-            quality: VideoQuality.Res1920x1080Quality,
-            includeAudio: true,
-            deleteOrigin: false,
-          );
-          if (_uploadCancelled) throw const UploadCancelled();
-          if (out?.file == null) throw Exception('compress failed');
-          compressed = out!.file!;
-          source = compressed;
-        } finally {
-          sub.unsubscribe();
-        }
-      }
-      if (_uploadCancelled) throw const UploadCancelled();
-      if (mounted) {
-        setState(() {
-          _lUploadPhase = 'upload';
-          _lUploadProgress = 0;
-        });
-      }
-      final upload = _upload = R2Upload(
-        courseId: _activeCourse!['id'] as String,
-        lectureId: lectureId,
-        file: source,
-      );
-      await upload.start((p) {
-        if (mounted) setState(() => _lUploadProgress = p);
-      });
-      final orderIndex = _activeLectures.isEmpty
-          ? 0
-          : (_activeLectures
-                  .map((l) => (l['order_index'] as num?) ?? 0)
-                  .reduce((a, b) => a > b ? a : b) +
-              1);
-      // Pending until the admin approves it (only an admin can set r2_path,
-      // which is what makes it playable).
-      await sb.from('lectures').insert({
-        'id': lectureId,
-        'course_id': _activeCourse!['id'],
-        'title': title,
-        'is_free': _lIsFree,
-        'order_index': orderIndex,
-        'pending_upload_path': 'r2:${upload.key}',
-        if (info.seconds != null) 'duration_seconds': info.seconds,
-      });
+    setState(() => _lPreparing = true);
+    // Runtime off the local file so it shows on the course page from the
+    // start.
+    final file = File(_lVideoFile!.path);
+    final info = await _readVideoInfo(file);
+    if (!mounted) return;
+    UploadManager.instance.start(LectureUploadJob(
+      lectureId: const Uuid().v4(),
+      courseId: _activeCourse!['id'] as String,
+      courseTitle: _activeCourse!['title'] as String? ?? '',
+      title: title,
+      isFree: _lIsFree,
+      durationSeconds: info.seconds,
+      file: file,
+    ));
+    setState(() {
+      _lPreparing = false;
       _lTitle.clear();
       _lVideoFile = null;
       _lIsFree = false;
-      _showError(t('lecture_sent_for_review'));
-      await _loadLectures();
-    } on UploadCancelled {
-      if (mounted) _showError(t('upload_cancelled'));
-    } catch (e) {
-      if (mounted) setState(() => _lFormError = t('err_video_upload_failed'));
-    } finally {
-      _upload = null;
-      _uploadBusy = false;
-      _uploadCancelled = false;
-      if (compressed != null) {
-        compressed.delete().catchError((_) => compressed!);
-      }
-      if (mounted) setState(() => _lUploadProgress = null);
-    }
+    });
+    _showError(t('upload_started'));
   }
 
   /// Local video runtime (seconds) and the shorter side of its frame (the
@@ -928,19 +860,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
     return result ?? false;
   }
 
-  /// Asks first, then stops the running lecture upload.
-  Future<bool> _confirmCancelUpload() async {
-    if (!_uploadBusy) return true;
-    final t = AppStrings.instance.t;
-    final ok = await _confirm(t('confirm_cancel_upload'),
-        confirmLabel: t('btn_cancel_upload'));
-    if (ok) {
-      _uploadCancelled = true;
-      VideoCompress.cancelCompression();
-      _upload?.cancel();
-    }
-    return ok;
-  }
+  /// Uploads now run in the background, so leaving a view never needs
+  /// confirming.
+  Future<bool> _confirmCancelUpload() async => true;
 
   @override
   Widget build(BuildContext context) {
@@ -985,7 +907,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
           // Inside a sub-view, back steps up one level (like the AppBar
           // arrow) instead of closing the whole dashboard.
           canPop: !widget.mandatoryPayment &&
-              !_uploadBusy &&
               (_view == _TView.overview || widget.openPaymentInfo),
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || widget.mandatoryPayment) return;
@@ -1436,6 +1357,48 @@ class _TeacherScreenState extends State<TeacherScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         DashSection('${t('curriculum')} · ${_activeCourse?['title'] ?? ''}'),
+        AnimatedBuilder(
+          animation: UploadManager.instance,
+          builder: (context, _) {
+            final jobs = UploadManager.instance
+                .forCourse(_activeCourse?['id'] as String? ?? '');
+            if (jobs.isEmpty) return const SizedBox.shrink();
+            return Column(children: [
+              for (final j in jobs) ...[
+                DashCard(
+                  leading: _UploadProgressPill(
+                      progress: j.progress, label: ''),
+                  title: j.title,
+                  subtitle: switch (j.status) {
+                    UploadStatus.uploading =>
+                      '${t('uploading_video')} ${(j.progress * 100).round()}%',
+                    UploadStatus.done => t('lecture_sent_for_review'),
+                    UploadStatus.failed => t('err_video_upload_failed'),
+                    UploadStatus.cancelled => t('upload_cancelled'),
+                  },
+                  actions: [
+                    if (j.status == UploadStatus.uploading)
+                      DashButton(t('btn_cancel_upload'),
+                          danger: true,
+                          icon: ArcIcon.close,
+                          onPressed: () async {
+                            if (await _confirm(t('confirm_cancel_upload'),
+                                confirmLabel: t('btn_cancel_upload'))) {
+                              UploadManager.instance.cancel(j.lectureId);
+                            }
+                          })
+                    else
+                      DashButton(t('btn_hide'),
+                          icon: ArcIcon.close,
+                          onPressed: () =>
+                              UploadManager.instance.dismiss(j.lectureId)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+            ]);
+          },
+        ),
         if (_activeLectures.isEmpty)
           DashEmpty(icon: ArcIcon.video, message: t('no_lectures_teacher'))
         else
@@ -1458,13 +1421,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
               video: true,
               emptyLabel: t('label_video_file'),
               onPick: () async {
-                if (_uploadBusy) return;
                 final picked = await SafePicker.video();
                 if (picked != null) setState(() => _lVideoFile = picked);
               },
-              onRemove: _uploadBusy
-                  ? null
-                  : () => setState(() => _lVideoFile = null),
+              onRemove: () => setState(() => _lVideoFile = null),
             ),
             const SizedBox(height: 4),
             InkWell(
@@ -1481,28 +1441,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
             ),
             _formError(_lFormError),
             const SizedBox(height: 10),
-            if (_lUploadProgress != null)
-              Center(
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 12,
-                  runSpacing: 10,
-                  children: [
-                    _UploadProgressPill(
-                        progress: _lUploadProgress!,
-                        label: _lUploadPhase == 'prepare'
-                            ? t('preparing_video')
-                            : t('uploading_video')),
-                    DashButton(t('btn_cancel_upload'),
-                        danger: true,
-                        icon: ArcIcon.close,
-                        onPressed: _confirmCancelUpload),
-                  ],
-                ),
-              )
-            else
-              ElevatedButton(onPressed: _addLecture, child: Text(t('btn_add'))),
+            ElevatedButton(
+                onPressed: _lPreparing ? null : _addLecture,
+                child: _lPreparing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : Text(t('btn_add'))),
+            const SizedBox(height: 6),
+            Text(t('upload_background_hint'),
+                textAlign: TextAlign.center,
+                style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
           ],
         ),
       ],
