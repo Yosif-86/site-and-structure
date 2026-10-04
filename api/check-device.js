@@ -5,6 +5,15 @@ const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
 const MAX_DEVICES = 1;
 
+// Best effort: a missing table (migration not run yet) never breaks sign-in.
+async function logSecurityEvent(admin, userId, kind, detail) {
+  try {
+    await admin.from('security_events').insert({ user_id: userId, kind, detail });
+  } catch (e) {
+    console.error('check-device: security event failed', e);
+  }
+}
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -127,8 +136,39 @@ module.exports = async (req, res) => {
   }
 
   if (!allowed) {
+    // Someone tried this account on another device: logged as a security
+    // event, which notifies the admins and the account owner (add-oct05-fixes.sql).
+    await logSecurityEvent(admin, userId, 'device_blocked', {
+      device_label: safeDeviceLabel || null
+    });
     res.status(200).json({ allowed: false });
     return;
+  }
+
+  // Same phone signed into another account too: worth a look (account sharing).
+  {
+    const { data: others } = await admin
+      .from('trusted_devices')
+      .select('user_id')
+      .eq('device_id', deviceId)
+      .neq('user_id', userId)
+      .limit(5);
+    if (Array.isArray(others) && others.length > 0) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: recent } = await admin
+        .from('security_events')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('kind', 'shared_device')
+        .gte('created_at', since)
+        .limit(1);
+      if (!recent || recent.length === 0) {
+        await logSecurityEvent(admin, userId, 'shared_device', {
+          device_label: safeDeviceLabel || null,
+          other_users: others.map((o) => o.user_id)
+        });
+      }
+    }
   }
 
   // Single-session rule: a new token logs every other device out. Accounts

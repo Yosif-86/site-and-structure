@@ -57,10 +57,14 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const { data, error } = await asUser.rpc('redeem_discount_code', {
-    p_code: code.trim().toUpperCase(),
-    p_course_id: courseId
-  });
+  // Checks the code without using it up (add-oct05-fixes.sql); the code is
+  // only consumed when the payment request is sent (submit_paid_enrollment).
+  // Falls back to the old redeem call until that migration has run.
+  const params = { p_code: code.trim().toUpperCase(), p_course_id: courseId };
+  let { data, error } = await asUser.rpc('preview_discount_code', params);
+  if (error && error.code === 'PGRST202') {
+    ({ data, error } = await asUser.rpc('redeem_discount_code', params));
+  }
   if (error) {
     // The DB-level cap (add-discount-code-rate-limit.sql) raises this exact
     // message via errcode P0001 when the RPC is called directly, bypassing

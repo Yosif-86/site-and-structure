@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gal/gal.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
@@ -14,6 +15,7 @@ import '../services/error_reporter.dart';
 import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/payment_rules.dart';
+import '../services/net_status.dart';
 import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -1193,7 +1195,10 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
     return digits.isEmpty ? 0 : int.parse(digits);
   }
 
+  bool _applying = false;
+
   Future<void> _applyDiscount() async {
+    if (_applying) return;
     final t = AppStrings.instance.t;
     final code = _discountCtrl.text.trim().toUpperCase();
     setState(() {
@@ -1204,6 +1209,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       setState(() => _discountError = t('err_enter_discount_code'));
       return;
     }
+    setState(() => _applying = true);
     try {
       // Routed through the server (not sb.rpc directly) so the daily
       // attempts cap in api/redeem-discount-code.js actually applies --
@@ -1222,12 +1228,19 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         },
         body: jsonEncode(
             {'code': code, 'courseId': widget.course.id}),
-      );
-      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      ).timeout(const Duration(seconds: 20));
+      Map<String, dynamic> body = const {};
+      try {
+        body = jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {}
+      if (res.statusCode >= 500) {
+        setState(() => _discountError = t('err_generic'));
+        return;
+      }
       if (res.statusCode != 200 || body['ok'] != true) {
         setState(() => _discountError =
             res.statusCode == 429 && body['error'] is String
-                ? body['error'] as String
+                ? t(body['error'] as String)
                 : t('err_invalid_discount'));
         return;
       }
@@ -1240,10 +1253,16 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       setState(() {
         _discountedPrice = discounted;
         _discountApplied = true;
+        _appliedCode = code;
         _discountOk = '${t('total_after_discount')}: $discounted';
       });
     } catch (e) {
-      setState(() => _discountError = t('err_invalid_discount'));
+      if (!mounted) return;
+      setState(() => _discountError = NetStatus.isOffline(e)
+          ? t('err_offline')
+          : t('err_invalid_discount'));
+    } finally {
+      if (mounted) setState(() => _applying = false);
     }
   }
 
@@ -1255,8 +1274,14 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   }
 
   Future<void> _pickProof() async {
-    final picked = await SafePicker.image(imageQuality: 85);
-    if (picked != null) setState(() => _proof = picked);
+    try {
+      final picked = await SafePicker.image(imageQuality: 85);
+      if (picked != null && mounted) setState(() => _proof = picked);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = AppStrings.instance.t('err_photo_permission'));
+      }
+    }
   }
 
   bool get _hasZain => _payZaincashPhone?.trim().isNotEmpty ?? false;
@@ -1273,6 +1298,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   }
 
   bool _savingQr = false;
+  String? _appliedCode;
 
   Future<void> _saveQr() async {
     final t = AppStrings.instance.t;
@@ -1325,20 +1351,41 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
     });
     final sb = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser!;
+    // Our own name only: picked files can have Arabic or spaced names that
+    // storage rejects.
+    final ext = _proof!.name.contains('.')
+        ? _proof!.name.split('.').last.toLowerCase()
+        : 'jpg';
+    final fileName =
+        '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
+    var uploaded = false;
     try {
-      final fileName =
-          '${user.id}/${DateTime.now().millisecondsSinceEpoch}-${_proof!.name}';
       await sb.storage
           .from('payment-proofs')
           .upload(fileName, File(_proof!.path));
-      await sb.from('enrollments').insert({
-        'user_id': user.id,
-        'course_slug': widget.course.slug,
-        'status': 'pending',
-        'payment_method': _method,
-        'payment_detail': _detailCtrl.text.trim(),
-        'payment_proof_path': fileName,
-      });
+      uploaded = true;
+      try {
+        // Records the request, the price, and the discount code together;
+        // the code is only used up here (add-oct05-fixes.sql).
+        await sb.rpc('submit_paid_enrollment', params: {
+          'p_course_slug': widget.course.slug,
+          'p_method': _method,
+          'p_detail': _detailCtrl.text.trim(),
+          'p_proof_path': fileName,
+          'p_code': _discountApplied ? _appliedCode : null,
+        });
+      } on PostgrestException catch (e) {
+        if (e.code != 'PGRST202') rethrow;
+        // Migration not run yet: the old direct insert.
+        await sb.from('enrollments').insert({
+          'user_id': user.id,
+          'course_slug': widget.course.slug,
+          'status': 'pending',
+          'payment_method': _method,
+          'payment_detail': _detailCtrl.text.trim(),
+          'payment_proof_path': fileName,
+        });
+      }
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -1346,10 +1393,26 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
       });
       widget.onDone();
     } catch (e) {
+      // The request didn't go through: don't leave the screenshot behind.
+      if (uploaded) {
+        sb.storage.from('payment-proofs').remove([fileName]).ignore();
+      }
       if (!mounted) return;
+      final code = e is PostgrestException ? e.code : null;
       setState(() {
         _loading = false;
-        _error = ErrorReporter.userMessage(e, page: 'enroll_paid');
+        if (code == 'P0002') {
+          // Drop the dead code so the full price shows and they can resend.
+          _discountApplied = false;
+          _discountedPrice = null;
+          _appliedCode = null;
+          _discountOk = null;
+        }
+        _error = code == '23505'
+            ? t('err_already_requested')
+            : code == 'P0002'
+                ? t('err_discount_now_invalid')
+                : ErrorReporter.userMessage(e, page: 'enroll_paid');
       });
     }
   }

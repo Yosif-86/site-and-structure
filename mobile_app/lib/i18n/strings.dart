@@ -272,6 +272,15 @@ class AppStrings extends ChangeNotifier {
     'confirm_clear_errors': 'حذف كل سجل الأخطاء؟ لا يمكن التراجع عن هذا.',
     'alert_review_failed': 'تعذر تنفيذ المراجعة. ',
     'km': 'كم',
+    'err_already_requested': 'لديك طلب سابق لهذه الدورة قيد المراجعة.',
+    'err_discount_now_invalid': 'رمز الخصم لم يعد صالحًا. أرسل الطلب بالسعر الكامل أو جرّب رمزًا آخر.',
+    'err_photo_permission': 'اسمح للتطبيق بالوصول إلى الصور من إعدادات الجهاز.',
+    'Too many discount code attempts today. Try again tomorrow.':
+        'محاولات كثيرة لرموز الخصم اليوم. حاول غدًا.',
+    'Too many attempts today. Try again tomorrow.':
+        'محاولات كثيرة اليوم. حاول غدًا.',
+    'rev_last_payment': 'آخر دفعة',
+    'rev_discount': 'خصم',
     'err_duplicate': 'هذا العنصر موجود مسبقًا.',
     'err_code_exists': 'هذا الكود موجود مسبقًا لهذه الدورة.',
     'err_max_uses_invalid': 'عدد مرات الاستخدام يجب أن يكون رقمًا صحيحًا 1 أو أكثر.',

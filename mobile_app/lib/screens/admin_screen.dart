@@ -186,12 +186,8 @@ class _AdminScreenState extends State<AdminScreen> {
             'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
         sb.from('profiles').select(
             'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
-        sb
-            .from('login_events')
-            .select('user_id, email, created_at')
-            .order('created_at', ascending: false),
-        sb.from('enrollments').select(
-            'id, user_id, course_slug, status, payment_method, payment_detail, payment_proof_path, created_at, approved_by, approved_at'),
+        _loadEmails(),
+        sb.from('enrollments').select('*'),
         sb
             .from('login_events')
             .select('email, city, country, distance_km, created_at')
@@ -324,6 +320,23 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Map<String, Map<String, dynamic>> _redemptionsByCourseUser = {};
+
+  /// Every account's email. The function (add-oct05-fixes.sql) isn't capped
+  /// like the old login_events read, which stopped at 1000 rows; that read
+  /// stays as the fallback until the migration runs.
+  Future<List<Map<String, dynamic>>> _loadEmails() async {
+    final sb = SupabaseService.instance.client;
+    try {
+      final rows = await sb.rpc('admin_user_emails');
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      final rows = await sb
+          .from('login_events')
+          .select('user_id, email, created_at')
+          .order('created_at', ascending: false);
+      return (rows as List).cast<Map<String, dynamic>>();
+    }
+  }
 
   String _courseTitle(String slug) =>
       (_courseBySlug[slug]?['title'] as String?) ?? slug;
@@ -737,14 +750,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
   // ---- Dashboard ----
 
-  int _parsePrice(dynamic price) {
-    final digits = RegExp(r'\d')
-        .allMatches((price ?? '').toString())
-        .map((m) => m.group(0))
-        .join();
-    return digits.isEmpty ? 0 : int.parse(digits);
-  }
-
   String _date(String? iso, {bool time = false}) {
     final d = DateTime.tryParse(iso ?? '')?.toLocal();
     if (d == null) return '—';
@@ -753,13 +758,20 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildDashboard(String Function(String) t) {
+    // The platform's own 20%, computed exactly like the revenue screen it
+    // opens (same courses, real amounts paid). Direct-payment courses earn
+    // the platform nothing.
     final revenue = _activeEnrollments.fold<int>(0, (sum, e) {
       final c = _courseBySlug[e['course_slug']];
-      // The platform's own 20% (direct-payment courses earn it nothing).
-      if (c == null || c['is_free'] == true || c['pay_to_teacher'] == true) {
+      if (c == null ||
+          c['status'] != 'published' ||
+          c['is_free'] == true ||
+          c['pay_to_teacher'] == true) {
         return sum;
       }
-      return sum + (_parsePrice(c['price']) * PaymentRules.platformRate).round();
+      final r = _paidFor(e, c);
+      final cut = PaymentRules.split(price: r.price, paid: r.paid).platform;
+      return sum + (cut > r.paid ? r.paid : cut);
     });
     final now = DateTime.now();
     final activeInvitesCount = _invites
@@ -944,6 +956,40 @@ class _AdminScreenState extends State<AdminScreen> {
     });
   }
 
+  /// What one active enrollment actually paid. Uses the amounts stored on
+  /// the enrollment (add-oct05-fixes.sql); older rows fall back to the
+  /// student's latest redemption on that course.
+  ({int price, int paid, int discount, String? code}) _paidFor(
+      Map<String, dynamic> e, Map<String, dynamic> c) {
+    final price = (e['list_price'] as num?)?.toInt() ??
+        PaymentRules.parsePrice(c['price']);
+    final stored = (e['amount_paid'] as num?)?.toInt();
+    if (stored != null) {
+      final codeRow = _discountCodes
+          .where((d) => d['id'] == e['discount_code_id'])
+          .firstOrNull;
+      return (
+        price: price,
+        paid: stored,
+        discount: (e['discount_amount'] as num?)?.toInt() ?? (price - stored),
+        code: codeRow?['code'] as String?,
+      );
+    }
+    final dc = _redemptionsByCourseUser['${c['id']}|${e['user_id']}'];
+    if (dc == null) return (price: price, paid: price, discount: 0, code: null);
+    final value = (dc['discount_value'] as num?) ?? 0;
+    var paid = dc['discount_type'] == 'percent'
+        ? (price * (1 - value / 100)).round()
+        : (price - value).round();
+    if (paid < 0) paid = 0;
+    return (
+      price: price,
+      paid: paid,
+      discount: price - paid,
+      code: dc['code'] as String?,
+    );
+  }
+
   Widget _buildRevenue(String Function(String) t) {
     // Per course: what students paid (after discounts), the platform's 20%
     // of the full price on each, and the teacher's share of the rest. A
@@ -960,22 +1006,28 @@ class _AdminScreenState extends State<AdminScreen> {
           .where((e) => e['course_slug'] == c['slug'])
           .toList();
       int paidSum = 0, platform = 0, teacher = 0, discountedCount = 0;
+      int discountSum = 0;
+      final codes = <String>{};
+      DateTime? latest;
       for (final e in enrolled) {
-        final dc = _redemptionsByCourseUser['${c['id']}|${e['user_id']}'];
-        int paid = price;
-        if (dc != null) {
+        final r = _paidFor(e, c);
+        if (r.discount > 0) {
           discountedCount++;
-          final value = (dc['discount_value'] as num?) ?? 0;
-          paid = dc['discount_type'] == 'percent'
-              ? (price * (1 - value / 100)).round()
-              : (price - value).round();
-          if (paid < 0) paid = 0;
+          discountSum += r.discount;
+          if (r.code != null) codes.add(r.code!);
         }
         final s = PaymentRules.split(
-            price: price, paid: paid, directToTeacher: direct);
-        paidSum += paid;
-        platform += s.platform;
-        teacher += s.teacher;
+            price: r.price, paid: r.paid, directToTeacher: direct);
+        paidSum += r.paid;
+        // Never book more for the platform than was actually collected.
+        final cut = s.platform > r.paid ? r.paid : s.platform;
+        platform += cut;
+        teacher += r.paid - cut;
+        final when = DateTime.tryParse(
+            (e['approved_at'] ?? e['created_at'])?.toString() ?? '');
+        if (when != null && (latest == null || when.isAfter(latest))) {
+          latest = when;
+        }
       }
       if (direct) {
         totalDirect += paidSum;
@@ -994,12 +1046,23 @@ class _AdminScreenState extends State<AdminScreen> {
         'direct': direct,
         'students': enrolled.length,
         'discounted': discountedCount,
+        'discountSum': discountSum,
+        'codes': codes.join(', '),
+        'latest': latest,
         'paid': paidSum,
         'platform': platform,
         'teacher': teacher,
       });
     }
-    rows.sort((a, b) => (b['paid'] as int).compareTo(a['paid'] as int));
+    rows.sort((a, b) {
+      final la = a['latest'] as DateTime?, lb = b['latest'] as DateTime?;
+      if (la == null && lb == null) {
+        return (b['paid'] as int).compareTo(a['paid'] as int);
+      }
+      if (la == null) return 1;
+      if (lb == null) return -1;
+      return lb.compareTo(la);
+    });
 
     if (rows.isEmpty) return _empty(t('no_revenue'), ArcIcon.money);
     String name(String? id) =>
@@ -1046,7 +1109,11 @@ class _AdminScreenState extends State<AdminScreen> {
                 : Text('${r['paid']}',
                     style: AppFonts.code(size: 15, color: AppColors.red)),
             meta: [
+              if (r['latest'] != null)
+                '${t('rev_last_payment')}: ${_date((r['latest'] as DateTime).toIso8601String(), time: true)}',
               '${t('rev_price')}: ${r['price']}',
+              if ((r['discountSum'] as int) > 0)
+                '${t('rev_discount')}${(r['codes'] as String).isEmpty ? '' : ' ${r['codes']}'}: −${r['discountSum']}',
               r['direct'] == true
                   ? '${t('rev_teacher')}: ${r['teacher']} (${t('rev_no_cut')})'
                   : '${t('rev_platform_cut')}: ${r['platform']} · ${t('rev_teacher')}: ${r['teacher']}',

@@ -81,7 +81,9 @@ class NotificationsScreen extends StatelessWidget {
                     child: Text(t('mark_all_read'))),
             ],
           ),
-          body: svc.items.isEmpty
+          body: RefreshIndicator(
+            onRefresh: svc.refresh,
+            child: svc.items.isEmpty
               ? ListView(children: [
                   DashEmpty(icon: ArcIcon.bell, message: t('no_notifications'))
                 ])
@@ -148,6 +150,7 @@ class NotificationsScreen extends StatelessWidget {
                     );
                   },
                 ),
+          ),
         ),
       ),
     );

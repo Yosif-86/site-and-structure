@@ -332,13 +332,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final earnings = rows.fold<num>(0, (sum, e) {
       final c = courseBySlug[e['course_slug']];
       if (c == null || c['is_free'] == true) return sum;
-      final price = PaymentRules.parsePrice(c['price']);
-      return sum +
-          PaymentRules.split(
-                  price: price,
-                  paid: price,
-                  directToTeacher: c['pay_to_teacher'] == true)
-              .teacher;
+      // Real amounts once stored on the enrollment (discounts, free grants);
+      // older rows count the full price.
+      final price = (e['list_price'] as num?)?.toInt() ??
+          PaymentRules.parsePrice(c['price']);
+      final paid = (e['amount_paid'] as num?)?.toInt() ?? price;
+      final s = PaymentRules.split(
+          price: price,
+          paid: paid,
+          directToTeacher: c['pay_to_teacher'] == true);
+      return sum + (s.teacher < 0 ? 0 : s.teacher);
     });
     if (!mounted) return;
     setState(() {
