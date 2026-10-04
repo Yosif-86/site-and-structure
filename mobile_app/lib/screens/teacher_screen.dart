@@ -308,14 +308,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
       });
       return;
     }
-    final sb = SupabaseService.instance.client;
-    final enrollments = await sb
-        .from('enrollments')
-        .select('user_id, course_slug, status')
-        .inFilter('course_slug', slugs)
-        .eq('status', 'active');
-    final rows = (enrollments as List).cast<Map<String, dynamic>>();
-    final uniqueStudents = {for (final e in rows) e['user_id']}.length;
+    // enrollments RLS only lets a user read their own rows, so a direct
+    // select returned nothing here; get_teacher_students (security definer)
+    // returns this teacher's enrollments.
+    final all = await SupabaseService.instance.client
+        .rpc('get_teacher_students') as List;
+    final rows = all
+        .cast<Map<String, dynamic>>()
+        .where((e) => e['status'] == 'active')
+        .toList();
+    final uniqueStudents = {
+      for (final e in rows) e['email'] ?? e['phone'] ?? e['enrollment_id']
+    }.length;
     final courseBySlug = {for (final c in _myCourses) c['slug'] as String: c};
     final earnings = rows.fold<num>(0, (sum, e) {
       final c = courseBySlug[e['course_slug']];
