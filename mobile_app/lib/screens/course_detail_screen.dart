@@ -112,7 +112,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       try {
         final fileRows = await sb
             .from('course_files')
-            .select('id, title, kind, view_path, view_type, is_free, allow_download, original_name, status')
+            .select('id, title, kind, view_path, view_type, is_free, allow_download, original_name, status, lecture_id')
             .eq('course_id', course.id)
             .eq('status', 'published')
             .order('order_index');
@@ -449,7 +449,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         if (_tab == 0) ..._buildOverview(course) else ...[
           ..._buildCurriculum(),
           CourseFilesSection(
-            files: _files,
+            files: _files.where((f) => f['lecture_id'] == null).toList(),
             unlocked: _isActive,
             onLocked: _openEnroll,
           ),
@@ -574,6 +574,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         progressByLecture: _progressByLecture,
         continueWatchingId: _continueWatchingId,
         onWatch: _watchLecture,
+        files: _files,
+        onLocked: _openEnroll,
       ),
     ];
   }
@@ -908,6 +910,8 @@ class _CurriculumCard extends StatelessWidget {
   final Map<String, Map<String, int>> progressByLecture;
   final String? continueWatchingId;
   final void Function(Lecture) onWatch;
+  final List<Map<String, dynamic>> files;
+  final VoidCallback onLocked;
   const _CurriculumCard({
     required this.lectures,
     required this.isActive,
@@ -915,6 +919,8 @@ class _CurriculumCard extends StatelessWidget {
     required this.progressByLecture,
     required this.continueWatchingId,
     required this.onWatch,
+    required this.files,
+    required this.onLocked,
   });
 
   @override
@@ -939,6 +945,9 @@ class _CurriculumCard extends StatelessWidget {
               progress: progressByLecture[lectures[i].id],
               isContinueWatching: lectures[i].id == continueWatchingId,
               onWatch: () => onWatch(lectures[i]),
+              files: files.where((f) => f['lecture_id'] == lectures[i].id).toList(),
+              filesUnlocked: isActive,
+              onLocked: onLocked,
             ),
           ],
         ],
@@ -955,6 +964,9 @@ class _LectureRow extends StatelessWidget {
   final Map<String, int>? progress;
   final bool isContinueWatching;
   final VoidCallback onWatch;
+  final List<Map<String, dynamic>> files;
+  final bool filesUnlocked;
+  final VoidCallback onLocked;
   const _LectureRow({
     required this.index,
     required this.lecture,
@@ -963,6 +975,9 @@ class _LectureRow extends StatelessWidget {
     required this.progress,
     required this.isContinueWatching,
     required this.onWatch,
+    required this.files,
+    required this.filesUnlocked,
+    required this.onLocked,
   });
 
   @override
@@ -1074,6 +1089,8 @@ class _LectureRow extends StatelessWidget {
                 ),
               ),
             ],
+            LectureFileChips(
+                files: files, unlocked: filesUnlocked, onLocked: onLocked),
           ],
         ),
       ),

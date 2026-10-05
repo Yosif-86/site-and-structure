@@ -25,6 +25,7 @@ import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
 import 'course_detail_screen.dart';
+import 'course_files.dart';
 import 'teacher_profile_screen.dart';
 import 'video_player_screen.dart';
 import '../widgets/glass_scaffold.dart';
@@ -66,6 +67,7 @@ enum _View {
   payments,
   editRequests,
   attention,
+  files,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -80,6 +82,7 @@ class _AdminScreenState extends State<AdminScreen> {
     'review' => _View.review,
     'editRequests' => _View.editRequests,
     'uploads' => _View.uploads,
+    'files' => _View.files,
     _ => _View.dashboard,
   };
 
@@ -96,6 +99,7 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _devices = [];
   List<Map<String, dynamic>> _invites = [];
   List<Map<String, dynamic>> _pendingUploads = [];
+  List<Map<String, dynamic>> _pendingFiles = [];
   List<Map<String, dynamic>> _discountCodes = [];
   List<Map<String, dynamic>> _errorLogs = [];
   Map<String, String> _emailByUser = {};
@@ -245,6 +249,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final errors = (results[9] as List).cast<Map<String, dynamic>>();
       final redemptions = (results[10] as List).cast<Map<String, dynamic>>();
       final securityEvents = await _loadSecurityEvents();
+      final pendingFiles = await _loadPendingFiles();
 
       final emailByUser = <String, String>{};
       for (final l in logins) {
@@ -289,6 +294,7 @@ class _AdminScreenState extends State<AdminScreen> {
             .toList();
         _invites = invites;
         _pendingUploads = uploads;
+        _pendingFiles = pendingFiles;
         _discountCodes = codes;
         _errorLogs = errors;
         // New three-field details, seeded from the old single method/number
@@ -347,6 +353,43 @@ class _AdminScreenState extends State<AdminScreen> {
       return const [];
     }
   }
+
+  /// Course files waiting for approval (add-lecture-files-and-review.sql).
+  Future<List<Map<String, dynamic>>> _loadPendingFiles() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .from('course_files')
+          .select(
+              'id, course_id, lecture_id, title, kind, view_path, view_type, original_name, allow_download, is_free, uploaded_by, created_at, lectures(title)')
+          .eq('status', 'pending_review')
+          .order('created_at');
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _reviewFile(Map<String, dynamic> f, bool approve) =>
+      _once('file-${f['id']}', () async {
+    final t = AppStrings.instance.t;
+    String? reason;
+    if (!approve) {
+      reason = await askRejectReason(context, title: t('btn_reject'));
+      if (reason == null) return;
+    }
+    try {
+      await SupabaseService.instance.client.rpc('admin_review_course_file',
+          params: {
+            'p_file_id': f['id'],
+            'p_approve': approve,
+            'p_reason': reason,
+          });
+      _showError(t(approve ? 'file_approved' : 'file_rejected_done'));
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
 
   int get _suspiciousCount => _flagged.length + _securityEvents.length;
 
@@ -888,6 +931,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('teacher_invites');
       case _View.uploads:
         return t('pending_lectures');
+      case _View.files:
+        return t('pending_files');
       case _View.flagged:
         return t('flagged_logins');
       case _View.devices:
@@ -948,6 +993,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.review => _buildReview(t),
         _View.invites => _buildInvites(t),
         _View.uploads => _buildUploads(t),
+        _View.files => _buildPendingFiles(t),
         _View.flagged => _buildFlagged(t),
         _View.devices => _buildDevices(t),
         _View.discountCodes => _buildDiscountCodes(t),
@@ -1034,7 +1080,7 @@ class _AdminScreenState extends State<AdminScreen> {
             stats: [
               (Money.iqd(revenue), t('est_revenue')),
               ('$activeStudents', t('active_students')),
-              ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length}',
+              ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length + _pendingFiles.length}',
                   t('dash_needs_attention')),
             ],
             statTaps: [
@@ -1067,6 +1113,9 @@ class _AdminScreenState extends State<AdminScreen> {
           tile(ArcIcon.video, '${_pendingUploads.length}',
               t('pending_lectures'), AppColors.byline, _View.uploads,
               alert: _pendingUploads.isNotEmpty),
+          tile(ArcIcon.lessons, '${_pendingFiles.length}', t('pending_files'),
+              AppColors.teal, _View.files,
+              alert: _pendingFiles.isNotEmpty),
         ]),
         DashSection(t('dash_sec_people')),
         DashGrid(children: [
@@ -1460,7 +1509,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final total = payments.length +
         _pendingReview.length +
         _editRequests.length +
-        _pendingUploads.length;
+        _pendingUploads.length +
+        _pendingFiles.length;
     if (total == 0) return _empty(t('attention_none'), ArcIcon.check);
     String teacherOf(dynamic id) =>
         (_profileByUser[id]?['full_name'] as String?) ?? '—';
@@ -1504,6 +1554,19 @@ class _AdminScreenState extends State<AdminScreen> {
                     '—',
                 t('attention_lecture'),
                 _View.uploads),
+        ],
+        if (_pendingFiles.isNotEmpty) ...[
+          DashSection('${t('pending_files')} (${_pendingFiles.length})'),
+          for (final f in _pendingFiles)
+            item(
+                ArcIcon.lessons,
+                AppColors.teal,
+                f['title'] as String? ?? '—',
+                (_allCourses.where((c) => c['id'] == f['course_id']).firstOrNull?['title']
+                        as String?) ??
+                    '—',
+                t('attention_file'),
+                _View.files),
         ],
         if (_pendingReview.isNotEmpty) ...[
           DashSection('${t('course_review')} (${_pendingReview.length})'),
@@ -1901,6 +1964,56 @@ class _AdminScreenState extends State<AdminScreen> {
           ],
           DashButton(t('btn_reject'),
               danger: true, icon: ArcIcon.close, onPressed: () => _rejectLecture(l)),
+        ],
+      );
+    });
+  }
+
+  Widget _buildPendingFiles(String Function(String) t) {
+    if (_pendingFiles.isEmpty) {
+      return _empty(t('no_pending_files'), ArcIcon.lessons);
+    }
+    return _list(_pendingFiles.length, (i) {
+      final f = _pendingFiles[i];
+      final course = _allCourses.firstWhere((c) => c['id'] == f['course_id'],
+          orElse: () => <String, dynamic>{});
+      final teacher =
+          (_profileByUser[course['teacher_id']]?['full_name'] as String?) ?? '—';
+      final lecture = (f['lectures'] as Map?)?['title'] as String?;
+      final busy = _busy.contains('file-${f['id']}');
+      final viewable = f['view_type'] == 'pdf' || f['view_type'] == 'image';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.lessons, accent: AppColors.teal),
+        title: f['title'] as String? ?? '—',
+        subtitle: '${course['title'] ?? '—'} · $teacher',
+        trailing: StatusPill(t('file_pending_review'), tone: StatusTone.warn),
+        meta: [
+          lecture ?? t('file_whole_course'),
+          if ((f['original_name'] as String?)?.isNotEmpty ?? false)
+            f['original_name'] as String,
+          f['allow_download'] == true
+              ? t('file_downloadable')
+              : t('file_view_only'),
+        ],
+        actions: [
+          DashButton(t('btn_approve'),
+              primary: true,
+              icon: ArcIcon.check,
+              onPressed: busy ? null : () => _reviewFile(f, true)),
+          DashButton(t('btn_preview'),
+              icon: viewable ? ArcIcon.image : ArcIcon.download,
+              onPressed: () {
+                if (viewable) {
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => CourseFileViewerScreen(file: f)));
+                } else {
+                  downloadCourseFile(context, f);
+                }
+              }),
+          DashButton(t('btn_reject'),
+              danger: true,
+              icon: ArcIcon.close,
+              onPressed: busy ? null : () => _reviewFile(f, false)),
         ],
       );
     });

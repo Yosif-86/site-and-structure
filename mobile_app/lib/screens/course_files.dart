@@ -163,6 +163,79 @@ class CourseFilesSection extends StatelessWidget {
   }
 }
 
+/// A lecture's own files, as small chips under the lecture on the course page.
+class LectureFileChips extends StatelessWidget {
+  final List<Map<String, dynamic>> files;
+  final bool unlocked;
+  final VoidCallback onLocked;
+
+  const LectureFileChips({
+    super.key,
+    required this.files,
+    required this.unlocked,
+    required this.onLocked,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (files.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 48, top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final f in files)
+            Builder(builder: (context) {
+              final open = unlocked || f['is_free'] == true;
+              return InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {
+                  if (!open) {
+                    onLocked();
+                    return;
+                  }
+                  if (!TapGuard.allow()) return;
+                  if (_viewable(f)) {
+                    Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => CourseFileViewerScreen(file: f)));
+                  } else {
+                    downloadCourseFile(context, f);
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.glassBg,
+                    border: Border.all(color: AppColors.glassBorder),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    ArcIconView(
+                        open
+                            ? _iconFor(f['view_type'] as String?)
+                            : ArcIcon.lock,
+                        size: 14,
+                        color: open ? AppColors.teal : AppColors.muted2),
+                    const SizedBox(width: 6),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(f['title'] as String? ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppFonts.body(size: 12, color: AppColors.text)),
+                    ),
+                  ]),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Viewer
 // ---------------------------------------------------------------------------
@@ -330,7 +403,10 @@ class _TilePainter extends CustomPainter {
 
 class TeacherCourseFiles extends StatefulWidget {
   final String courseId;
-  const TeacherCourseFiles({super.key, required this.courseId});
+  /// The course's lectures (id, title): a file can belong to one of them.
+  final List<Map<String, dynamic>> lectures;
+  const TeacherCourseFiles(
+      {super.key, required this.courseId, this.lectures = const []});
 
   @override
   State<TeacherCourseFiles> createState() => _TeacherCourseFilesState();
@@ -343,6 +419,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
   bool _isFree = false;
   bool _allowDownload = false;
   bool _busy = false;
+  String? _lectureId; // null = the whole course
 
   String get _pickedExt => (_picked?.extension ?? '').toLowerCase();
   // Office and CAD files can't be shown in the app: always downloadable.
@@ -432,6 +509,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
       await sb.from('course_files').insert({
         'id': id,
         'course_id': widget.courseId,
+        if (_lectureId != null) 'lecture_id': _lectureId,
         'title': title,
         'kind': kind,
         'original_name': f.name,
@@ -457,6 +535,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
         _title.clear();
         _isFree = false;
         _allowDownload = false;
+        _lectureId = null;
       });
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(_t('file_processing_started'))));
@@ -507,6 +586,13 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
     }
   }
 
+  String _lectureTitle(String? id) {
+    if (id == null) return _t('file_whole_course');
+    return (widget.lectures.where((l) => l['id'] == id).firstOrNull?['title']
+            as String?) ??
+        '';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -522,23 +608,27 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
                 icon: _iconFor(f['kind'] as String?), accent: AppColors.teal),
             title: f['title'] as String? ?? '—',
             subtitle: [
+              _lectureTitle(f['lecture_id'] as String?),
               f['original_name'] as String? ?? '',
               f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
             ].where((s) => s.isNotEmpty).join(' · '),
             trailing: StatusPill(
               switch (f['status']) {
                 'published' => _t('file_ready'),
+                'pending_review' => _t('file_pending_review'),
+                'rejected' => _t('file_rejected'),
                 'failed' => _t('file_failed'),
                 _ => _t('file_processing'),
               },
               tone: switch (f['status']) {
                 'published' => StatusTone.good,
-                'failed' => StatusTone.bad,
+                'failed' || 'rejected' => StatusTone.bad,
                 _ => StatusTone.warn,
               },
             ),
             actions: [
-              if (f['status'] == 'published' && _viewable(f))
+              if ((f['status'] == 'published' || f['status'] == 'pending_review') &&
+                  _viewable(f))
                 DashButton(_t('btn_preview'),
                     icon: ArcIcon.image,
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
@@ -557,6 +647,27 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
                 controller: _title,
                 decoration: InputDecoration(labelText: _t('label_file_title'))),
             const SizedBox(height: 12),
+            if (widget.lectures.isNotEmpty) ...[
+              DropdownButtonFormField<String?>(
+                value: _lectureId,
+                isExpanded: true,
+                decoration:
+                    InputDecoration(labelText: _t('label_file_lecture')),
+                items: [
+                  DropdownMenuItem<String?>(
+                      value: null, child: Text(_t('file_whole_course'))),
+                  for (final l in widget.lectures)
+                    DropdownMenuItem<String?>(
+                      value: l['id'] as String,
+                      child: Text(l['title'] as String? ?? '—',
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged:
+                    _busy ? null : (v) => setState(() => _lectureId = v),
+              ),
+              const SizedBox(height: 12),
+            ],
             OutlinedButton.icon(
               onPressed: _busy ? null : _pick,
               icon: ArcIconView(ArcIcon.plus, size: 16, color: AppColors.text),

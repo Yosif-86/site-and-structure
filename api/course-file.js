@@ -12,8 +12,10 @@
 //       POST { action: 'job', fileId }            -> links to read the
 //            original and write the processed copy (never put in workflow
 //            inputs: the repository is public)
-//       POST { action: 'finish', fileId, ok }     -> marks the file ready
-//            (or failed) and deletes the original.
+//       POST { action: 'finish', fileId, ok }     -> marks the file processed
+//            (or failed) and deletes the original. Processed files wait
+//            for the admin (pending_review) unless an admin uploaded them;
+//            see finish_course_file in add-lecture-files-and-review.sql.
 //
 // Env: SUPABASE_SERVICE_ROLE_KEY, GITHUB_DISPATCH_TOKEN.
 

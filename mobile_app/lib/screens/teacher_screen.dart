@@ -1651,7 +1651,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
         if (_activeCourse != null)
           TeacherCourseFiles(
               key: ValueKey(_activeCourse!['id']),
-              courseId: _activeCourse!['id'] as String),
+              courseId: _activeCourse!['id'] as String,
+              lectures: _activeLectures),
       ],
     );
   }
