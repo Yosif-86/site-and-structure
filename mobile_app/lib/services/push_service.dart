@@ -125,6 +125,9 @@ class PushService {
           importance: Importance.high,
           priority: Priority.high,
           icon: 'ic_stat_arc',
+          // Same coloured picture as the phone icon, beside the text (the
+          // small icon above must be a one-colour silhouette on Android).
+          largeIcon: const DrawableResourceAndroidBitmap('ic_notification_large'),
           color: const Color(0xFFE8622C),
         ),
       ),
