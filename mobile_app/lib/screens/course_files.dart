@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../i18n/strings.dart';
 import '../services/bidi.dart';
 import '../services/error_reporter.dart';
+import '../services/pdf_stamp.dart';
 import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
 import '../services/tap_guard.dart';
@@ -50,8 +51,25 @@ String _extOf(Map<String, dynamic> f) {
 bool _viewable(Map<String, dynamic> f) =>
     f['view_type'] == 'pdf' || f['view_type'] == 'image';
 
+/// The signed-in user's name and phone ("Name · 07..."), drawn on the
+/// course files they view or download.
+Future<String> viewerMark() async {
+  final user = SupabaseService.instance.currentUser;
+  if (user == null) return '';
+  final p = await SupabaseService.instance.client
+      .from('profiles')
+      .select('full_name, phone')
+      .eq('id', user.id)
+      .maybeSingle();
+  return [p?['full_name'], p?['phone'] ?? user.email]
+      .whereType<String>()
+      .where((s) => s.isNotEmpty)
+      .join(' · ');
+}
+
 /// Saves the file where the student picks (only when the teacher allowed
-/// it). The bytes come through a 60-second private link.
+/// it). The bytes come through a 60-second private link. A PDF gets the
+/// student's name and phone on every page first.
 Future<void> downloadCourseFile(
     BuildContext context, Map<String, dynamic> f) async {
   final messenger = ScaffoldMessenger.of(context);
@@ -66,12 +84,17 @@ Future<void> downloadCourseFile(
         await http.get(Uri.parse(url)).timeout(const Duration(minutes: 5));
     if (res.statusCode != 200) throw HttpException('file ${res.statusCode}');
     final ext = path.split('.').last;
+    var bytes = res.bodyBytes;
+    if (ext.toLowerCase() == 'pdf') {
+      final mark = await viewerMark();
+      if (mark.isNotEmpty) bytes = await PdfStamp.stamp(bytes, mark);
+    }
     final original = (f['original_name'] as String?)?.trim();
     final name = (original != null && original.isNotEmpty)
         ? original
         : '${f['title'] ?? 'file'}.$ext';
     final saved = await FilePicker.platform
-        .saveFile(fileName: name, bytes: res.bodyBytes);
+        .saveFile(fileName: name, bytes: bytes);
     if (saved != null) {
       messenger.showSnackBar(SnackBar(content: Text(_t('file_saved'))));
     }
@@ -177,17 +200,7 @@ class _CourseFileViewerScreenState extends State<CourseFileViewerScreen> {
     final user = SupabaseService.instance.currentUser;
     try {
       // The viewer's own name and phone, drawn over every page.
-      if (user != null) {
-        final p = await sb
-            .from('profiles')
-            .select('full_name, phone')
-            .eq('id', user.id)
-            .maybeSingle();
-        _mark = [p?['full_name'], p?['phone'] ?? user.email]
-            .whereType<String>()
-            .where((s) => s.isNotEmpty)
-            .join(' · ');
-      }
+      if (user != null) _mark = await viewerMark();
       final path = widget.file['view_path'] as String?;
       if (path == null) throw StateError('not ready');
       // Short-lived link, bytes kept in memory only (never written to disk).
