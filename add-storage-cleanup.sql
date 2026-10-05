@@ -4,8 +4,9 @@
 -- stored files no longer belong to anything. Only the service role (the
 -- worker) can call them.
 
--- Of the given lecture ids (R2 folders videos/<id>/), the ones with no
--- lecture row any more.
+-- Of the given R2 folder ids (videos/<id>/), the ones no lecture uses: no
+-- lecture with that id, and no lecture whose live or pending video path
+-- points into that folder.
 create or replace function public.missing_lecture_ids(p_ids uuid[])
 returns setof uuid
 language sql
@@ -14,7 +15,11 @@ security definer
 set search_path = public
 as $$
   select i from unnest(p_ids) as i
-  where not exists (select 1 from lectures l where l.id = i);
+  where not exists (
+    select 1 from lectures l
+     where l.id = i
+        or l.r2_path like 'videos/' || i::text || '%'
+        or l.pending_upload_path like 'r2:videos/' || i::text || '%');
 $$;
 
 -- course-files objects older than two days that no course_files row points
