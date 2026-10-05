@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import 'course_files.dart';
 import '../i18n/strings.dart';
 import '../models/lecture.dart';
 import '../services/api_service.dart';
@@ -36,6 +37,10 @@ class VideoPlayerScreen extends StatefulWidget {
 
   /// Admin previewing an uploaded lecture before approving it.
   final bool preview;
+
+  /// The course's files; the ones of the lecture playing get a button.
+  final List<Map<String, dynamic>> files;
+  final bool filesUnlocked;
   const VideoPlayerScreen({
     super.key,
     required this.lectureId,
@@ -43,6 +48,8 @@ class VideoPlayerScreen extends StatefulWidget {
     this.playlist = const [],
     this.isUnlocked = _alwaysUnlocked,
     this.preview = false,
+    this.files = const [],
+    this.filesUnlocked = true,
   });
 
   static bool _alwaysUnlocked(Lecture _) => true;
@@ -450,6 +457,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         title: lecture.localizedTitle(AppStrings.instance.isAr),
         playlist: widget.playlist,
         isUnlocked: widget.isUnlocked,
+        files: widget.files,
+        filesUnlocked: widget.filesUnlocked,
       ),
     ));
   }
@@ -518,6 +527,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
   }
 
+  List<Map<String, dynamic>> get _lectureFiles =>
+      widget.files.where((f) => f['lecture_id'] == widget.lectureId).toList();
+
   Widget _buildPortrait() {
     final ar = AppStrings.instance.isAr;
     final t = AppStrings.instance.t;
@@ -567,6 +579,18 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                                 ],
                               ),
                             ),
+                            if (_lectureFiles.isNotEmpty) ...[
+                              const SizedBox(width: 10),
+                              _FilesButton(
+                                count: _lectureFiles.length,
+                                label: t('lecture_files'),
+                                onTap: () {
+                                  _hlsController?.pause();
+                                  showLectureFilesSheet(context, _lectureFiles,
+                                      unlocked: widget.filesUnlocked);
+                                },
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1317,6 +1341,40 @@ class _LessonPanel extends StatelessWidget {
             else if (l.isFree && !current)
               Text(t('free_tag'),
                   style: AppFonts.body(size: 11, color: const Color(0xFF6FA8A0))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Lecture files (2)" pill in the player header.
+class _FilesButton extends StatelessWidget {
+  final int count;
+  final String label;
+  final VoidCallback onTap;
+  const _FilesButton(
+      {required this.count, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.08),
+      shape: StadiumBorder(
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.14))),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const ArcIconView(ArcIcon.lessons, size: 16, color: Color(0xFFF2B544)),
+            const SizedBox(width: 6),
+            Text('$label ($count)',
+                style: AppFonts.body(
+                    size: 12.5,
+                    weight: FontWeight.w600,
+                    color: const Color(0xFFFEE4BF))),
           ]),
         ),
       ),

@@ -57,7 +57,20 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   String? _continueWatchingId;
   bool _loading = true;
   String? _error;
-  int _tab = 0; // 0 = overview, 1 = curriculum
+  int _tab = 0; // 0 = overview, 1 = curriculum, 2 = files
+  final Map<String, GlobalKey> _fileGroupKeys = {};
+
+  /// Opens the Files tab, scrolled to [lectureId]'s files.
+  void _openFiles(String lectureId) {
+    setState(() => _tab = 2);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _fileGroupKeys[lectureId]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 300), alignment: 0.05);
+      }
+    });
+  }
 
   // An approved payment unlocks the course on screen the moment it happens.
   late final _live = LiveRefresh(
@@ -225,6 +238,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         title: lecture.localizedTitle(AppStrings.instance.isAr),
         playlist: _lectures,
         isUnlocked: (l) => l.isFree || isActive,
+        files: _files,
+        filesUnlocked: isActive,
       ),
     ));
     if (mounted) _load();
@@ -441,19 +456,33 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ),
         const SizedBox(height: 18),
         _Tabs(
-          labels: [_t('tab_overview'), _t('curriculum')],
+          labels: [
+            _t('tab_overview'),
+            _t('curriculum'),
+            if (_files.isNotEmpty) '${_t('tab_files')} (${_files.length})',
+          ],
           selected: _tab,
           onSelect: (i) => setState(() => _tab = i),
         ),
         const SizedBox(height: 14),
-        if (_tab == 0) ..._buildOverview(course) else ...[
-          ..._buildCurriculum(),
-          CourseFilesSection(
-            files: _files.where((f) => f['lecture_id'] == null).toList(),
+        if (_tab == 0)
+          ..._buildOverview(course)
+        else if (_tab == 2 && _files.isNotEmpty)
+          CourseFilesTab(
+            files: _files,
+            lectures: [
+              for (final l in _lectures)
+                (id: l.id, title: l.localizedTitle(AppStrings.instance.isAr)),
+            ],
             unlocked: _isActive,
             onLocked: _openEnroll,
-          ),
-        ],
+            groupKeys: {
+              for (final l in _lectures)
+                l.id: _fileGroupKeys.putIfAbsent(l.id, () => GlobalKey()),
+            },
+          )
+        else
+          ..._buildCurriculum(),
       ],
     );
   }
@@ -575,7 +604,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         continueWatchingId: _continueWatchingId,
         onWatch: _watchLecture,
         files: _files,
-        onLocked: _openEnroll,
+        onOpenFiles: _openFiles,
       ),
     ];
   }
@@ -911,7 +940,7 @@ class _CurriculumCard extends StatelessWidget {
   final String? continueWatchingId;
   final void Function(Lecture) onWatch;
   final List<Map<String, dynamic>> files;
-  final VoidCallback onLocked;
+  final void Function(String lectureId) onOpenFiles;
   const _CurriculumCard({
     required this.lectures,
     required this.isActive,
@@ -920,7 +949,7 @@ class _CurriculumCard extends StatelessWidget {
     required this.continueWatchingId,
     required this.onWatch,
     required this.files,
-    required this.onLocked,
+    required this.onOpenFiles,
   });
 
   @override
@@ -945,9 +974,9 @@ class _CurriculumCard extends StatelessWidget {
               progress: progressByLecture[lectures[i].id],
               isContinueWatching: lectures[i].id == continueWatchingId,
               onWatch: () => onWatch(lectures[i]),
-              files: files.where((f) => f['lecture_id'] == lectures[i].id).toList(),
-              filesUnlocked: isActive,
-              onLocked: onLocked,
+              fileCount:
+                  files.where((f) => f['lecture_id'] == lectures[i].id).length,
+              onOpenFiles: () => onOpenFiles(lectures[i].id),
             ),
           ],
         ],
@@ -964,9 +993,8 @@ class _LectureRow extends StatelessWidget {
   final Map<String, int>? progress;
   final bool isContinueWatching;
   final VoidCallback onWatch;
-  final List<Map<String, dynamic>> files;
-  final bool filesUnlocked;
-  final VoidCallback onLocked;
+  final int fileCount;
+  final VoidCallback onOpenFiles;
   const _LectureRow({
     required this.index,
     required this.lecture,
@@ -975,9 +1003,8 @@ class _LectureRow extends StatelessWidget {
     required this.progress,
     required this.isContinueWatching,
     required this.onWatch,
-    required this.files,
-    required this.filesUnlocked,
-    required this.onLocked,
+    required this.fileCount,
+    required this.onOpenFiles,
   });
 
   @override
@@ -1089,8 +1116,7 @@ class _LectureRow extends StatelessWidget {
                 ),
               ),
             ],
-            LectureFileChips(
-                files: files, unlocked: filesUnlocked, onLocked: onLocked),
+            LectureFilesLink(count: fileCount, onTap: onOpenFiles),
           ],
         ),
       ),
@@ -1189,7 +1215,7 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
   }
 }
 
-/// Paid-course enroll sheet: payment method + detail + proof screenshot upload,
+/// Paid-course enroll sheet: payment method + proof screenshot upload,
 /// mirrors openEnroll()'s paid branch + submitPay() in course.html.
 class _PaidEnrollSheet extends StatefulWidget {
   final Course course;
@@ -1202,7 +1228,6 @@ class _PaidEnrollSheet extends StatefulWidget {
 
 class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
   String? _method; // 'zain' | 'qi'
-  final _detailCtrl = TextEditingController();
   final _discountCtrl = TextEditingController();
   XFile? _proof;
   bool _loading = false;
@@ -1331,7 +1356,6 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
 
   @override
   void dispose() {
-    _detailCtrl.dispose();
     _discountCtrl.dispose();
     super.dispose();
   }
@@ -1392,16 +1416,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
 
   Future<void> _submit() async {
     final t = AppStrings.instance.t;
-    if (_method == null || _detailCtrl.text.trim().isEmpty) {
+    if (_method == null) {
       setState(() => _error = t('err_choose_payment'));
-      return;
-    }
-    final valid = _method == 'zain'
-        ? PaymentRules.isValidZain(_detailCtrl.text)
-        : PaymentRules.isValidQi(_detailCtrl.text);
-    if (!valid) {
-      setState(() => _error =
-          t(_method == 'zain' ? 'err_invalid_zain' : 'err_invalid_qi'));
       return;
     }
     if (_proof == null) {
@@ -1433,7 +1449,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         await sb.rpc('submit_paid_enrollment', params: {
           'p_course_slug': widget.course.slug,
           'p_method': _method,
-          'p_detail': _detailCtrl.text.trim(),
+          'p_detail': null,
           'p_proof_path': fileName,
           'p_code': _discountApplied ? _appliedCode : null,
         });
@@ -1445,7 +1461,6 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
           'course_slug': widget.course.slug,
           'status': 'pending',
           'payment_method': _method,
-          'payment_detail': _detailCtrl.text.trim(),
           'payment_proof_path': fileName,
         });
       }
@@ -1596,21 +1611,6 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                                 style: AppFonts.body(
                                     size: 12, color: AppColors.teal)),
                           ),
-                        const SizedBox(height: 12),
-                        TextField(
-                            controller: _detailCtrl,
-                            textDirection: TextDirection.ltr,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: PaymentRules.numberInput,
-                            // The student's own account the money came from,
-                            // so the approver can match the transfer.
-                            decoration: InputDecoration(
-                                labelText: t(_method == 'qi'
-                                    ? 'pay_label_qi'
-                                    : _method == 'zain'
-                                        ? 'pay_label_zain'
-                                        : 'pay_label'),
-                                helperText: t('pay_label_helper'))),
                         const SizedBox(height: 12),
                         FilePickBox(
                           file: _proof,

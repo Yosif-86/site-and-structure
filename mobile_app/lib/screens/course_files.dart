@@ -108,132 +108,155 @@ Future<void> downloadCourseFile(
 // Student: list on the course page
 // ---------------------------------------------------------------------------
 
-class CourseFilesSection extends StatelessWidget {
+/// One file as a card: tap to view (PDF, photo) or download (other types).
+Widget courseFileCard(BuildContext context, Map<String, dynamic> f,
+    {required bool unlocked, required VoidCallback onLocked}) {
+  final open = unlocked || f['is_free'] == true;
+  return DashCard(
+    leading: DashIconBadge(
+        icon: _iconFor(f['view_type'] as String?), accent: AppColors.teal),
+    title: f['title'] as String? ?? '—',
+    subtitle: [
+      _extOf(f),
+      f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
+    ].where((s) => s.isNotEmpty).join(' · '),
+    trailing: !open
+        ? ArcIconView(ArcIcon.lock, size: 16, color: AppColors.muted2)
+        : _viewable(f)
+            ? ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2)
+            : ArcIconView(ArcIcon.download, size: 18, color: AppColors.teal),
+    onTap: () {
+      if (!open) {
+        onLocked();
+        return;
+      }
+      if (!TapGuard.allow()) return;
+      if (_viewable(f)) {
+        Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => CourseFileViewerScreen(file: f)));
+      } else {
+        downloadCourseFile(context, f);
+      }
+    },
+  );
+}
+
+/// The course page's Files tab: each lecture's files under its name (in
+/// lecture order), then the files for the whole course.
+class CourseFilesTab extends StatelessWidget {
   final List<Map<String, dynamic>> files;
+  /// (id, title) of each lecture, in order.
+  final List<({String id, String title})> lectures;
   final bool unlocked;
   final VoidCallback onLocked;
+  /// Lecture id -> key on its group, so the page can scroll to it.
+  final Map<String, GlobalKey> groupKeys;
 
-  const CourseFilesSection({
+  const CourseFilesTab({
     super.key,
     required this.files,
+    required this.lectures,
     required this.unlocked,
     required this.onLocked,
+    this.groupKeys = const {},
   });
 
   @override
   Widget build(BuildContext context) {
-    if (files.isEmpty) return const SizedBox.shrink();
+    final general = files.where((f) => f['lecture_id'] == null).toList();
+    final ids = {for (final l in lectures) l.id};
+    // A file whose lecture isn't in the list (shouldn't happen) still shows.
+    general.addAll(files.where(
+        (f) => f['lecture_id'] != null && !ids.contains(f['lecture_id'])));
+    Widget group(Key? key, String heading, List<Map<String, dynamic>> items) =>
+        Column(
+          key: key,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DashSection(heading),
+            for (final f in items) ...[
+              courseFileCard(context, f, unlocked: unlocked, onLocked: onLocked),
+              const SizedBox(height: 10),
+            ],
+          ],
+        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DashSection('${_t('course_files')} (${files.length})'),
-        for (final f in files) ...[
-          DashCard(
-            leading: DashIconBadge(
-                icon: _iconFor(f['view_type'] as String?),
-                accent: AppColors.teal),
-            title: f['title'] as String? ?? '—',
-            subtitle: [
-              _extOf(f),
-              f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
-            ].where((s) => s.isNotEmpty).join(' · '),
-            trailing: !(unlocked || f['is_free'] == true)
-                ? ArcIconView(ArcIcon.lock, size: 16, color: AppColors.muted2)
-                : _viewable(f)
-                    ? ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2)
-                    : ArcIconView(ArcIcon.download, size: 18, color: AppColors.teal),
-            onTap: () {
-              if (!(unlocked || f['is_free'] == true)) {
-                onLocked();
-                return;
-              }
-              if (!TapGuard.allow()) return;
-              if (_viewable(f)) {
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => CourseFileViewerScreen(file: f)));
-              } else {
-                downloadCourseFile(context, f);
-              }
-            },
-          ),
-          const SizedBox(height: 10),
-        ],
+        for (var i = 0; i < lectures.length; i++)
+          if (files.any((f) => f['lecture_id'] == lectures[i].id))
+            group(
+                groupKeys[lectures[i].id],
+                '${(i + 1).toString().padLeft(2, '0')}  ${lectures[i].title}',
+                files.where((f) => f['lecture_id'] == lectures[i].id).toList()),
+        if (general.isNotEmpty) group(null, _t('files_general'), general),
       ],
     );
   }
 }
 
-/// A lecture's own files, as small chips under the lecture on the course page.
-class LectureFileChips extends StatelessWidget {
-  final List<Map<String, dynamic>> files;
-  final bool unlocked;
-  final VoidCallback onLocked;
-
-  const LectureFileChips({
-    super.key,
-    required this.files,
-    required this.unlocked,
-    required this.onLocked,
-  });
+/// Under a lecture on the curriculum: "Lecture files (2)", opens the Files tab.
+class LectureFilesLink extends StatelessWidget {
+  final int count;
+  final VoidCallback onTap;
+  const LectureFilesLink({super.key, required this.count, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    if (files.isEmpty) return const SizedBox.shrink();
+    if (count == 0) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsetsDirectional.only(start: 48, top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final f in files)
-            Builder(builder: (context) {
-              final open = unlocked || f['is_free'] == true;
-              return InkWell(
-                borderRadius: BorderRadius.circular(999),
-                onTap: () {
-                  if (!open) {
-                    onLocked();
-                    return;
-                  }
-                  if (!TapGuard.allow()) return;
-                  if (_viewable(f)) {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => CourseFileViewerScreen(file: f)));
-                  } else {
-                    downloadCourseFile(context, f);
-                  }
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.glassBg,
-                    border: Border.all(color: AppColors.glassBorder),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    ArcIconView(
-                        open
-                            ? _iconFor(f['view_type'] as String?)
-                            : ArcIcon.lock,
-                        size: 14,
-                        color: open ? AppColors.teal : AppColors.muted2),
-                    const SizedBox(width: 6),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(f['title'] as String? ?? '—',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppFonts.body(size: 12, color: AppColors.text)),
-                    ),
-                  ]),
-                ),
-              );
-            }),
-        ],
+      padding: const EdgeInsetsDirectional.only(start: 48, top: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            ArcIconView(ArcIcon.lessons, size: 15, color: AppColors.teal),
+            const SizedBox(width: 6),
+            Text('${_t('lecture_files')} ($count)',
+                style: AppFonts.body(
+                    size: 12.5, weight: FontWeight.w600, color: AppColors.teal)),
+          ]),
+        ),
       ),
     );
   }
+}
+
+/// Bottom sheet with one lecture's files (from the video player).
+Future<void> showLectureFilesSheet(BuildContext context,
+    List<Map<String, dynamic>> files, {required bool unlocked}) {
+  return showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: AppColors.bg,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => Directionality(
+      textDirection: AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints:
+              BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            children: [
+              DashSection('${_t('lecture_files')} (${files.length})'),
+              for (final f in files) ...[
+                courseFileCard(ctx, f,
+                    unlocked: unlocked,
+                    onLocked: () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(_t('file_locked'))))),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -639,6 +662,13 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
           ),
           const SizedBox(height: 10),
         ],
+        if (widget.lectures.isEmpty)
+          DashCard(
+            leading: DashIconBadge(icon: ArcIcon.lessons, accent: AppColors.muted),
+            title: _t('files_after_first_lecture'),
+            titleStyle: AppFonts.body(size: 13, color: AppColors.muted),
+          )
+        else
         DashFormPanel(
           title: _t('add_course_file'),
           icon: ArcIcon.lessons,
