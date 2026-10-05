@@ -213,7 +213,116 @@ async function handleConvert(request, env, url) {
   return json({ error: 'Not allowed' }, 405);
 }
 
+/**
+ * Daily storage cleanup (cron in wrangler.toml). Deleting a lecture, course
+ * or account removes database rows only, so this removes what they leave:
+ *   - R2 folders videos/<lectureId>/ whose lecture no longer exists
+ *   - course-files objects no course_files row points to
+ * Anything uploaded in the last two days is left alone, so an upload still
+ * in progress can't be caught. CLEANUP_MODE = "live" deletes; anything else
+ * only logs what it would delete. Needs the SUPABASE_SERVICE_ROLE_KEY secret
+ * and add-storage-cleanup.sql.
+ */
+const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
+const LECTURE_FOLDER = /^videos\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/$/i;
+const MIN_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+const MAX_FOLDERS_PER_RUN = 20;
+
+async function supabase(env, path, init = {}) {
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    ...init,
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  });
+  if (!res.ok) throw new Error(`${path} -> ${res.status} ${await res.text()}`);
+  return res.status === 204 ? null : res.json();
+}
+
+async function cleanupStorage(env) {
+  const live = env.CLEANUP_MODE === 'live';
+  const report = { live, videoFolders: [], videoObjects: 0, courseFiles: [] };
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.log('cleanup: SUPABASE_SERVICE_ROLE_KEY not set, skipping');
+    return report;
+  }
+  const bucket = env.VIDEOS_BUCKET;
+
+  // 1. Lecture folders in R2.
+  const ids = [];
+  let cursor;
+  do {
+    const page = await bucket.list({ prefix: 'videos/', delimiter: '/', cursor });
+    for (const p of page.delimitedPrefixes || []) {
+      const m = LECTURE_FOLDER.exec(p);
+      if (m) ids.push(m[1]);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+
+  const missing = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const rows = await supabase(env, '/rest/v1/rpc/missing_lecture_ids', {
+      method: 'POST',
+      body: JSON.stringify({ p_ids: ids.slice(i, i + 200) }),
+    });
+    for (const r of rows || []) missing.push(typeof r === 'string' ? r : r.missing_lecture_ids);
+  }
+
+  for (const id of missing.slice(0, MAX_FOLDERS_PER_RUN)) {
+    const keys = [];
+    let recent = false;
+    let c;
+    do {
+      const page = await bucket.list({ prefix: `videos/${id}/`, cursor: c });
+      for (const o of page.objects) {
+        keys.push(o.key);
+        if (Date.now() - new Date(o.uploaded).getTime() < MIN_AGE_MS) recent = true;
+      }
+      c = page.truncated ? page.cursor : undefined;
+    } while (c);
+    if (recent || keys.length === 0) continue;
+    if (live) {
+      for (let i = 0; i < keys.length; i += 1000) await bucket.delete(keys.slice(i, i + 1000));
+    }
+    report.videoFolders.push(id);
+    report.videoObjects += keys.length;
+  }
+
+  // 2. Course files (Supabase Storage).
+  const paths = await supabase(env, '/rest/v1/rpc/orphan_course_file_paths', {
+    method: 'POST',
+    body: JSON.stringify({ p_limit: 200 }),
+  });
+  report.courseFiles = (paths || []).map((r) =>
+    typeof r === 'string' ? r : r.orphan_course_file_paths);
+  if (live && report.courseFiles.length) {
+    await supabase(env, '/storage/v1/object/course-files', {
+      method: 'DELETE',
+      body: JSON.stringify({ prefixes: report.courseFiles }),
+    });
+  }
+
+  console.log('cleanup:', JSON.stringify({
+    live,
+    videoFolders: report.videoFolders.length,
+    videoObjects: report.videoObjects,
+    courseFiles: report.courseFiles.length,
+    folders: report.videoFolders,
+    files: report.courseFiles,
+  }));
+  return report;
+}
+
 export default {
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(cleanupStorage(env).catch((e) => console.error('cleanup failed', e)));
+  },
+
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
