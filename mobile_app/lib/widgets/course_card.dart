@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/learning_service.dart';
+import '../services/money.dart';
 import '../theme.dart';
 import 'arc_icons.dart';
 import 'glass_card.dart';
@@ -100,7 +101,7 @@ Widget _priceText(Course course, {double size = 13}) {
       ? Text(t('card_free'),
           style: AppFonts.body(
               size: size, weight: FontWeight.w700, color: AppColors.teal))
-      : Text(course.price ?? '',
+      : Text(Money.text(course.price, fallback: ''),
           style: AppFonts.code(
               size: size, weight: FontWeight.w700, color: AppColors.red));
 }
@@ -170,7 +171,7 @@ class FeaturedCourseCard extends StatelessWidget {
               top: 12,
               end: 12,
               child: GlassChip(
-                  label: course.isFree ? t('card_free') : (course.price ?? ''),
+                  label: course.isFree ? t('card_free') : Money.text(course.price, fallback: ''),
                   color: course.isFree ? AppColors.teal : null,
                   onImage: !course.isFree),
             ),

@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
+import '../services/money.dart';
 import '../services/api_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
@@ -412,7 +413,18 @@ class _AdminScreenState extends State<AdminScreen> {
         t('confirm_approve_payment')
             .replaceAll('{name}', name)
             .replaceAll('{course}', _courseTitle(slug))
-            .replaceAll('{price}', course == null ? '—' : _priceLabel(course, t)),
+            .replaceAll(
+                '{price}',
+                course == null
+                    ? '—'
+                    : () {
+                        final r = _paidFor(e, course);
+                        return Money.paymentSummary(t,
+                            price: r.price,
+                            discount: r.discount,
+                            paid: r.paid,
+                            code: r.code);
+                      }()),
         confirmLabel: t('btn_confirm'));
     if (!ok) return;
     try {
@@ -878,7 +890,7 @@ class _AdminScreenState extends State<AdminScreen> {
             title: t('nav_admin'),
             subtitle: t('dash_admin_sub'),
             stats: [
-              ('$revenue', t('est_revenue')),
+              (Money.iqd(revenue), t('est_revenue')),
               ('$activeStudents', t('active_students')),
               ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length}',
                   t('dash_needs_attention')),
@@ -931,7 +943,7 @@ class _AdminScreenState extends State<AdminScreen> {
           tile(ArcIcon.review, '$myPendingPayments', t('payment_requests'),
               const Color(0xFFE0A030), _View.payments,
               alert: myPendingPayments > 0),
-          tile(ArcIcon.money, '$revenue', t('est_revenue'), AppColors.red,
+          tile(ArcIcon.money, Money.iqd(revenue), t('est_revenue'), AppColors.red,
               _View.revenue),
           tile(ArcIcon.tag, '$activeDiscountCodes', t('discount_codes'),
               AppColors.byline, _View.discountCodes),
@@ -967,7 +979,7 @@ class _AdminScreenState extends State<AdminScreen> {
       );
 
   String _priceLabel(Map<String, dynamic> c, String Function(String) t) =>
-      c['is_free'] == true ? t('card_free') : '${c['price'] ?? '—'}';
+      c['is_free'] == true ? t('card_free') : Money.text(c['price']);
 
   Widget _buildCoursesList(String Function(String) t) {
     if (_publishedCourses.isEmpty) {
@@ -1151,9 +1163,9 @@ class _AdminScreenState extends State<AdminScreen> {
           title: t('rev_total'),
           subtitle: t('rev_rule'),
           stats: [
-            ('$totalCollected', t('rev_collected')),
-            ('$totalPlatform', t('rev_platform_cut')),
-            ('$totalTeacher', t('rev_teacher_payouts')),
+            (Money.iqd(totalCollected), t('rev_collected')),
+            (Money.iqd(totalPlatform), t('rev_platform_cut')),
+            (Money.iqd(totalTeacher), t('rev_teacher_payouts')),
           ],
         ),
         if (owedByTeacher.isNotEmpty) ...[
@@ -1163,7 +1175,7 @@ class _AdminScreenState extends State<AdminScreen> {
               leading: DashAvatar(name: name(e.key)),
               title: name(e.key),
               subtitle: t('rev_owed_sub'),
-              trailing: Text('${e.value}',
+              trailing: Text(Money.iqd(e.value),
                   style: AppFonts.code(size: 15, color: AppColors.teal)),
             ),
             const SizedBox(height: 10),
@@ -1171,7 +1183,7 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
         if (totalDirect > 0) ...[
           const SizedBox(height: 4),
-          Text('${t('rev_direct_note')} $totalDirect',
+          Text('${t('rev_direct_note')} ${Money.iqd(totalDirect)}',
               style: AppFonts.body(size: 12, color: AppColors.muted2)),
         ],
         DashSection(t('rev_by_course')),
@@ -1183,17 +1195,17 @@ class _AdminScreenState extends State<AdminScreen> {
                 '${name(r['c']['teacher_id'] as String?)} · ${r['students']} ${t('rev_students')}${r['discounted'] > 0 ? ' (${r['discounted']} ${t('rev_discounted')})' : ''}',
             trailing: r['direct'] == true
                 ? StatusPill(t('rev_direct'), tone: StatusTone.neutral)
-                : Text('${r['paid']}',
+                : Text(Money.iqd(r['paid'] as int),
                     style: AppFonts.code(size: 15, color: AppColors.red)),
             meta: [
               if (r['latest'] != null)
                 '${t('rev_last_payment')}: ${_date((r['latest'] as DateTime).toIso8601String(), time: true)}',
-              '${t('rev_price')}: ${r['price']}',
+              '${t('rev_price')}: ${Money.iqd(r['price'] as int)}',
               if ((r['discountSum'] as int) > 0)
-                '${t('rev_discount')}${(r['codes'] as String).isEmpty ? '' : ' ${r['codes']}'}: −${r['discountSum']}',
+                '${t('rev_discount')}${(r['codes'] as String).isEmpty ? '' : ' ${r['codes']}'}: -${Money.iqd(r['discountSum'] as int)}',
               r['direct'] == true
-                  ? '${t('rev_teacher')}: ${r['teacher']} (${t('rev_no_cut')})'
-                  : '${t('rev_platform_cut')}: ${r['platform']} · ${t('rev_teacher')}: ${r['teacher']}',
+                  ? '${t('rev_teacher')}: ${Money.iqd(r['teacher'] as int)} (${t('rev_no_cut')})'
+                  : '${t('rev_platform_cut')}: ${Money.iqd(r['platform'] as int)} · ${t('rev_teacher')}: ${Money.iqd(r['teacher'] as int)}',
             ],
           ),
           const SizedBox(height: 10),
@@ -1418,7 +1430,10 @@ class _AdminScreenState extends State<AdminScreen> {
             .where((s) => s.isNotEmpty)
             .join(' · '),
         courseTitle: _courseTitle(e['course_slug'] as String),
-        price: course?['price'] as String?,
+        price: course?['price']?.toString(),
+        discount: course == null ? null : _paidFor(e, course).discount,
+        paid: course == null ? null : _paidFor(e, course).paid,
+        code: course == null ? null : _paidFor(e, course).code,
         method: e['payment_method'] as String?,
         detail: e['payment_detail'] as String?,
         createdAt: _date(e['created_at'] as String?, time: true),
@@ -1812,7 +1827,7 @@ class _AdminScreenState extends State<AdminScreen> {
           : (expired ? 'expired' : 'active');
       final discount = c['discount_type'] == 'percent'
           ? '${c['discount_value']}%'
-          : '${c['discount_value']} IQD';
+          : Money.iqd((c['discount_value'] as num?) ?? 0);
       return DashCard(
         leading: DashIconBadge(icon: ArcIcon.tag, accent: AppColors.byline),
         title: c['code'] as String? ?? '—',

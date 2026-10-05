@@ -15,6 +15,7 @@ import '../services/error_reporter.dart';
 import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/payment_rules.dart';
+import '../services/money.dart';
 import '../services/net_status.dart';
 import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
@@ -647,7 +648,7 @@ class _EnrollPanel extends StatelessWidget {
                           size: 24,
                           weight: FontWeight.w800,
                           color: AppColors.teal))
-                  : Text(course.price ?? '',
+                  : Text(Money.text(course.price, fallback: ''),
                       style: AppFonts.code(
                           size: 22,
                           weight: FontWeight.w700,
@@ -1290,7 +1291,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         _discountedPrice = discounted;
         _discountApplied = true;
         _appliedCode = code;
-        _discountOk = '${t('total_after_discount')}: $discounted';
+        _discountOk = '${t('total_after_discount')}: ${Money.iqd(discounted)}';
       });
     } catch (e) {
       if (!mounted) return;
@@ -1492,7 +1493,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                         Text(t('amount_to_pay'),
                             style: AppFonts.body(size: 13, color: AppColors.muted)),
                         const SizedBox(width: 6),
-                        Text('${_discountedPrice ?? widget.course.price ?? ''}',
+                        Text(_discountedPrice != null ? Money.iqd(_discountedPrice!) : Money.text(widget.course.price, fallback: ''),
                             style: AppFonts.code(size: 15, color: AppColors.red)),
                       ]),
                       const SizedBox(height: 18),

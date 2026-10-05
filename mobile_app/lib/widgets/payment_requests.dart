@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
+import '../services/money.dart';
 import '../theme.dart';
 import 'arc_icons.dart';
 import 'dashboard_kit.dart';
@@ -74,10 +75,44 @@ Future<String?> askRejectReason(BuildContext context,
 /// proof, and either approve/reject actions or a read-only note saying who
 /// decides it.
 class PaymentRequestCard extends StatelessWidget {
+  Widget _amountLines(String Function(String) t) {
+    final listPrice = Money.digitsOf(price) ?? paid ?? 0;
+    final shownPaid = paid ?? listPrice;
+    final shownDiscount = discount ?? 0;
+    Widget line(String label, String value, {bool strong = false, Color? color}) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 3),
+          child: Row(children: [
+            Expanded(
+                child: Text(label,
+                    style: AppFonts.body(size: 12.5, color: AppColors.muted))),
+            Text(value,
+                style: AppFonts.code(
+                    size: strong ? 15 : 13,
+                    weight: strong ? FontWeight.w700 : FontWeight.w500,
+                    color: color ?? AppColors.text)),
+          ]),
+        );
+    return Column(children: [
+      line(t('pay_lbl_price'), Money.iqd(listPrice)),
+      if (shownDiscount > 0)
+        line(
+            '${t('pay_lbl_discount')}${(code != null && code!.isNotEmpty) ? ' ($code)' : ''}',
+            '-${Money.iqd(shownDiscount)}',
+            color: AppColors.error),
+      line(t('pay_lbl_paid'), Money.iqd(shownPaid),
+          strong: true, color: AppColors.teal),
+    ]);
+  }
+
   final String studentName;
   final String? contact;
   final String courseTitle;
   final String? price;
+  // What was actually charged: list price, discount taken off, amount paid.
+  final int? discount;
+  final int? paid;
+  final String? code;
   final String? method;
   final String? detail;
   final String? createdAt;
@@ -93,6 +128,9 @@ class PaymentRequestCard extends StatelessWidget {
     required this.courseTitle,
     this.contact,
     this.price,
+    this.discount,
+    this.paid,
+    this.code,
     this.method,
     this.detail,
     this.createdAt,
@@ -118,10 +156,14 @@ class PaymentRequestCard extends StatelessWidget {
       trailing: StatusPill(t('status_pending'), tone: StatusTone.warn),
       meta: [
         if (contact != null && contact!.isNotEmpty) contact!,
-        '$methodLabel${detail != null && detail!.isNotEmpty ? ' · $detail' : ''}${price != null ? ' · $price' : ''}',
+        '$methodLabel${detail != null && detail!.isNotEmpty ? ' · $detail' : ''}',
         if (createdAt != null) createdAt!,
       ],
       extra: [
+        if (paid != null || Money.digitsOf(price) != null) ...[
+          const SizedBox(height: 10),
+          _amountLines(t),
+        ],
         if (!canDecide && decidedByNote != null) ...[
           const SizedBox(height: 10),
           Row(children: [

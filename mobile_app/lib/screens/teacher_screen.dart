@@ -9,6 +9,7 @@ import 'package:video_player/video_player.dart';
 
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
+import '../services/money.dart';
 import '../services/notification_service.dart';
 import '../services/payment_rules.dart';
 import '../services/upload_manager.dart';
@@ -58,7 +59,7 @@ class TeacherScreen extends StatefulWidget {
   State<TeacherScreen> createState() => _TeacherScreenState();
 }
 
-enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention }
+enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention, students, earnings }
 
 class _TeacherScreenState extends State<TeacherScreen> {
   bool _checking = true;
@@ -77,23 +78,52 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// Pending payment requests on this teacher's pay-to-teacher courses
   /// (get_teacher_students). Only these are the teacher's to decide.
   List<Map<String, dynamic>> _paymentRequests = [];
+  // Every enrollment in this teacher's courses, newest first.
+  List<Map<String, dynamic>> _teacherRows = [];
 
   Future<void> _loadPaymentRequests() async {
     try {
       final rows = await SupabaseService.instance.client
           .rpc('get_teacher_students') as List;
       if (!mounted) return;
-      setState(() => _paymentRequests = rows
-          .cast<Map<String, dynamic>>()
-          .where((r) => r['status'] != 'active' && r['pay_to_teacher'] == true)
-          .toList());
+      final all = rows.cast<Map<String, dynamic>>();
+      setState(() {
+        _teacherRows = all;
+        _paymentRequests = all
+            .where((r) => r['status'] != 'active' && r['pay_to_teacher'] == true)
+            .toList();
+      });
     } catch (_) {
       // Leaves the list as it was; the overview tile just shows 0.
     }
   }
 
+  ({int price, int discount, int paid}) _amountsOf(Map<String, dynamic> r) {
+    final price =
+        (r['list_price'] as num?)?.toInt() ?? Money.digitsOf(r['course_price']) ?? 0;
+    final paid = (r['amount_paid'] as num?)?.toInt() ?? price;
+    final discount =
+        (r['discount_amount'] as num?)?.toInt() ?? (price > paid ? price - paid : 0);
+    return (price: price, discount: discount, paid: paid);
+  }
+
   Future<void> _approvePayment(String id) async {
     final t = AppStrings.instance.t;
+    final row = _paymentRequests.firstWhere((r) => r['enrollment_id'] == id,
+        orElse: () => const {});
+    final a = _amountsOf(row);
+    final ok = await _confirm(
+        t('confirm_approve_payment')
+            .replaceAll('{name}',
+                (row['full_name'] as String?) ?? (row['email'] as String?) ?? '—')
+            .replaceAll('{course}', (row['course_title'] as String?) ?? '—')
+            .replaceAll(
+                '{price}',
+                Money.paymentSummary(t,
+                    price: a.price, discount: a.discount, paid: a.paid)),
+        confirmLabel: t('btn_confirm'),
+        danger: false);
+    if (!ok) return;
     try {
       await SupabaseService.instance.client
           .rpc('teacher_approve_enrollment', params: {'p_enrollment_id': id});
@@ -145,7 +175,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
                         .where((s) => s.isNotEmpty)
                         .join(' · '),
                     courseTitle: r['course_title'] as String? ?? '—',
-                    price: r['course_price'] as String?,
+                    price: r['course_price']?.toString(),
+                    discount: _amountsOf(r).discount,
+                    paid: _amountsOf(r).paid,
                     method: r['payment_method'] as String?,
                     detail: r['payment_detail'] as String?,
                     createdAt: created?.toString().substring(0, 16),
@@ -377,7 +409,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final src = {...c, ...?pending};
     _cTitle.text = src['title'] as String? ?? '';
     _cDescription.text = src['description'] as String? ?? '';
-    _cPrice.text = '${src['price'] ?? 0}';
+    _cPrice.text = Money.group(Money.digitsOf(src['price']) ?? 0);
     _setPoints(((src['learning_points'] as List?) ?? const [])
         .whereType<String>()
         .toList());
@@ -960,6 +992,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.codes => _buildCodes(t),
       _TView.payments => _buildPayments(t),
       _TView.attention => _buildAttention(t),
+      _TView.students => _buildStudents(t),
+      _TView.earnings => _buildEarnings(t),
       _TView.profile => _buildProfile(t),
     };
   }
@@ -999,13 +1033,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
               stats: [
                 ('${_myCourses.length}', t('stat_courses')),
                 ('$_statStudents', t('stat_students')),
-                ('$_statEarnings', t('stat_earnings')),
+                (Money.iqd(_statEarnings), t('stat_earnings')),
                 ('${_attentionCount(paymentSet)}', t('dash_needs_attention')),
               ],
               statTaps: [
                 () => go(_TView.courses),
-                null,
-                null,
+                () => go(_TView.students),
+                () => go(_TView.earnings),
                 () => go(_TView.attention),
               ],
             ),
@@ -1019,9 +1053,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
             tile(ArcIcon.courses, '${_myCourses.length}', t('stat_courses'),
                 AppColors.teal, () => go(_TView.courses)),
             tile(ArcIcon.users, '$_statStudents', t('stat_students'),
-                AppColors.byline, () => go(_TView.courses)),
-            tile(ArcIcon.money, '$_statEarnings', t('stat_earnings'),
-                AppColors.red, () => go(_TView.courses)),
+                AppColors.byline, () => go(_TView.students)),
+            tile(ArcIcon.money, Money.iqd(_statEarnings), t('stat_earnings'),
+                AppColors.red, () => go(_TView.earnings)),
             tile(ArcIcon.wallet, paymentSet ? '✓' : '—',
                 t('settings_payment_info'), AppColors.teal,
                 () => go(_TView.profile),
@@ -1069,6 +1103,147 @@ class _TeacherScreenState extends State<TeacherScreen> {
             ],
         ],
       ),
+    );
+  }
+
+  String _when(dynamic iso) {
+    final d = DateTime.tryParse('${iso ?? ''}')?.toLocal();
+    return d == null ? '—' : d.toString().substring(0, 16);
+  }
+
+  /// Every student in this teacher's courses, newest first, with what each
+  /// one paid.
+  Widget _buildStudents(String Function(String) t) {
+    final rows = _teacherRows;
+    final distinct = {
+      for (final r in rows) (r['email'] ?? r['phone'] ?? r['enrollment_id'])
+    }.length;
+    return RefreshIndicator(
+      onRefresh: _loadPaymentRequests,
+      child: rows.isEmpty
+          ? ListView(children: [
+              DashEmpty(icon: ArcIcon.users, message: t('no_students'))
+            ])
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                DashSection('${t('stat_students')} ($distinct)'),
+                for (var i = 0; i < rows.length; i++) ...[
+                  FadeSlideIn(
+                    delayMs: (i % 10) * 30,
+                    child: Builder(builder: (context) {
+                      final r = rows[i];
+                      final active = r['status'] == 'active';
+                      final name = (r['full_name'] as String?) ??
+                          (r['email'] as String?) ??
+                          '—';
+                      return DashCard(
+                        leading: DashAvatar(name: name),
+                        title: name,
+                        subtitle: r['course_title'] as String? ?? '—',
+                        trailing: StatusPill(
+                            active ? t('status_active') : t('status_pending'),
+                            tone: active ? StatusTone.good : StatusTone.warn),
+                        meta: [
+                          [r['email'], r['phone']]
+                              .whereType<String>()
+                              .where((s) => s.isNotEmpty)
+                              .join(' · '),
+                          '${_when(r['created_at'])} · ${Money.iqd(_amountsOf(r).paid)}',
+                        ].where((s) => s.isNotEmpty).toList(),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            ),
+    );
+  }
+
+  /// Totals, then each course with every payment: date, student, price,
+  /// discount, amount paid and this teacher's share.
+  Widget _buildEarnings(String Function(String) t) {
+    final active = _teacherRows.where((r) => r['status'] == 'active').toList();
+    // Share per enrollment: the platform keeps 20% of the full price (never
+    // more than was paid); a direct-payment course is the teacher's in full.
+    ({int platform, int mine}) share(Map<String, dynamic> r) {
+      final a = _amountsOf(r);
+      if (r['pay_to_teacher'] == true) return (platform: 0, mine: a.paid);
+      final cut = PaymentRules.split(price: a.price, paid: a.paid).platform;
+      final platform = cut > a.paid ? a.paid : cut;
+      return (platform: platform, mine: a.paid - platform);
+    }
+
+    var collected = 0, platform = 0, mine = 0;
+    final byCourse = <String, List<Map<String, dynamic>>>{};
+    for (final r in active) {
+      final s = share(r);
+      collected += _amountsOf(r).paid;
+      platform += s.platform;
+      mine += s.mine;
+      byCourse.putIfAbsent('${r['course_slug']}', () => []).add(r);
+    }
+    return RefreshIndicator(
+      onRefresh: _loadPaymentRequests,
+      child: active.isEmpty
+          ? ListView(children: [
+              DashEmpty(icon: ArcIcon.money, message: t('earnings_none'))
+            ])
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                DashHero(
+                  title: t('stat_earnings'),
+                  subtitle: t('earnings_sub'),
+                  stats: [
+                    (Money.iqd(collected), t('rev_collected')),
+                    (Money.iqd(platform), t('rev_platform_cut')),
+                    (Money.iqd(mine), t('earnings_yours')),
+                  ],
+                ),
+                for (final entry in byCourse.entries) ...[
+                  DashSection(
+                      '${entry.value.first['course_title'] ?? '—'} (${entry.value.length})'),
+                  DashCard(
+                    leading: DashIconBadge(
+                        icon: ArcIcon.money, accent: AppColors.teal),
+                    title: t('earnings_course_total'),
+                    trailing: Text(
+                        Money.iqd(entry.value
+                            .fold<int>(0, (s, r) => s + share(r).mine)),
+                        style: AppFonts.code(size: 15, color: AppColors.teal)),
+                  ),
+                  const SizedBox(height: 10),
+                  for (final r in entry.value) ...[
+                    Builder(builder: (context) {
+                      final a = _amountsOf(r);
+                      final s = share(r);
+                      final name = (r['full_name'] as String?) ??
+                          (r['email'] as String?) ??
+                          '—';
+                      return DashCard(
+                        leading: DashAvatar(name: name),
+                        title: name,
+                        subtitle: _when(r['created_at']),
+                        trailing: Text(Money.iqd(s.mine),
+                            style:
+                                AppFonts.code(size: 14, color: AppColors.teal)),
+                        meta: [
+                          '${t('pay_lbl_price')}: ${Money.iqd(a.price)}',
+                          if (a.discount > 0)
+                            '${t('pay_lbl_discount')}: -${Money.iqd(a.discount)}',
+                          '${t('pay_lbl_paid')}: ${Money.iqd(a.paid)}',
+                          if (s.platform > 0)
+                            '${t('rev_platform_cut')}: ${Money.iqd(s.platform)}',
+                        ],
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              ],
+            ),
     );
   }
 
@@ -1299,7 +1474,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
             TextField(
                 controller: _cPrice,
                 keyboardType: TextInputType.number,
-                inputFormatters: PaymentRules.numberInput,
+                inputFormatters: Money.inputFormatters,
                 decoration: InputDecoration(labelText: t('label_price'))),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _cPrice,
@@ -1521,7 +1696,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               title: c['code'] as String? ?? '—',
               titleStyle: AppFonts.code(size: 15),
               subtitle:
-                  '${c['discount_type'] == 'percent' ? '${c['discount_value']}%' : '${c['discount_value']} IQD'} · ${c['used_count']}/${c['max_uses']} ${t('codes_used')}',
+                  '${c['discount_type'] == 'percent' ? '${c['discount_value']}%' : Money.iqd((c['discount_value'] as num?) ?? 0)} · ${c['used_count']}/${c['max_uses']} ${t('codes_used')}',
               trailing: StatusPill(
                   c['is_active'] == true
                       ? t('status_active_code')
@@ -1733,7 +1908,7 @@ class _CourseCard extends StatelessWidget {
       title: course['title'] as String? ?? '—',
       subtitle: course['is_free'] == true
           ? t('card_free')
-          : '${course['price'] ?? '—'}',
+          : Money.text(course['price']),
       trailing: StatusPill(t('status_$status'), tone: tone),
       extra: [
         if (course['edit_status'] == 'pending_review') ...[
@@ -1844,7 +2019,7 @@ class _SplitChip extends StatelessWidget {
         children: [
           Text(label, style: AppFonts.body(size: 11, color: AppColors.muted)),
           const SizedBox(height: 2),
-          Text('$value IQD', style: AppFonts.code(size: 14, color: color)),
+          Text(Money.iqd(value), style: AppFonts.code(size: 14, color: color)),
         ],
       ),
     );

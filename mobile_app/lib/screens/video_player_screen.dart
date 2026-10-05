@@ -63,6 +63,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   // turning the device. Leaving it with the button locks portrait so the
   // screen doesn't flip straight back.
   bool _manualFullscreen = false;
+  // The first time a video starts, the player turns the screen sideways and
+  // goes fullscreen by itself (once per screen; leaving fullscreen with the
+  // button is then respected).
+  bool _autoFullscreenDone = false;
+  // Set after leaving fullscreen with the button, until the screen is
+  // really upright again (the rotation listener must not undo the exit).
+  bool _awaitingPortrait = false;
+  // Players alive at once: moving to the next lecture builds the new screen
+  // before the old one is disposed, so the old one must not reset the
+  // orientation while the new one is already using it.
+  static int _live = 0;
   Timer? _progressTimer;
   bool _autoplayTriggered = false;
   String? _hlsMasterUrl;
@@ -83,6 +94,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   @override
   void initState() {
     super.initState();
+    _live++;
     WidgetsBinding.instance.addObserver(this);
     // Let the player follow the device: turning it sideways goes fullscreen
     // (respects the phone's own rotation lock).
@@ -108,6 +120,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void didChangeMetrics() {
     if (!mounted || _manualFullscreen) return;
     final landscape = _deviceLandscape;
+    if (_awaitingPortrait) {
+      if (!landscape) _awaitingPortrait = false;
+      return;
+    }
     if (landscape && !_isFullscreen) {
       setState(() => _isFullscreen = true);
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -208,6 +224,14 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       setState(() { _hlsController = controller; _loading = false; });
       _startProgressSaving();
       _scheduleAutoHide();
+      // Landscape lectures start fullscreen and sideways. A portrait video
+      // (phone-shot) stays in the normal view.
+      if (!_autoFullscreenDone) {
+        _autoFullscreenDone = true;
+        if (controller.value.aspectRatio >= 1 && !_isFullscreen) {
+          unawaited(_toggleFullscreen());
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -327,6 +351,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _isFullscreen = enter;
       _manualFullscreen = enter;
     });
+    if (!enter) _awaitingPortrait = _deviceLandscape;
     if (enter) {
       await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -440,7 +465,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     ScreenSecurity.onCapture(null);
     WidgetsBinding.instance.removeObserver(this);
     ScreenSecurity.currentScreen = null;
-    _restoreSystemUi();
+    _live--;
+    if (_live <= 0) {
+      _live = 0;
+      _restoreSystemUi();
+    }
     super.dispose();
   }
 
