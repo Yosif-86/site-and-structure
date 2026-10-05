@@ -6,7 +6,13 @@ import 'supabase_service.dart';
 class CourseStats {
   final int lectureCount;
   final int totalSeconds;
-  const CourseStats({required this.lectureCount, required this.totalSeconds});
+  // Published course files (PDF, Word, CAD, ...).
+  final int fileCount;
+  const CourseStats({
+    required this.lectureCount,
+    required this.totalSeconds,
+    this.fileCount = 0,
+  });
 
   static const empty = CourseStats(lectureCount: 0, totalSeconds: 0);
 }
@@ -61,9 +67,27 @@ class LearningService {
       counts[id] = (counts[id] ?? 0) + 1;
       seconds[id] = (seconds[id] ?? 0) + ((r['duration_seconds'] as int?) ?? 0);
     }
+    final files = <String, int>{};
+    try {
+      final fileRows = await SupabaseService.instance.client
+          .from('course_files')
+          .select('course_id')
+          .eq('status', 'published')
+          .inFilter('course_id', courseIds);
+      for (final r in (fileRows as List)) {
+        final id = r['course_id'] as String;
+        files[id] = (files[id] ?? 0) + 1;
+      }
+    } catch (_) {
+      // Files table not there yet: cards simply show no file count.
+    }
     return {
-      for (final id in counts.keys)
-        id: CourseStats(lectureCount: counts[id]!, totalSeconds: seconds[id]!),
+      for (final id in {...counts.keys, ...files.keys})
+        id: CourseStats(
+          lectureCount: counts[id] ?? 0,
+          totalSeconds: seconds[id] ?? 0,
+          fileCount: files[id] ?? 0,
+        ),
     };
   }
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../i18n/strings.dart';
+import 'bidi.dart';
 import 'r2_upload.dart';
 import 'supabase_service.dart';
 
@@ -118,7 +119,7 @@ class UploadManager extends ChangeNotifier {
       job.status = UploadStatus.done;
       job.progress = 1;
       onMessage?.call(
-          t('upload_done').replaceAll('{title}', job.title));
+          t('upload_done').replaceAll('{title}', Bidi.iso(job.title)));
       Timer(const Duration(seconds: 6), () => dismiss(job.lectureId));
     } on UploadCancelled {
       job.status = UploadStatus.cancelled;
@@ -127,7 +128,7 @@ class UploadManager extends ChangeNotifier {
     } catch (_) {
       job.status = UploadStatus.failed;
       onMessage?.call(
-          t('upload_failed_named').replaceAll('{title}', job.title));
+          t('upload_failed_named').replaceAll('{title}', Bidi.iso(job.title)));
     } finally {
       job._upload = null;
       notifyListeners();

@@ -12,6 +12,7 @@ import '../services/api_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
 import '../services/safe_picker.dart';
+import '../services/bidi.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -411,8 +412,8 @@ class _AdminScreenState extends State<AdminScreen> {
     final course = _courseBySlug[slug];
     final ok = await _confirm(
         t('confirm_approve_payment')
-            .replaceAll('{name}', name)
-            .replaceAll('{course}', _courseTitle(slug))
+            .replaceAll('{name}', Bidi.iso(name))
+            .replaceAll('{course}', Bidi.iso(_courseTitle(slug)))
             .replaceAll(
                 '{price}',
                 course == null
@@ -451,8 +452,8 @@ class _AdminScreenState extends State<AdminScreen> {
       String enrollmentId, String title, String email) async {
     final t = AppStrings.instance.t;
     final confirmed = await _confirm(t('confirm_remove')
-        .replaceAll('{email}', email)
-        .replaceAll('{title}', title));
+        .replaceAll('{email}', Bidi.iso(email))
+        .replaceAll('{title}', Bidi.iso(title)));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -470,7 +471,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _removeDevice(String deviceRowId, String email) async {
     final t = AppStrings.instance.t;
     final confirmed =
-        await _confirm(t('confirm_remove_device').replaceAll('{email}', email));
+        await _confirm(t('confirm_remove_device').replaceAll('{email}', Bidi.iso(email)));
     if (!confirmed) return;
     try {
       final result = await SupabaseService.instance.client
@@ -502,7 +503,7 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _rejectCourse(String id, String title) async {
     final t = AppStrings.instance.t;
     final confirmed = await _confirm(
-        t('confirm_reject_course').replaceAll('{title}', title),
+        t('confirm_reject_course').replaceAll('{title}', Bidi.iso(title)),
         confirmLabel: t('btn_confirm'));
     if (!confirmed) return;
     try {
@@ -1439,7 +1440,7 @@ class _AdminScreenState extends State<AdminScreen> {
         createdAt: _date(e['created_at'] as String?, time: true),
         canDecide: !teacherPaid,
         decidedByNote: teacherPaid
-            ? t('decided_by_teacher').replaceAll('{name}', teacherName)
+            ? t('decided_by_teacher').replaceAll('{name}', Bidi.iso(teacherName))
             : null,
         onViewProof: proof == null ? null : () => _viewProof(proof),
         onApprove: () => _approve(e['id'] as String),

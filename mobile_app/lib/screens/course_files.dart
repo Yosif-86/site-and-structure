@@ -10,6 +10,7 @@ import 'package:pdfx/pdfx.dart';
 import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
+import '../services/bidi.dart';
 import '../services/error_reporter.dart';
 import '../services/screen_security.dart';
 import '../services/supabase_service.dart';
@@ -466,7 +467,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
       context: context,
       builder: (ctx) => AlertDialog(
         content: Text(_t('confirm_delete_file')
-            .replaceAll('{title}', f['title'] as String? ?? '')),
+            .replaceAll('{title}', Bidi.iso(f['title'] as String?))),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),

@@ -225,6 +225,7 @@ class AppStrings extends ChangeNotifier {
     'view_all': 'عرض الكل',
     'nav_explore': 'استكشاف',
     'lessons_label': 'درس',
+    'files_label': 'ملف',
     'duration_label': 'المدة',
     'dur_hr': 'س',
     'dur_min': 'د',

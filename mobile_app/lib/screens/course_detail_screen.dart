@@ -411,6 +411,15 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _StatTile(
+                  icon: ArcIcon.review,
+                  value: '${_files.length}',
+                  label: _t('files_label'),
+                  color: const Color(0xFFE0A030),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatTile(
                   icon: ArcIcon.clock,
                   value: durationLabel ?? '—',
                   label: _t('duration_label'),

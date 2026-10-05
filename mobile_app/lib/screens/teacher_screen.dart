@@ -14,6 +14,7 @@ import '../services/notification_service.dart';
 import '../services/payment_rules.dart';
 import '../services/upload_manager.dart';
 import '../services/safe_picker.dart';
+import '../services/bidi.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -114,9 +115,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final a = _amountsOf(row);
     final ok = await _confirm(
         t('confirm_approve_payment')
-            .replaceAll('{name}',
-                (row['full_name'] as String?) ?? (row['email'] as String?) ?? '—')
-            .replaceAll('{course}', (row['course_title'] as String?) ?? '—')
+            .replaceAll(
+                '{name}',
+                Bidi.iso((row['full_name'] as String?) ??
+                    (row['email'] as String?) ??
+                    '—'))
+            .replaceAll('{course}',
+                Bidi.iso((row['course_title'] as String?) ?? '—'))
             .replaceAll(
                 '{price}',
                 Money.paymentSummary(t,
@@ -513,7 +518,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final t = AppStrings.instance.t;
     final confirmed = await _confirm(
         t('confirm_submit_review')
-            .replaceAll('{title}', c['title'] as String? ?? ''),
+            .replaceAll('{title}', Bidi.iso(c['title'] as String?)),
         confirmLabel: t('btn_confirm'),
         danger: false);
     if (!confirmed) return;
@@ -548,7 +553,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 ? t('confirm_delete_course_students')
                     .replaceAll('{n}', '$students')
                 : t('confirm_delete_course'))
-            .replaceAll('{title}', title));
+            .replaceAll('{title}', Bidi.iso(title)));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -647,7 +652,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     final live = l['r2_path'] != null;
     final ok = await _confirm(
         t(live ? 'confirm_delete_live_lecture' : 'confirm_delete_lecture')
-            .replaceAll('{title}', l['title'] as String? ?? ''));
+            .replaceAll('{title}', Bidi.iso(l['title'] as String?)));
     if (!ok) return;
     try {
       await SupabaseService.instance.client
@@ -760,7 +765,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   Future<void> _stopCode(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
     final confirmed = await _confirm(t('confirm_revoke_code')
-        .replaceAll('{code}', c['code'] as String? ?? ''));
+        .replaceAll('{code}', Bidi.iso(c['code'] as String?)));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client

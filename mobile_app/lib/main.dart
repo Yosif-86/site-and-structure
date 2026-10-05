@@ -159,8 +159,15 @@ class SiteAndStructureApp extends StatelessWidget {
             value: AppTheme.instance.isDark
                 ? SystemUiOverlayStyle.light
                 : SystemUiOverlayStyle.dark,
-            child: PrivacyOverlay(
-              child: OfflineBanner(child: UploadPill(child: child!)),
+            // One direction for every route, dialog and sheet: dialogs used
+            // to open left-to-right and scramble mixed Arabic/English text.
+            child: Directionality(
+              textDirection: AppStrings.instance.isAr
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+              child: PrivacyOverlay(
+                child: OfflineBanner(child: UploadPill(child: child!)),
+              ),
             ),
           ),
           home: const _LaunchGate(),

@@ -114,6 +114,11 @@ List<Widget> _statChips(Course course, CourseStats? stats) {
         icon: ArcIcon.lessons,
         label: '${stats!.lectureCount} ${t('lessons_label')}'));
   }
+  if ((stats?.fileCount ?? 0) > 0) {
+    chips.add(StatChip(
+        icon: ArcIcon.review,
+        label: '${stats!.fileCount} ${t('files_label')}'));
+  }
   final dur = LearningService.courseDurationLabel(course, stats);
   if (dur != null) {
     chips.add(StatChip(icon: ArcIcon.clock, label: dur));

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../i18n/strings.dart';
+import '../services/bidi.dart';
 import '../services/upload_manager.dart';
 import '../theme.dart';
 
@@ -26,7 +27,7 @@ class UploadPill extends StatelessWidget {
           final label = active.length == 1
               ? AppStrings.instance
                   .t('upload_pill_one')
-                  .replaceAll('{title}', active.first.title)
+                  .replaceAll('{title}', Bidi.iso(active.first.title))
               : AppStrings.instance
                   .t('upload_pill_many')
                   .replaceAll('{n}', '${active.length}');
