@@ -40,9 +40,9 @@ module.exports = async (req, res) => {
     res.status(401).json({ error: 'Invalid session' });
     return;
   }
-  const userId = userData.user.id;
+  const callerId = userData.user.id;
 
-  if (!allow('delete-account:user:' + userId, 3, 60 * 1000)) {
+  if (!allow('delete-account:user:' + callerId, 10, 60 * 1000)) {
     res.status(429).json({ error: 'Too many requests, try again shortly.' });
     return;
   }
@@ -54,6 +54,42 @@ module.exports = async (req, res) => {
   const admin = createClient(SUPABASE_URL, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false }
   });
+
+  // An admin may delete someone else's account by sending { userId }.
+  // Other admins can't be deleted this way. A deleted teacher's courses
+  // (and through them lectures, files and discount codes) go too.
+  const body = typeof req.body === 'string' ? safeJson(req.body) : (req.body || {});
+  const targetId = typeof body.userId === 'string' ? body.userId : null;
+  let userId = callerId;
+  if (targetId && targetId !== callerId) {
+    if (!/^[0-9a-f-]{36}$/i.test(targetId)) {
+      res.status(400).json({ error: 'Bad user id' });
+      return;
+    }
+    const { data: rows, error: profErr } = await admin
+      .from('profiles').select('id, is_admin').in('id', [callerId, targetId]);
+    if (profErr) {
+      res.status(500).json({ error: 'Could not check permissions.' });
+      return;
+    }
+    const caller = (rows || []).find(r => r.id === callerId);
+    const target = (rows || []).find(r => r.id === targetId);
+    if (!caller?.is_admin) {
+      res.status(403).json({ error: 'Not allowed' });
+      return;
+    }
+    if (target?.is_admin) {
+      res.status(403).json({ error: 'Admins cannot be deleted here' });
+      return;
+    }
+    const { error: courseErr } = await admin.from('courses').delete().eq('teacher_id', targetId);
+    if (courseErr) {
+      console.error('delete-account: deleting courses failed', courseErr);
+      res.status(500).json({ error: 'Could not delete the teacher courses.' });
+      return;
+    }
+    userId = targetId;
+  }
 
   // Storage objects aren't covered by FK cascades. Every per-user bucket
   // stores files under a "<userId>/" folder (that's what the bucket policies
@@ -78,3 +114,7 @@ module.exports = async (req, res) => {
 
   res.status(200).json({ ok: true });
 };
+
+function safeJson(text) {
+  try { return JSON.parse(text) || {}; } catch (_) { return {}; }
+}

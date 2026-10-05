@@ -967,6 +967,31 @@ class SupabaseService extends ChangeNotifier {
     return null;
   }
 
+  /// Admin only: permanently deletes another account (and, for a teacher,
+  /// their courses) through api/delete-account.js. Returns an error string
+  /// key on failure, null on success.
+  Future<String?> adminDeleteAccount(String userId) async {
+    final session = client.auth.currentSession;
+    if (session == null) return 'err_delete_account_failed';
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$kApiBaseUrl/api/delete-account'),
+            headers: {
+              'Authorization': 'Bearer ${session.accessToken}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({'userId': userId}),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode == 403) return 'err_not_allowed';
+      if (res.statusCode != 200) return 'err_delete_account_failed';
+      return null;
+    } catch (e) {
+      return NetStatus.isOffline(e) ? 'err_offline' : 'err_delete_account_failed';
+    }
+  }
+
   /// Call once at app start if a session was restored from disk, to resume
   /// the session-watch loop (mirrors updateAuthUI() calling startSessionWatch
   /// on the website whenever a session is found).

@@ -383,6 +383,81 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   });
 
+  bool _canDelete(String? uid) =>
+      uid != null &&
+      uid != SupabaseService.instance.currentUser?.id &&
+      _profileByUser[uid]?['is_admin'] != true;
+
+  Widget _deleteAccountButton(String uid, String Function(String) t) =>
+      DashButton(t('btn_delete_account'),
+          danger: true,
+          icon: ArcIcon.trash,
+          onPressed: _busy.contains('delete-$uid')
+              ? null
+              : () => _deleteAccount(uid));
+
+  /// Deletes the account for good (a teacher's courses go with it).
+  Future<void> _deleteAccount(String uid) => _once('delete-$uid', () async {
+    final t = AppStrings.instance.t;
+    final name = (_profileByUser[uid]?['full_name'] as String?) ??
+        _emailByUser[uid] ??
+        '—';
+    final courses = _allCourses.where((c) => c['teacher_id'] == uid).length;
+    final msg = (courses > 0
+            ? t('confirm_admin_delete_teacher').replaceAll('{n}', '$courses')
+            : t('confirm_admin_delete_account'))
+        .replaceAll('{name}', Bidi.iso(name));
+    if (!await _confirm(msg, confirmLabel: t('btn_delete'))) return;
+    final err = await SupabaseService.instance.adminDeleteAccount(uid);
+    if (err != null) {
+      _showError(t(err));
+      return;
+    }
+    _showError(t('account_deleted'));
+    await _loadAll();
+  });
+
+  Future<void> _deleteCourse(Map<String, dynamic> c) =>
+      _once('course-del-${c['id']}', () async {
+    final t = AppStrings.instance.t;
+    final students =
+        _activeEnrollments.where((e) => e['course_slug'] == c['slug']).length;
+    final msg = (students > 0
+            ? t('confirm_delete_course_students').replaceAll('{n}', '$students')
+            : t('confirm_delete_course'))
+        .replaceAll('{title}', Bidi.iso(c['title'] as String? ?? ''));
+    if (!await _confirm(msg, confirmLabel: t('btn_delete'))) return;
+    try {
+      final rows = await SupabaseService.instance.client
+          .from('courses')
+          .delete()
+          .eq('id', c['id'])
+          .select('id');
+      if ((rows as List).isEmpty) {
+        _showError(t('err_not_allowed'));
+        return;
+      }
+      _showError(t('course_deleted'));
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
+
+  Future<void> _clearSuspicious() => _once('clear-suspicious', () async {
+    final t = AppStrings.instance.t;
+    if (!await _confirm(t('confirm_clear_suspicious'),
+        confirmLabel: t('btn_clear_all'))) {
+      return;
+    }
+    try {
+      await SupabaseService.instance.client.rpc('admin_clear_suspicious');
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
+
   /// Every account's email. The function (add-oct05-fixes.sql) isn't capped
   /// like the old login_events read, which stopped at 1000 rows; that read
   /// stays as the fallback until the migration runs.
@@ -1052,25 +1127,41 @@ class _AdminScreenState extends State<AdminScreen> {
     if (_publishedCourses.isEmpty) {
       return _empty(t('no_courses'), ArcIcon.courses);
     }
-    return _list(_publishedCourses.length, (i) {
-      final c = _publishedCourses[i];
-      final teacherName =
-          (_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—';
+    final shown = _publishedCourses.where((c) {
+      final teacher = _profileByUser[c['teacher_id']];
+      return _hit(
+          [c['title'], teacher?['full_name'], _emailByUser[c['teacher_id']]],
+          teacher);
+    }).toList();
+    return _withSearch(t, shown.isEmpty, _list(shown.length, (i) {
+      final c = shown[i];
+      final teacher = _profileByUser[c['teacher_id']];
+      final teacherName = (teacher?['full_name'] as String?) ?? '—';
+      final tag = _idTag(teacher);
       return DashCard(
         leading: DashIconBadge(icon: ArcIcon.courses, accent: AppColors.teal),
         title: c['title'] as String? ?? '—',
-        subtitle: teacherName,
+        subtitle: tag == null ? teacherName : '$teacherName · $tag',
         trailing: StatusPill(_priceLabel(c, t),
             tone: c['is_free'] == true ? StatusTone.good : StatusTone.neutral),
         onTap: c['slug'] == null
             ? null
             : () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => CourseDetailScreen(slug: c['slug'] as String))),
+        actions: [
+          DashButton(t('btn_delete_course'),
+              danger: true,
+              icon: ArcIcon.trash,
+              onPressed: _busy.contains('course-del-${c['id']}')
+                  ? null
+                  : () => _deleteCourse(c)),
+        ],
       );
-    });
+    }));
   }
 
-  Widget _person(String? name, String? email, String? phone, String? tag) =>
+  Widget _person(String? name, String? email, String? phone, String? tag,
+          {String? uid}) =>
       DashCard(
         leading: DashAvatar(name: name),
         title: name ?? '—',
@@ -1078,6 +1169,10 @@ class _AdminScreenState extends State<AdminScreen> {
         meta: [
           if (phone != null && phone.isNotEmpty) phone,
           if (tag != null) tag,
+        ],
+        actions: [
+          if (_canDelete(uid))
+            _deleteAccountButton(uid!, AppStrings.instance.t),
         ],
       );
 
@@ -1105,6 +1200,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 fallbackName: p['full_name'] as String?,
                 adminView: true,
                 email: _emailByUser[id]))),
+        actions: [if (_canDelete(id)) _deleteAccountButton(id, t)],
       );
     }));
   }
@@ -1125,7 +1221,8 @@ class _AdminScreenState extends State<AdminScreen> {
       final uid = shown[i];
       final prof = _profileByUser[uid];
       return _person(prof?['full_name'] as String?, _emailByUser[uid],
-          prof?['phone'] as String?, _idTag(prof));
+          prof?['phone'] as String?, _idTag(prof),
+          uid: uid);
     }));
   }
 
@@ -1851,55 +1948,108 @@ class _AdminScreenState extends State<AdminScreen> {
     ]..sort((a, b) =>
         (b['at']?.toString() ?? '').compareTo(a['at']?.toString() ?? ''));
     if (items.isEmpty) return _empty(t('no_flagged'), ArcIcon.warning);
-    return _list(items.length, (i) {
-      final it = items[i];
+    final shown = items.where((it) {
       final uid = it['user_id'] as String?;
-      final name = (_profileByUser[uid]?['full_name'] as String?) ??
-          (it['email'] as String?) ??
-          _emailByUser[uid] ??
-          '—';
-      final detail = it['detail'] as String;
-      return DashCard(
-        leading:
-            DashIconBadge(icon: it['icon'] as ArcIcon, accent: AppColors.error),
-        title: name,
-        titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
-        subtitle: _emailByUser[uid] ?? (it['email'] as String?) ?? '—',
-        trailing: StatusPill(it['reason'] as String, tone: StatusTone.bad),
-        meta: [
-          if (detail.isNotEmpty) detail,
-          _date(it['at']?.toString(), time: true),
-        ],
-        actions: uid == null
-            ? const []
-            : [
-                DashButton(t('btn_force_logout'),
-                    icon: ArcIcon.logout,
-                    onPressed: _busy.contains('logout-$uid')
-                        ? null
-                        : () => _forceLogout(uid)),
-                DashButton(t('btn_reset_devices'),
-                    danger: true,
-                    icon: ArcIcon.phone,
-                    onPressed: _busy.contains('reset-$uid')
-                        ? null
-                        : () => _resetDevices(uid)),
-              ],
-      );
-    });
+      final prof = _profileByUser[uid];
+      return _hit([
+        prof?['full_name'],
+        _emailByUser[uid] ?? it['email'],
+        prof?['phone'],
+        it['reason'],
+        it['detail'],
+      ], prof);
+    }).toList()
+      ..sort((a, b) => _idFirst(
+          _profileByUser[a['user_id']], _profileByUser[b['user_id']]));
+    return _withSearch(
+        t,
+        shown.isEmpty,
+        ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: DashButton(t('btn_clear_all'),
+                  danger: true,
+                  icon: ArcIcon.trash,
+                  onPressed: _busy.contains('clear-suspicious')
+                      ? null
+                      : _clearSuspicious),
+            ),
+            const SizedBox(height: 8),
+            for (final it in shown) ...[
+              _flaggedCard(it, t),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ));
+  }
+
+  Widget _flaggedCard(Map<String, dynamic> it, String Function(String) t) {
+    final uid = it['user_id'] as String?;
+    final prof = _profileByUser[uid];
+    final name = (prof?['full_name'] as String?) ??
+        (it['email'] as String?) ??
+        _emailByUser[uid] ??
+        '—';
+    final detail = it['detail'] as String;
+    final tag = _idTag(prof);
+    return DashCard(
+      leading:
+          DashIconBadge(icon: it['icon'] as ArcIcon, accent: AppColors.error),
+      title: name,
+      titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+      subtitle: _emailByUser[uid] ?? (it['email'] as String?) ?? '—',
+      trailing: StatusPill(it['reason'] as String, tone: StatusTone.bad),
+      meta: [
+        if (tag != null) tag,
+        if (detail.isNotEmpty) detail,
+        _date(it['at']?.toString(), time: true),
+      ],
+      actions: uid == null
+          ? const []
+          : [
+              DashButton(t('btn_force_logout'),
+                  icon: ArcIcon.logout,
+                  onPressed: _busy.contains('logout-$uid')
+                      ? null
+                      : () => _forceLogout(uid)),
+              DashButton(t('btn_reset_devices'),
+                  danger: true,
+                  icon: ArcIcon.phone,
+                  onPressed: _busy.contains('reset-$uid')
+                      ? null
+                      : () => _resetDevices(uid)),
+              if (_canDelete(uid)) _deleteAccountButton(uid, t),
+            ],
+    );
   }
 
   Widget _buildDevices(String Function(String) t) {
     if (_devices.isEmpty) return _empty(t('no_devices'), ArcIcon.phone);
-    return _list(_devices.length, (i) {
-      final d = _devices[i];
-      final email = _emailByUser[d['user_id'] as String] ?? '—';
+    final shown = _devices.where((d) {
+      final uid = d['user_id'] as String;
+      final prof = _profileByUser[uid];
+      return _hit(
+          [prof?['full_name'], _emailByUser[uid], prof?['phone'], d['device_label']],
+          prof);
+    }).toList()
+      ..sort((a, b) => _idFirst(
+          _profileByUser[a['user_id']], _profileByUser[b['user_id']]));
+    return _withSearch(t, shown.isEmpty, _list(shown.length, (i) {
+      final d = shown[i];
+      final uid = d['user_id'] as String;
+      final prof = _profileByUser[uid];
+      final email = _emailByUser[uid] ?? '—';
+      final tag = _idTag(prof);
       return DashCard(
         leading: DashIconBadge(icon: ArcIcon.phone, accent: AppColors.teal),
-        title: email,
+        title: (prof?['full_name'] as String?) ?? email,
         titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
-        subtitle: d['device_label'] as String? ?? '—',
+        subtitle: email,
         meta: [
+          if (tag != null) tag,
+          d['device_label'] as String? ?? '—',
           '${t('th_first_seen')}: ${_date(d['first_seen'] as String?)}',
           '${t('th_last_seen')}: ${_date(d['last_seen'] as String?, time: true)}',
         ],
@@ -1908,17 +2058,24 @@ class _AdminScreenState extends State<AdminScreen> {
               danger: true,
               icon: ArcIcon.trash,
               onPressed: () => _removeDevice(d['id'] as String, email)),
+          if (_canDelete(uid)) _deleteAccountButton(uid, t),
         ],
       );
-    });
+    }));
   }
 
   Widget _buildDiscountCodes(String Function(String) t) {
     if (_discountCodes.isEmpty) {
       return _empty(t('no_discount_codes'), ArcIcon.tag);
     }
-    return _list(_discountCodes.length, (i) {
-      final c = _discountCodes[i];
+    final codes = _discountCodes.where((c) {
+      final course = _allCourses.firstWhere((cc) => cc['id'] == c['course_id'],
+          orElse: () => {});
+      final teacher = _profileByUser[course['teacher_id']];
+      return _hit([c['code'], course['title'], teacher?['full_name']], teacher);
+    }).toList();
+    return _withSearch(t, codes.isEmpty, _list(codes.length, (i) {
+      final c = codes[i];
       final courseId = c['course_id'];
       final course = _allCourses.firstWhere((cc) => cc['id'] == courseId,
           orElse: () => {});
@@ -1943,7 +2100,7 @@ class _AdminScreenState extends State<AdminScreen> {
             tone: status == 'active' ? StatusTone.good : StatusTone.bad),
         meta: ['$discount · ${c['used_count']}/${c['max_uses']} ${t('codes_used')}'],
       );
-    });
+    }));
   }
 
   Widget _buildErrorLog(String Function(String) t) {

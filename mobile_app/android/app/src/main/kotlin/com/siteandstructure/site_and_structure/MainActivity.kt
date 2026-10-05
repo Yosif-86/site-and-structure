@@ -44,11 +44,13 @@ class MainActivity : FlutterActivity() {
     // FLAG_SECURE still blanks the capture itself; this only says it happened.
     private val screenshotCallback: Any? =
         if (Build.VERSION.SDK_INT >= 34) Activity.ScreenCaptureCallback {
+            android.util.Log.i("ArcSecurity", "screenshot detected")
             channel?.invokeMethod("onCapture", mapOf("type" to "screenshot"))
         } else null
 
     private val recordingCallback: Any? =
         if (Build.VERSION.SDK_INT >= 35) java.util.function.Consumer<Int> { state ->
+            android.util.Log.i("ArcSecurity", "recording state $state")
             if (state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE) {
                 channel?.invokeMethod("onCapture", mapOf("type" to "recording"))
             }
