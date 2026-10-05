@@ -29,15 +29,17 @@ set discount_code_id = r.code_id,
       then round(e.list_price * r.discount_value / 100.0)
       else round(r.discount_value) end)::int
 from public.courses c,
-lateral (
-  select d.id as code_id, d.discount_type, d.discount_value
+(
+  -- Latest redemption per student per course.
+  select distinct on (x.user_id, d.course_id)
+         x.user_id, d.course_id, d.id as code_id, d.discount_type, d.discount_value
   from public.discount_code_redemptions x
   join public.discount_codes d on d.id = x.discount_code_id
-  where x.user_id = e.user_id and d.course_id = c.id
-  order by x.redeemed_at desc
-  limit 1
+  order by x.user_id, d.course_id, x.redeemed_at desc
 ) r
-where c.slug = e.course_slug and e.amount_paid is null and e.discount_code_id is null;
+where c.slug = e.course_slug
+  and r.user_id = e.user_id and r.course_id = c.id
+  and e.amount_paid is null and e.discount_code_id is null;
 
 update public.enrollments
 set amount_paid = greatest(0, coalesce(list_price, 0) - coalesce(discount_amount, 0))
