@@ -523,6 +523,7 @@ class _SocialButton extends StatelessWidget {
             Container(
               width: 46,
               height: 46,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppColors.glassBg,
