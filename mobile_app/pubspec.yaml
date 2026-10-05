@@ -23,9 +23,12 @@ dependencies:
   android_id: ^0.4.0
   audioplayers: ^6.1.0
   gal: ^2.3.0
-  connectivity_plus: ^7.3.2
+  connectivity_plus: 6.1.0
   file_picker: ^10.2.4
   pdfx: ^2.11.0
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
+  flutter_local_notifications: 19.4.0
 
 dev_dependencies:
   flutter_test:

@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import 'net_status.dart';
+import 'push_service.dart';
 import 'signup_rules.dart';
 
 /// Same Vercel deployment the website talks to — the two API routes
@@ -900,6 +901,8 @@ class SupabaseService extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // This phone stops receiving the account's notifications.
+    await PushService.instance.unregister();
     stopSessionWatch();
     _sessionTokenMemory = null;
     try {

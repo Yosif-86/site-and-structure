@@ -6,11 +6,13 @@ import 'package:flutter/services.dart';
 import 'i18n/strings.dart';
 import 'screens/auth_screen.dart';
 import 'screens/catalogue_screen.dart';
+import 'screens/notifications_screen.dart';
 import 'screens/set_new_password_screen.dart';
 import 'services/error_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'services/net_status.dart';
+import 'services/push_service.dart';
 import 'services/screen_security.dart';
 import 'services/upload_manager.dart';
 import 'theme.dart';
@@ -47,6 +49,10 @@ Future<void> main() async {
     NotificationService.instance;
     NetStatus.instance.start();
     ScreenSecurity.init();
+    // Phone notifications; tapping one opens the bell list.
+    PushService.instance.onOpen = () => navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    unawaited(PushService.instance.init());
     UploadManager.instance.onMessage = (m) => messengerKey.currentState
         ?.showSnackBar(SnackBar(content: Text(m)));
     runApp(const SiteAndStructureApp());

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "982425355302",
+    "project_id": "arc-platform-39b9e",
+    "storage_bucket": "arc-platform-39b9e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:982425355302:android:d7bf182361251ea9d652e7",
+        "android_client_info": {
+          "package_name": "com.siteandstructure.site_and_structure"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAk47cQqqDN5KiGk8M8zRURIx3X6c7puIw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
