@@ -355,7 +355,8 @@ class AppStrings extends ChangeNotifier {
     'confirm_delete_lecture': 'حذف المحاضرة "{title}"؟',
     'confirm_delete_live_lecture':
         'المحاضرة "{title}" منشورة ويشاهدها الطلاب. هل أنت متأكد من حذفها نهائيًا؟',
-    'err_published_course_delete': 'لا يمكن حذف دورة منشورة. تواصل مع الإدارة.',
+    'confirm_delete_course_students':
+        'الدورة "{title}" منشورة ولديها {n} طالب مشترك. حذفها نهائيًا سيحذف كل محاضراتها وملفاتها، ويفقد الطلاب إمكانية مشاهدتها بعد أن دفعوا ثمنها. لا يمكن التراجع. هل أنت متأكد؟',
     'err_not_allowed': 'ليست لديك صلاحية لهذا الإجراء.',
     'err_offline': 'لا يوجد اتصال بالإنترنت. تحقق من الاتصال وحاول مرة أخرى.',
     'offline_banner': 'أنت غير متصل بالإنترنت',

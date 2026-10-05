@@ -273,12 +273,13 @@ revoke all on function public.get_teacher_students() from public, anon;
 grant execute on function public.get_teacher_students() to authenticated;
 
 -- ------------------------------------------------------------
--- 6. Teachers can't delete a published course (students paid for it).
+-- 6. Teachers can delete their own course, published or not (decided
+--    Oct 5; the app warns when students are enrolled).
 -- ------------------------------------------------------------
 drop policy if exists "Teachers can delete own courses" on courses;
 create policy "Teachers can delete own courses"
   on courses for delete
-  using (teacher_id = auth.uid() and status <> 'published');
+  using (teacher_id = auth.uid());
 
 -- ------------------------------------------------------------
 -- 7. Admin: latest email per user (the old query hit the 1000-row cap).

@@ -497,14 +497,26 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   Future<void> _deleteCourse(Map<String, dynamic> c) async {
     final t = AppStrings.instance.t;
-    // Students may have paid for a published course; only the admin can
-    // take one down (the database enforces the same rule).
+    final title = c['title'] as String? ?? '';
+    // A course with paying students gets a much stronger warning.
+    var students = 0;
     if (c['status'] == 'published') {
-      _showError(t('err_published_course_delete'));
-      return;
+      try {
+        final rows = await SupabaseService.instance.client
+            .rpc('get_teacher_students') as List;
+        students = rows
+            .cast<Map<String, dynamic>>()
+            .where((r) =>
+                r['course_slug'] == c['slug'] && r['status'] == 'active')
+            .length;
+      } catch (_) {}
     }
-    final confirmed = await _confirm(t('confirm_delete_course')
-        .replaceAll('{title}', c['title'] as String? ?? ''));
+    final confirmed = await _confirm(
+        (students > 0
+                ? t('confirm_delete_course_students')
+                    .replaceAll('{n}', '$students')
+                : t('confirm_delete_course'))
+            .replaceAll('{title}', title));
     if (!confirmed) return;
     try {
       await SupabaseService.instance.client
@@ -1050,9 +1062,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   onSubmit: _myCourses[i]['status'] == 'draft'
                       ? () => _submitForReview(_myCourses[i])
                       : null,
-                  onDelete: _myCourses[i]['status'] == 'published'
-                      ? null
-                      : () => _deleteCourse(_myCourses[i]),
+                  onDelete: () => _deleteCourse(_myCourses[i]),
                 ),
               ),
               const SizedBox(height: 10),

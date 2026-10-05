@@ -249,11 +249,12 @@ class _CourseFileViewerScreenState extends State<CourseFileViewerScreen> {
           Positioned.fill(child: body),
           if (_mark.isNotEmpty) ...[
             Positioned.fill(
-              child: IgnorePointer(child: _TiledWatermark(text: _mark)),
+              child: IgnorePointer(
+                child: ClipRect(child: _TiledWatermark(text: _mark)),
+              ),
             ),
-            Positioned.fill(
-              child: IgnorePointer(child: WatermarkOverlay(label: _mark)),
-            ),
+            // WatermarkOverlay is already a Positioned.fill and ignores taps.
+            WatermarkOverlay(label: _mark),
           ],
         ]),
       ),
