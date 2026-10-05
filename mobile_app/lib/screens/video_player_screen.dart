@@ -496,7 +496,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         },
         child: Scaffold(
           backgroundColor: _isFullscreen ? Colors.black : const Color(0xFF14120F),
-          body: _isFullscreen ? Center(child: _buildPlayer()) : _buildPortrait(),
+          body: _isFullscreen ? _fullscreenBody() : _buildPortrait(),
         ),
       ),
     );
@@ -504,6 +504,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 
   /// Portrait layout: the blueprint sheet, a glass header with the lesson
   /// number and title, the framed video, and the course's lessons below.
+  /// Fullscreen player. Android 16 ignores an app's request to turn the
+  /// screen sideways on tablets (smallest side 600dp or more), so the screen
+  /// can stay portrait while we are "fullscreen". In that case the player is
+  /// turned 90 degrees here so the video fills the screen: the viewer turns
+  /// the tablet, and once the system rotates by itself this extra turn
+  /// disappears (the screen is then landscape).
+  Widget _fullscreenBody() {
+    return LayoutBuilder(builder: (context, c) {
+      final player = Center(child: _buildPlayer());
+      final stillPortrait = c.maxHeight > c.maxWidth;
+      return stillPortrait ? RotatedBox(quarterTurns: 1, child: player) : player;
+    });
+  }
+
   Widget _buildPortrait() {
     final ar = AppStrings.instance.isAr;
     final t = AppStrings.instance.t;

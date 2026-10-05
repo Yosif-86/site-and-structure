@@ -17,6 +17,13 @@
         android:fullBackupContent="false">
         <!-- Push notifications: white Arc mark in the status bar, brand
              orange, and the high-importance channel the app creates. -->
+        <!-- Android 16 ignores screen-rotation requests on tablets for apps
+             targeting API 36. This asks to keep honoring them (a temporary
+             opt-out, removed when targeting API 37). The video player also
+             turns itself when the system doesn't rotate. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_stat_arc" />
