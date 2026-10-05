@@ -446,28 +446,36 @@ revoke all on function public.get_teacher_public(uuid) from public;
 grant execute on function public.get_teacher_public(uuid) to anon, authenticated;
 
 -- ------------------------------------------------------------
--- 11. Course files (PDF, Word, Excel, PowerPoint, photos). Teachers upload
---     the original to course-files/raw/<course>/; a GitHub Actions job
---     turns it into a PDF (or image) stamped with the Arc logo at
---     course-files/view/<course>/<id>.(pdf|jpg). Students only ever read
---     the view copy, inside the app, if enrolled (or the file is free).
+-- 11. Course files (PDF, photos, Word/Excel/PowerPoint, CAD), always kept
+--     in their original format. Teachers upload to course-files/raw/; PDFs
+--     and photos get the Arc logo stamped by a GitHub Actions job, other
+--     types are published as-is, at course-files/view/<course>/<id>.<ext>.
+--     Students read only the view copy, if enrolled (or the file is free).
+--     allow_download: the teacher's choice; files the app can't display
+--     (Office, CAD) are always downloadable.
 -- ------------------------------------------------------------
 create table if not exists public.course_files (
   id uuid primary key default gen_random_uuid(),
   course_id uuid not null references public.courses(id) on delete cascade,
   title text not null check (length(title) between 1 and 200),
-  kind text not null check (kind in ('pdf', 'image', 'office')),
+  kind text not null check (kind in ('pdf', 'image', 'office', 'cad')),
   original_name text,
   raw_path text,
   view_path text,
-  view_type text check (view_type in ('pdf', 'image')),
+  view_type text check (view_type in ('pdf', 'image', 'file')),
   status text not null default 'processing'
     check (status in ('processing', 'published', 'failed')),
   is_free boolean not null default false,
+  allow_download boolean not null default false,
   order_index integer not null default 0,
   uploaded_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+-- Files the app can't display must be downloadable.
+alter table public.course_files drop constraint if exists course_files_download_check;
+alter table public.course_files add constraint course_files_download_check
+  check (allow_download or kind in ('pdf', 'image'));
 
 create index if not exists course_files_course_idx
   on public.course_files (course_id, order_index);

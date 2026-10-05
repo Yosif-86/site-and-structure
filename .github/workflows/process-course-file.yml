@@ -1,7 +1,7 @@
-# Turns a course file a teacher uploaded into the copy students see:
-#   PDF            -> logo stamped in the middle of every page
-#   Word/Excel/PPT -> converted to PDF (LibreOffice), then stamped
-#   Photo          -> resized and stamped
+# Stamps the Arc logo on a course file a teacher uploaded, keeping its format:
+#   PDF   -> logo in the middle of every page, still a PDF
+#   Photo -> logo in the middle, same image format
+# (Word/Excel/PowerPoint/CAD are published as-is by api/course-file.js.)
 # Started by api/course-file.js right after the upload. Each student's own
 # name and phone are drawn over the file by the app while they view it.
 #
@@ -59,9 +59,6 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y imagemagick
-          if [ "$KIND" = "office" ]; then
-            sudo apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress fonts-noto-core fonts-noto-extra
-          fi
           mkdir -p /tmp/stamp && cd /tmp/stamp && npm init -y >/dev/null && npm i pdf-lib@1.17.1 >/dev/null
 
       - name: Download the original
@@ -77,20 +74,18 @@ jobs:
       - name: Convert and stamp
         run: |
           case "$KIND" in
-            office)
-              soffice --headless --convert-to pdf --outdir . "input.$EXT"
-              NODE_PATH=/tmp/stamp/node_modules node scripts/stamp-pdf.js input.pdf wm.png out.pdf
-              echo "OUT=out.pdf" >> "$GITHUB_ENV"; echo "TYPE=application/pdf" >> "$GITHUB_ENV" ;;
             pdf)
               NODE_PATH=/tmp/stamp/node_modules node scripts/stamp-pdf.js "input.$EXT" wm.png out.pdf
               echo "OUT=out.pdf" >> "$GITHUB_ENV"; echo "TYPE=application/pdf" >> "$GITHUB_ENV" ;;
             image)
-              convert "input.$EXT" -auto-orient -resize '2400x2400>' base.jpg
-              W=$(identify -format '%w' base.jpg); H=$(identify -format '%h' base.jpg)
+              # Same format out as in (a PNG stays a PNG).
+              convert "input.$EXT" -auto-orient "base.$EXT"
+              W=$(identify -format '%w' "base.$EXT"); H=$(identify -format '%h' "base.$EXT")
               S=$(( (W < H ? W : H) * 45 / 100 ))
               convert wm.png -resize "${S}x${S}" wm-s.png
-              composite -dissolve 14 -gravity center wm-s.png base.jpg -quality 88 out.jpg
-              echo "OUT=out.jpg" >> "$GITHUB_ENV"; echo "TYPE=image/jpeg" >> "$GITHUB_ENV" ;;
+              composite -dissolve 14 -gravity center wm-s.png "base.$EXT" -quality 92 "out.$EXT"
+              case "$EXT" in png) T=image/png ;; *) T=image/jpeg ;; esac
+              echo "OUT=out.$EXT" >> "$GITHUB_ENV"; echo "TYPE=$T" >> "$GITHUB_ENV" ;;
             *) echo "unknown kind"; exit 1 ;;
           esac
 

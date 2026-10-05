@@ -19,20 +19,66 @@ import '../widgets/arc_icons.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/watermark_overlay.dart';
 
-/// Course files: PDFs, Word/Excel/PowerPoint (turned into PDF on the
-/// server), photos. Stored privately; students view them only inside the
-/// app, with the Arc logo stamped on the file and their own name and phone
-/// drawn over it. There is no download, share or print anywhere.
+/// Course files, kept in their original format: PDFs and photos (Arc logo
+/// stamped on the server, viewed in-app with the student's own name and
+/// phone drawn over them) and Word/Excel/PowerPoint/CAD (published as-is).
+/// The teacher decides per file whether students may download it; files
+/// the app can't display (Office, CAD) are always downloadable. Nothing is
+/// shared or printed from the app.
 
 const _bucket = 'course-files';
 const _office = {'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'};
 const _images = {'jpg', 'jpeg', 'png'};
-const _cad = {'dwg', 'dxf', 'dwf', 'rvt', 'skp'};
+const _cad = {'dwg', 'dxf', 'dwf', 'dgn', 'rvt', 'skp', 'ifc'};
 const _maxBytes = 50 * 1024 * 1024; // storage limit per file
 
 String _t(String k) => AppStrings.instance.t(k);
 
-ArcIcon _iconFor(String? kind) => kind == 'image' ? ArcIcon.image : ArcIcon.lessons;
+ArcIcon _iconFor(String? kind) => switch (kind) {
+      'image' => ArcIcon.image,
+      'cad' => ArcIcon.edit,
+      'office' => ArcIcon.review,
+      _ => ArcIcon.lessons,
+    };
+
+String _extOf(Map<String, dynamic> f) {
+  final p = (f['view_path'] ?? f['original_name'] ?? '') as String;
+  return p.contains('.') ? p.split('.').last.toUpperCase() : '';
+}
+
+bool _viewable(Map<String, dynamic> f) =>
+    f['view_type'] == 'pdf' || f['view_type'] == 'image';
+
+/// Saves the file where the student picks (only when the teacher allowed
+/// it). The bytes come through a 60-second private link.
+Future<void> downloadCourseFile(
+    BuildContext context, Map<String, dynamic> f) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final path = f['view_path'] as String?;
+    if (path == null) throw StateError('not ready');
+    messenger.showSnackBar(SnackBar(content: Text(_t('file_downloading'))));
+    final url = await SupabaseService.instance.client.storage
+        .from(_bucket)
+        .createSignedUrl(path, 60);
+    final res =
+        await http.get(Uri.parse(url)).timeout(const Duration(minutes: 5));
+    if (res.statusCode != 200) throw HttpException('file ${res.statusCode}');
+    final ext = path.split('.').last;
+    final original = (f['original_name'] as String?)?.trim();
+    final name = (original != null && original.isNotEmpty)
+        ? original
+        : '${f['title'] ?? 'file'}.$ext';
+    final saved = await FilePicker.platform
+        .saveFile(fileName: name, bytes: res.bodyBytes);
+    if (saved != null) {
+      messenger.showSnackBar(SnackBar(content: Text(_t('file_saved'))));
+    }
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(
+        content: Text(ErrorReporter.userMessage(e, page: 'course_file_download'))));
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Student: list on the course page
@@ -63,18 +109,27 @@ class CourseFilesSection extends StatelessWidget {
                 icon: _iconFor(f['view_type'] as String?),
                 accent: AppColors.teal),
             title: f['title'] as String? ?? '—',
-            subtitle: f['view_type'] == 'image' ? _t('file_image') : 'PDF',
-            trailing: (unlocked || f['is_free'] == true)
-                ? ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2)
-                : ArcIconView(ArcIcon.lock, size: 16, color: AppColors.muted2),
+            subtitle: [
+              _extOf(f),
+              f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
+            ].where((s) => s.isNotEmpty).join(' · '),
+            trailing: !(unlocked || f['is_free'] == true)
+                ? ArcIconView(ArcIcon.lock, size: 16, color: AppColors.muted2)
+                : _viewable(f)
+                    ? ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2)
+                    : ArcIconView(ArcIcon.download, size: 18, color: AppColors.teal),
             onTap: () {
               if (!(unlocked || f['is_free'] == true)) {
                 onLocked();
                 return;
               }
               if (!TapGuard.allow()) return;
-              Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => CourseFileViewerScreen(file: f)));
+              if (_viewable(f)) {
+                Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => CourseFileViewerScreen(file: f)));
+              } else {
+                downloadCourseFile(context, f);
+              }
             },
           ),
           const SizedBox(height: 10),
@@ -181,6 +236,14 @@ class _CourseFileViewerScreenState extends State<CourseFileViewerScreen> {
         appBar: AppBar(
           title: Text(widget.file['title'] as String? ?? '',
               maxLines: 1, overflow: TextOverflow.ellipsis),
+          actions: [
+            if (widget.file['allow_download'] == true)
+              IconButton(
+                tooltip: _t('btn_download'),
+                onPressed: () => downloadCourseFile(context, widget.file),
+                icon: ArcIconView(ArcIcon.download, size: 22, color: AppColors.text),
+              ),
+          ],
         ),
         body: Stack(children: [
           Positioned.fill(child: body),
@@ -263,7 +326,13 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
   final _title = TextEditingController();
   PlatformFile? _picked;
   bool _isFree = false;
+  bool _allowDownload = false;
   bool _busy = false;
+
+  String get _pickedExt => (_picked?.extension ?? '').toLowerCase();
+  // Office and CAD files can't be shown in the app: always downloadable.
+  bool get _mustDownload =>
+      _office.contains(_pickedExt) || _cad.contains(_pickedExt);
   String? _error;
 
   @override
@@ -302,11 +371,6 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
       );
       final f = r?.files.single;
       if (f == null || !mounted) return;
-      final ext = (f.extension ?? '').toLowerCase();
-      if (_cad.contains(ext)) {
-        setState(() => _error = _t('err_cad_export_pdf'));
-        return;
-      }
       if (f.size > _maxBytes) {
         setState(() => _error = _t('err_file_too_big'));
         return;
@@ -336,7 +400,9 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
         ? 'pdf'
         : _images.contains(ext)
             ? 'image'
-            : 'office';
+            : _cad.contains(ext)
+                ? 'cad'
+                : 'office';
     final sb = SupabaseService.instance.client;
     final id = const Uuid().v4();
     final rawPath = 'raw/${widget.courseId}/$id.$ext';
@@ -356,6 +422,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
         'original_name': f.name,
         'raw_path': rawPath,
         'is_free': _isFree,
+        'allow_download': _allowDownload || _mustDownload,
         'order_index': _files.length,
         'uploaded_by': SupabaseService.instance.currentUser?.id,
       });
@@ -374,6 +441,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
         _picked = null;
         _title.clear();
         _isFree = false;
+        _allowDownload = false;
       });
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(_t('file_processing_started'))));
@@ -438,7 +506,10 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
             leading: DashIconBadge(
                 icon: _iconFor(f['kind'] as String?), accent: AppColors.teal),
             title: f['title'] as String? ?? '—',
-            subtitle: f['original_name'] as String? ?? '',
+            subtitle: [
+              f['original_name'] as String? ?? '',
+              f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
+            ].where((s) => s.isNotEmpty).join(' · '),
             trailing: StatusPill(
               switch (f['status']) {
                 'published' => _t('file_ready'),
@@ -452,7 +523,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
               },
             ),
             actions: [
-              if (f['status'] == 'published')
+              if (f['status'] == 'published' && _viewable(f))
                 DashButton(_t('btn_preview'),
                     icon: ArcIcon.image,
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(
@@ -480,6 +551,25 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
             const SizedBox(height: 6),
             Text(_t('file_types_hint'),
                 style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: _mustDownload
+                  ? null
+                  : () => setState(() => _allowDownload = !_allowDownload),
+              child: Row(children: [
+                Checkbox(
+                    value: _allowDownload || _mustDownload,
+                    onChanged: _mustDownload
+                        ? null
+                        : (v) => setState(() => _allowDownload = v ?? false)),
+                Expanded(
+                    child: Text(
+                        _mustDownload
+                            ? _t('label_download_forced')
+                            : _t('label_allow_download'),
+                        style: AppFonts.body(size: 13, color: AppColors.muted))),
+              ]),
+            ),
             InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: () => setState(() => _isFree = !_isFree),

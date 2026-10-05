@@ -111,7 +111,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       try {
         final fileRows = await sb
             .from('course_files')
-            .select('id, title, view_path, view_type, is_free, status')
+            .select('id, title, kind, view_path, view_type, is_free, allow_download, original_name, status')
             .eq('course_id', course.id)
             .eq('status', 'published')
             .order('order_index');

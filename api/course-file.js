@@ -1,10 +1,11 @@
-// Course files (PDF, Word, Excel, PowerPoint, photos) -- one endpoint, two
-// callers:
+// Course files, kept in their original format -- one endpoint, two callers:
 //
 //  1. The teacher app, right after uploading an original to
 //     course-files/raw/<courseId>/<fileId>.<ext> and inserting the
 //     course_files row:   POST { action: 'start', fileId }  (teacher JWT)
-//     -> asks GitHub to run .github/workflows/process-course-file.yml.
+//     -> PDF / photo: asks GitHub to run process-course-file.yml (stamps
+//        the Arc logo, same format). Word/Excel/PowerPoint/CAD: published
+//        right here, untouched.
 //
 //  2. That workflow (header x-convert-key, the same CONVERT_KEY secret the
 //     lecture conversion uses; the database keeps only its sha256):
@@ -51,20 +52,22 @@ module.exports = async (req, res) => {
   });
   const { data: file } = await admin
     .from('course_files')
-    .select('id, course_id, kind, raw_path, status, courses(teacher_id)')
+    .select('id, course_id, kind, raw_path, view_path, status, courses(teacher_id)')
     .eq('id', fileId)
     .maybeSingle();
   if (!file) {
     res.status(404).json({ error: 'File not found' });
     return;
   }
+  // Same name and format as uploaded, only moved to the view folder.
+  const ext = ((file.raw_path || file.view_path || '').split('.').pop() || '')
+    .toLowerCase();
+  const viewType =
+    file.kind === 'image' ? 'image' : file.kind === 'pdf' ? 'pdf' : 'file';
+  const viewPath = `view/${file.course_id}/${file.id}.${ext}`;
 
   // ---------- teacher: start processing ----------
   if (action === 'start') {
-    if (!GITHUB_DISPATCH_TOKEN) {
-      res.status(500).json({ error: 'Processing not configured' });
-      return;
-    }
     const accessToken = (req.headers.authorization || '').replace('Bearer ', '');
     const verifier = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
     const { data: userData, error: userErr } = await verifier.auth.getUser(accessToken);
@@ -85,6 +88,27 @@ module.exports = async (req, res) => {
     }
     if (file.status !== 'processing' || !file.raw_path) {
       res.status(409).json({ error: 'Nothing to process' });
+      return;
+    }
+    // Word/Excel/PowerPoint/CAD: nothing to stamp, publish the original.
+    if (file.kind === 'office' || file.kind === 'cad') {
+      const { error: moveErr } = await admin.storage
+        .from(BUCKET).move(file.raw_path, viewPath);
+      const { error: finErr } = moveErr ? { error: null } : await admin.rpc(
+        'finish_course_file', {
+          p_file_id: file.id, p_view_path: viewPath,
+          p_view_type: viewType, p_ok: true,
+        });
+      if (moveErr || finErr) {
+        console.error('course-file: publish failed', moveErr, finErr);
+        res.status(500).json({ error: 'Could not publish file' });
+        return;
+      }
+      res.status(200).json({ ok: true, published: true });
+      return;
+    }
+    if (!GITHUB_DISPATCH_TOKEN) {
+      res.status(500).json({ error: 'Processing not configured' });
       return;
     }
     const gh = await fetch(
@@ -118,8 +142,6 @@ module.exports = async (req, res) => {
     return;
   }
 
-  const viewType = file.kind === 'image' ? 'image' : 'pdf';
-  const viewPath = `view/${file.course_id}/${file.id}.${viewType === 'image' ? 'jpg' : 'pdf'}`;
 
   if (action === 'job') {
     if (!file.raw_path) {
@@ -135,7 +157,6 @@ module.exports = async (req, res) => {
       res.status(500).json({ error: 'Could not sign' });
       return;
     }
-    const ext = (file.raw_path.split('.').pop() || '').toLowerCase();
     res.status(200).json({
       kind: file.kind,
       ext,
