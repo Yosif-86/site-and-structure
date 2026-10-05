@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../services/deep_links.dart';
@@ -387,21 +388,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final links = <Widget>[
       if (instagram != null)
         _SocialButton(
-          icon: Icons.camera_alt_outlined,
+          brand: FontAwesomeIcons.instagram,
           label: t('label_instagram'),
           accent: AppColors.byline,
           onTap: () => _openLink(() => DeepLinks.instagram(instagram)),
         ),
       if (telegram != null)
         _SocialButton(
-          icon: Icons.send_outlined,
+          brand: FontAwesomeIcons.telegram,
           label: t('label_telegram'),
           accent: AppColors.teal,
           onTap: () => _openLink(() => DeepLinks.telegram(telegram)),
         ),
       if (phone != null)
         _SocialButton(
-          icon: Icons.chat_outlined,
+          brand: FontAwesomeIcons.whatsapp,
           label: t('label_whatsapp'),
           accent: AppColors.teal,
           onTap: () => _openLink(() => DeepLinks.whatsapp(phone)),
@@ -494,13 +495,16 @@ class _AvatarButtonState extends State<_AvatarButton> {
 }
 
 class _SocialButton extends StatelessWidget {
-  final IconData icon;
+  /// A Material icon, or [brand] for a platform logo (Font Awesome).
+  final IconData? icon;
+  final FaIconData? brand;
   final String label;
   final Color accent;
   final VoidCallback onTap;
 
   const _SocialButton({
-    required this.icon,
+    this.icon,
+    this.brand,
     required this.label,
     required this.accent,
     required this.onTap,
@@ -524,7 +528,9 @@ class _SocialButton extends StatelessWidget {
                 color: AppColors.glassBg,
                 border: Border.all(color: AppColors.line),
               ),
-              child: Icon(icon, color: AppColors.text, size: 20),
+              child: brand != null
+                  ? FaIcon(brand, color: AppColors.text, size: 20)
+                  : Icon(icon, color: AppColors.text, size: 20),
             ),
             const SizedBox(height: 7),
             Text(label,

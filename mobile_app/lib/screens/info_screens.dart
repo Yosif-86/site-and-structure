@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../services/deep_links.dart';
@@ -44,7 +45,7 @@ class SupportScreen extends StatelessWidget {
               if (hasWhatsapp) ...[
                 const SizedBox(height: 16),
                 _ContactButton(
-                  icon: Icons.chat_outlined,
+                  brand: FontAwesomeIcons.whatsapp,
                   label: t('label_whatsapp'),
                   onTap: () => DeepLinks.whatsapp(kSupportWhatsappPhone),
                 ),
@@ -66,11 +67,13 @@ class SupportScreen extends StatelessWidget {
 }
 
 class _ContactButton extends StatelessWidget {
-  final IconData icon;
+  /// A Material icon, or [brand] for a platform logo (Font Awesome).
+  final IconData? icon;
+  final FaIconData? brand;
   final String label;
   final VoidCallback onTap;
 
-  const _ContactButton({required this.icon, required this.label, required this.onTap});
+  const _ContactButton({this.icon, this.brand, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -78,7 +81,7 @@ class _ContactButton extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: onTap,
-        icon: Icon(icon, size: 18),
+        icon: brand != null ? FaIcon(brand, size: 18) : Icon(icon, size: 18),
         label: Text(label),
       ),
     );

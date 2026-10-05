@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../models/course.dart';
@@ -181,9 +182,9 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (insta != null && insta.isNotEmpty)
-              StatusPill('Instagram: @$insta', tone: StatusTone.neutral),
+              _BrandHandle(FontAwesomeIcons.instagram, insta),
             if (tele != null && tele.isNotEmpty)
-              StatusPill('Telegram: @$tele', tone: StatusTone.neutral),
+              _BrandHandle(FontAwesomeIcons.telegram, tele),
           ]),
         ],
         if (widget.adminView && _private != null) ...[
@@ -236,4 +237,30 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         titleStyle: AppFonts.heading(size: 24),
         subtitle: label,
       );
+}
+
+/// Instagram or Telegram handle with the platform's own logo.
+class _BrandHandle extends StatelessWidget {
+  final FaIconData icon;
+  final String handle;
+  const _BrandHandle(this.icon, this.handle);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.muted.withValues(alpha: 0.14),
+        border: Border.all(color: AppColors.muted.withValues(alpha: 0.45)),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        FaIcon(icon, size: 15, color: AppColors.text),
+        const SizedBox(width: 7),
+        Text('@$handle',
+            textDirection: TextDirection.ltr,
+            style: AppFonts.body(size: 12.5, color: AppColors.text)),
+      ]),
+    );
+  }
 }
