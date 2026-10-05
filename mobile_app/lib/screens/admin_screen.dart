@@ -12,6 +12,7 @@ import '../services/api_service.dart';
 import '../services/payment_rules.dart';
 import '../services/r2_upload.dart';
 import '../services/safe_picker.dart';
+import '../services/text_search.dart';
 import '../services/bidi.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
@@ -103,6 +104,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
   final _payZainCtrl = TextEditingController();
   final _payQiCtrl = TextEditingController();
+  // Search box shared by the people / enrollment / payment lists.
+  final _searchCtrl = TextEditingController();
+  String _q = '';
   XFile? _payQrFile;
   String? _payQrUrl;
   bool _payLoaded = false;
@@ -141,6 +145,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _live.stop();
     _payZainCtrl.dispose();
     _payQiCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -189,7 +194,7 @@ class _AdminScreenState extends State<AdminScreen> {
         sb.from('courses').select(
             'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
         sb.from('profiles').select(
-            'id, full_name, phone, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
+            'id, full_name, phone, public_id, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
         _loadEmails(),
         sb.from('enrollments').select('*'),
         sb
@@ -398,7 +403,68 @@ class _AdminScreenState extends State<AdminScreen> {
   String _courseTitle(String slug) =>
       (_courseBySlug[slug]?['title'] as String?) ?? slug;
 
-  void _goto(_View v) => setState(() => _view = v);
+  void _goto(_View v) => setState(() {
+        _view = v;
+        _searchCtrl.clear();
+        _q = '';
+      });
+
+  /// The account's short public ID as "#2274" (null if it has none).
+  String? _idTag(Map<String, dynamic>? profile) {
+    final id = profile?['public_id']?.toString();
+    return (id == null || id.isEmpty) ? null : '#$id';
+  }
+
+  /// Name, email, phone and the #ID are all searchable. "#2274" and "2274"
+  /// both find that account.
+  bool _hit(Iterable<Object?> fields, Map<String, dynamic>? profile) {
+    final tag = _idTag(profile);
+    return TextSearch.matches(
+        _q.replaceAll('#', ' '), [...fields, if (tag != null) tag]);
+  }
+
+  /// Exact ID matches first when the query is a 4-digit ID.
+  int _idFirst(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    final q = _q.replaceAll('#', '').trim();
+    if (q.length != 4) return 0;
+    final ea = a?['public_id']?.toString() == q ? 0 : 1;
+    final eb = b?['public_id']?.toString() == q ? 0 : 1;
+    return ea.compareTo(eb);
+  }
+
+  Widget _searchBar(String Function(String) t) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _q = v),
+          textInputAction: TextInputAction.search,
+          decoration: InputDecoration(
+            hintText: t('admin_search_hint'),
+            prefixIcon: Padding(
+              padding: const EdgeInsets.all(12),
+              child: ArcIconView(ArcIcon.search, size: 18, color: AppColors.muted2),
+            ),
+            suffixIcon: _q.isEmpty
+                ? null
+                : IconButton(
+                    icon: ArcIconView(ArcIcon.close, size: 16, color: AppColors.muted2),
+                    onPressed: () => setState(() {
+                      _searchCtrl.clear();
+                      _q = '';
+                    })),
+          ),
+        ),
+      );
+
+  /// A list with the search box above it ("no results" when nothing matches).
+  Widget _withSearch(String Function(String) t, bool empty, Widget list) =>
+      Column(children: [
+        _searchBar(t),
+        Expanded(
+            child: empty
+                ? _empty(t('explore_no_results'), ArcIcon.search)
+                : list),
+      ]);
 
   Future<void> _approve(String enrollmentId) => _once(enrollmentId, () async {
     final t = AppStrings.instance.t;
@@ -1004,17 +1070,25 @@ class _AdminScreenState extends State<AdminScreen> {
     });
   }
 
-  Widget _person(String? name, String? email, String? phone) => DashCard(
+  Widget _person(String? name, String? email, String? phone, String? tag) =>
+      DashCard(
         leading: DashAvatar(name: name),
         title: name ?? '—',
         subtitle: email ?? '—',
-        meta: [if (phone != null && phone.isNotEmpty) phone],
+        meta: [
+          if (phone != null && phone.isNotEmpty) phone,
+          if (tag != null) tag,
+        ],
       );
 
   Widget _buildTeachersList(String Function(String) t) {
     if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);
-    return _list(_teacherProfiles.length, (i) {
-      final p = _teacherProfiles[i];
+    final shown = _teacherProfiles
+        .where((p) => _hit([p['full_name'], _emailByUser[p['id']], p['phone']], p))
+        .toList()
+      ..sort(_idFirst);
+    return _withSearch(t, shown.isEmpty, _list(shown.length, (i) {
+      final p = shown[i];
       final id = p['id'] as String;
       return DashCard(
         leading: DashAvatar(name: p['full_name'] as String?),
@@ -1022,6 +1096,7 @@ class _AdminScreenState extends State<AdminScreen> {
         subtitle: _emailByUser[id] ?? '—',
         meta: [
           if ((p['phone'] as String?)?.isNotEmpty ?? false) p['phone'] as String,
+          if (_idTag(p) != null) _idTag(p)!,
           '${_allCourses.where((c) => c['teacher_id'] == id).length} ${t('stat_courses')}',
         ],
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
@@ -1031,19 +1106,27 @@ class _AdminScreenState extends State<AdminScreen> {
                 adminView: true,
                 email: _emailByUser[id]))),
       );
-    });
+    }));
   }
 
   Widget _buildStudentsList(String Function(String) t) {
     final userIds =
         {for (final e in _activeEnrollments) e['user_id'] as String}.toList();
     if (userIds.isEmpty) return _empty(t('no_students'), ArcIcon.users);
-    return _list(userIds.length, (i) {
-      final uid = userIds[i];
+    final shown = userIds
+        .where((uid) => _hit([
+              _profileByUser[uid]?['full_name'],
+              _emailByUser[uid],
+              _profileByUser[uid]?['phone']
+            ], _profileByUser[uid]))
+        .toList()
+      ..sort((a, b) => _idFirst(_profileByUser[a], _profileByUser[b]));
+    return _withSearch(t, shown.isEmpty, _list(shown.length, (i) {
+      final uid = shown[i];
       final prof = _profileByUser[uid];
       return _person(prof?['full_name'] as String?, _emailByUser[uid],
-          prof?['phone'] as String?);
-    });
+          prof?['phone'] as String?, _idTag(prof));
+    }));
   }
 
   /// What one active enrollment actually paid. Uses the amounts stored on
@@ -1413,9 +1496,20 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildPayments(String Function(String) t) {
-    final list = _pendingPayments;
-    if (list.isEmpty) return _empty(t('no_payment_requests'), ArcIcon.check);
-    return _list(list.length, (i) {
+    final all = _pendingPayments;
+    if (all.isEmpty) return _empty(t('no_payment_requests'), ArcIcon.check);
+    final list = all.where((e) {
+      final uid = e['user_id'] as String;
+      final p = _profileByUser[uid];
+      return _hit([
+        p?['full_name'],
+        _emailByUser[uid],
+        p?['phone'],
+        _courseTitle(e['course_slug'] as String)
+      ], p);
+    }).toList()
+      ..sort((a, b) => _idFirst(_profileByUser[a['user_id']], _profileByUser[b['user_id']]));
+    return _withSearch(t, list.isEmpty, _list(list.length, (i) {
       final e = list[i];
       final uid = e['user_id'] as String;
       final prof = _profileByUser[uid];
@@ -1426,7 +1520,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final proof = e['payment_proof_path'] as String?;
       return PaymentRequestCard(
         studentName: prof?['full_name'] as String? ?? _emailByUser[uid] ?? '—',
-        contact: [_emailByUser[uid], prof?['phone']]
+        contact: [_emailByUser[uid], prof?['phone'], _idTag(prof)]
             .whereType<String>()
             .where((s) => s.isNotEmpty)
             .join(' · '),
@@ -1446,15 +1540,26 @@ class _AdminScreenState extends State<AdminScreen> {
         onApprove: () => _approve(e['id'] as String),
         onReject: () => _rejectEnrollment(e['id'] as String),
       );
-    });
+    }));
   }
 
   Widget _buildEnrollments(String Function(String) t) {
     if (_enrollments.isEmpty) return _empty(t('no_enrollments'), ArcIcon.lessons);
     _enrollments.sort((a, b) => ((b['created_at'] as String?) ?? '')
         .compareTo((a['created_at'] as String?) ?? ''));
-    return _list(_enrollments.length, (i) {
-      final e = _enrollments[i];
+    final rows = _enrollments.where((e) {
+      final uid = e['user_id'] as String;
+      final p = _profileByUser[uid];
+      return _hit([
+        p?['full_name'],
+        _emailByUser[uid],
+        p?['phone'],
+        _courseTitle(e['course_slug'] as String)
+      ], p);
+    }).toList()
+      ..sort((a, b) => _idFirst(_profileByUser[a['user_id']], _profileByUser[b['user_id']]));
+    return _withSearch(t, rows.isEmpty, _list(rows.length, (i) {
+      final e = rows[i];
       final userId = e['user_id'] as String;
       final prof = _profileByUser[userId];
       final email = _emailByUser[userId] ?? '—';
@@ -1475,7 +1580,7 @@ class _AdminScreenState extends State<AdminScreen> {
             tone: isActive ? StatusTone.good : StatusTone.warn),
         meta: [
           if (prof?['full_name'] != null || prof?['phone'] != null)
-            '${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}',
+            '${prof?['full_name'] ?? '—'} · ${prof?['phone'] ?? '—'}${_idTag(prof) != null ? ' · ${_idTag(prof)}' : ''}',
           '$payment · ${_date(e['created_at'] as String?)}',
           if (approvedBy != null)
             '${t('approved_by')}: ${_emailByUser[approvedBy] ?? approvedBy} · ${_date(e['approved_at'] as String?, time: true)}',
@@ -1498,7 +1603,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   _removeEnrollment(e['id'] as String, title, email)),
         ],
       );
-    });
+    }));
   }
 
   Widget _buildReview(String Function(String) t) {

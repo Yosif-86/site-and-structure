@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/error_reporter.dart';
+import '../services/text_search.dart';
 import '../services/learning_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -75,34 +76,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  /// Folds Arabic spelling variants together so "انشائية" finds
-  /// "إنشائية": hamza forms of alef, taa marbuta / haa, alef maqsura / yaa,
-  /// plus diacritics and tatweel are ignored.
-  static String _normalize(String s) {
-    final b = StringBuffer();
-    for (final r in s.toLowerCase().runes) {
-      if (r >= 0x064B && r <= 0x0652) continue; // tashkeel
-      if (r == 0x0640) continue; // tatweel
-      switch (r) {
-        case 0x0623: // أ
-        case 0x0625: // إ
-        case 0x0622: // آ
-        case 0x0671: // ٱ
-          b.writeCharCode(0x0627); // ا
-        case 0x0629: // ة
-          b.writeCharCode(0x0647); // ه
-        case 0x0649: // ى
-          b.writeCharCode(0x064A); // ي
-        case 0x0624: // ؤ
-          b.writeCharCode(0x0648); // و
-        case 0x0626: // ئ
-          b.writeCharCode(0x064A); // ي
-        default:
-          b.writeCharCode(r);
-      }
-    }
-    return b.toString();
-  }
+  static String _normalize(String s) => TextSearch.normalize(s);
 
   List<Course> get _filtered {
     final ar = AppStrings.instance.isAr;

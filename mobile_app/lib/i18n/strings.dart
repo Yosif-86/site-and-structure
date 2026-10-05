@@ -226,6 +226,7 @@ class AppStrings extends ChangeNotifier {
     'nav_explore': 'استكشاف',
     'lessons_label': 'درس',
     'files_label': 'ملف',
+    'admin_search_hint': 'ابحث بالاسم أو البريد أو الهاتف أو رقم الحساب #',
     'duration_label': 'المدة',
     'dur_hr': 'س',
     'dur_min': 'د',
