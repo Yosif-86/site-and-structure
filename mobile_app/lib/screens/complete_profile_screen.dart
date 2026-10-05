@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
@@ -118,10 +120,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         if (mounted) setState(() => _error = _t('err_phone_taken'));
         return;
       }
-      // Upsert: an account whose profile row never got created (sign-up cut
-      // off mid-way) gets it here instead of updating nothing.
+      // Also creates the row if a cut-off sign-up never made it.
       await SupabaseService.instance
-          .upsertProfileWithTerms({'id': user.id, 'full_name': name, 'phone': phone});
+          .saveProfileBasics(id: user.id, name: name, phone: phone);
+      unawaited(SupabaseService.instance.recordTermsAcceptance());
     } on PostgrestException catch (e) {
       if (mounted) {
         setState(() => _error =

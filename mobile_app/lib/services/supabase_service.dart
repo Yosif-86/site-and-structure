@@ -595,8 +595,8 @@ class SupabaseService extends ChangeNotifier {
       // so the user isn't left half signed-in; on the next sign-in the
       // complete-profile step creates the profile row (it upserts).
       try {
-        await upsertProfileWithTerms(
-            {'id': user.id, 'full_name': name.trim(), 'phone': normalizedPhone});
+        await saveProfileBasics(
+            id: user.id, name: name.trim(), phone: normalizedPhone);
       } on PostgrestException catch (e) {
         await client.auth.signOut().catchError((_) {});
         return e.code == '23505' ? 'err_phone_taken' : 'err_login_network';
@@ -617,6 +617,7 @@ class SupabaseService extends ChangeNotifier {
         return 'err_device_limit';
       }
       unawaited(_logLoginEvent(user.id, user.email ?? email.trim()));
+      unawaited(recordTermsAcceptance());
       notifyListeners();
       return null;
     } on AuthException catch (e) {
@@ -775,19 +776,36 @@ class SupabaseService extends ChangeNotifier {
   /// design, same as the website's redeem_teacher_invite() call -- a
   /// revoked/expired/already-used token must never undo the signup that
   /// already succeeded; it just means this account stays a normal student.
-  /// Profile upsert that also records terms acceptance. Before the
-  /// terms columns exist (add-oct05-fixes.sql) it saves without them.
-  Future<void> upsertProfileWithTerms(Map<String, dynamic> row) async {
-    try {
-      await client.from('profiles').upsert({
-        ...row,
-        'terms_accepted_at': DateTime.now().toUtc().toIso8601String(),
-        'terms_version': kTermsVersion,
-      });
-    } on PostgrestException catch (e) {
-      if (e.code != 'PGRST204' && !e.message.contains('terms_')) rethrow;
-      await client.from('profiles').upsert(row);
+  /// Name and phone on the profile row, creating the row if it isn't there
+  /// yet (a sign-up cut off half way). Users may only write a short list of
+  /// profile columns (full_name, phone, ...): writing anything else here --
+  /// an upsert that sets id, or the terms columns -- is refused by the
+  /// database and made registration fail.
+  Future<void> saveProfileBasics({
+    required String id,
+    required String name,
+    required String phone,
+  }) async {
+    final updated = await client
+        .from('profiles')
+        .update({'full_name': name, 'phone': phone})
+        .eq('id', id)
+        .select('id');
+    if ((updated as List).isEmpty) {
+      await client
+          .from('profiles')
+          .insert({'id': id, 'full_name': name, 'phone': phone});
     }
+  }
+
+  /// Stores that this user agreed to the terms (version + time). Goes through
+  /// a database function because users can't write those columns directly.
+  /// Best effort: never blocks sign-up.
+  Future<void> recordTermsAcceptance() async {
+    try {
+      await client.rpc('record_terms_acceptance',
+          params: {'p_version': kTermsVersion});
+    } catch (_) {}
   }
 
   Future<void> redeemTeacherInvite(String token) async {

@@ -393,7 +393,7 @@ begin
   if not public.is_admin() then
     raise exception 'Not authorized.';
   end if;
-  update profiles set active_session_token = gen_random_uuid()::text
+  update profiles set active_session_token = gen_random_uuid()
     where id = p_user_id;
 end;
 $$;

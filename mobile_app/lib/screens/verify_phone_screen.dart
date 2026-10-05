@@ -39,6 +39,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
   // Last code sent, kept across screen instances so leaving and coming back
   // doesn't send (and pay for) another SMS inside the cooldown.
   static String? _lastSentPhone;
+  static String? _lastSentUser;
   static DateTime? _lastSentAt;
 
   String? _phone;
@@ -127,7 +128,10 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
     }
     // A code already went to this number moments ago: reuse it.
     final last = _lastSentAt;
-    if (last != null && _lastSentPhone == _phone) {
+    final me = SupabaseService.instance.currentUser?.id;
+    // A code is stored per account: another account using the same number
+    // moments later still needs its own.
+    if (last != null && _lastSentPhone == _phone && _lastSentUser == me) {
       final left = 60 - DateTime.now().difference(last).inSeconds;
       if (left > 0) {
         setState(() {
@@ -153,6 +157,7 @@ class _VerifyPhoneScreenState extends State<VerifyPhoneScreen> {
       if (result.ok) {
         _info = _t('otp_sent');
         _lastSentPhone = _phone;
+        _lastSentUser = SupabaseService.instance.currentUser?.id;
         _lastSentAt = DateTime.now();
         _startCooldown();
       } else {
