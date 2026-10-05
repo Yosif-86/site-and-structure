@@ -57,6 +57,8 @@ echo "Transcoding $INPUT -> $OUT_ROOT (480p/720p/1080p, AES-128 encrypted)..."
 fit() { echo "scale=w='if(gte(iw,ih),-2,$1)':h='if(gte(iw,ih),$1,-2)',setsar=1"; }
 
 # One ffmpeg run producing all three renditions + segmented HLS output per rendition.
+# veryfast: about 2-3x quicker than the default preset at the same bitrates,
+# so a long lecture is ready much sooner.
 ffmpeg -y -i "$INPUT" \
   -filter_complex "[0:v]split=3[v1][v2][v3]; \
     [v1]$(fit 480)[v1out]; \
@@ -68,6 +70,7 @@ ffmpeg -y -i "$INPUT" \
   -map a:0 -c:a:0 aac -b:a:0 128k \
   -map a:0 -c:a:1 aac -b:a:1 128k \
   -map a:0 -c:a:2 aac -b:a:2 128k \
+  -preset veryfast \
   -f hls -hls_time 6 -hls_playlist_type vod \
   -hls_flags independent_segments \
   -hls_segment_type mpegts \
