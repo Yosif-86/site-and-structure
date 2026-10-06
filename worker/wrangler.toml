@@ -10,10 +10,10 @@ bucket_name = "site-structure-videos"
 # CLEANUP_MODE "dry" only logs what it would delete; "live" deletes.
 # Needs: wrangler secret put SUPABASE_SERVICE_ROLE_KEY
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["30 0 * * *"]
 
 [vars]
-CLEANUP_MODE = "dry"
+CLEANUP_MODE = "live"
 
 # Set the shared signing secret (must match R2_SECURITY_KEY
 # used in api/get-video-url.js) with:
