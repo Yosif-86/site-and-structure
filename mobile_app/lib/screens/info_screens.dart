@@ -7,15 +7,15 @@ import '../theme.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/glass_card.dart';
 
-/// TODO(Yosif): fill in the real support contact details.
+/// Support contact. The email forwards to the Arc support inbox (Cloudflare
+/// Email Routing). TODO(Yosif): add the support WhatsApp number (planned for
+/// about a month after 2026-10-06; also SUPPORT_WHATSAPP in site.js).
 ///
-/// Deliberately left empty rather than filled with a plausible-looking
-/// placeholder — a wrong phone number or email shipped in a release is worse
-/// than an honest "not set up yet". While these are empty the Support screen
-/// says so and offers no dead tap target; set either one (or both) and the
-/// matching button appears automatically, no other code change needed.
+/// An empty value hides its button rather than showing a placeholder — a
+/// wrong number shipped in a release is worse than none. Fill it in and the
+/// button appears automatically, no other code change needed.
 const String kSupportWhatsappPhone = '';
-const String kSupportEmail = '';
+const String kSupportEmail = 'support@arcplatformiq.com';
 
 /// Support contact screen, reached from Settings.
 class SupportScreen extends StatelessWidget {

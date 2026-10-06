@@ -6,7 +6,7 @@
 // so nothing ships pointing at a wrong or dead address.
 const PLAY_STORE_URL = '';
 const APP_STORE_URL = '';
-const SUPPORT_EMAIL = '';
+const SUPPORT_EMAIL = 'support@arcplatformiq.com';
 const SUPPORT_WHATSAPP = ''; // Iraqi format, e.g. 07XXXXXXXXX
 
 (function(){
