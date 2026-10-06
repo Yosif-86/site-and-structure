@@ -58,15 +58,16 @@ fit() { echo "scale=w='if(gte(iw,ih),-2,$1)':h='if(gte(iw,ih),$1,-2)',setsar=1";
 
 # One ffmpeg run producing all three renditions + segmented HLS output per rendition.
 # veryfast: about 2-3x quicker than the default preset at the same bitrates,
-# so a long lecture is ready much sooner.
+# so a long lecture is ready much sooner. Bitrates suit lecture content
+# (slides, handwriting, screen): about 2.6 GB per hour for all three.
 ffmpeg -y -i "$INPUT" \
   -filter_complex "[0:v]split=3[v1][v2][v3]; \
     [v1]$(fit 480)[v1out]; \
     [v2]$(fit 720)[v2out]; \
     [v3]$(fit 1080)[v3out]" \
-  -map "[v1out]" -c:v:0 h264 -b:v:0 900k  -maxrate:v:0 963k  -bufsize:v:0 1350k \
-  -map "[v2out]" -c:v:1 h264 -b:v:1 2500k -maxrate:v:1 2675k -bufsize:v:1 3750k \
-  -map "[v3out]" -c:v:2 h264 -b:v:2 5000k -maxrate:v:2 5350k -bufsize:v:2 7500k \
+  -map "[v1out]" -c:v:0 h264 -b:v:0 600k  -maxrate:v:0 642k  -bufsize:v:0 900k \
+  -map "[v2out]" -c:v:1 h264 -b:v:1 1500k -maxrate:v:1 1605k -bufsize:v:1 2250k \
+  -map "[v3out]" -c:v:2 h264 -b:v:2 3200k -maxrate:v:2 3424k -bufsize:v:2 4800k \
   -map a:0 -c:a:0 aac -b:a:0 128k \
   -map a:0 -c:a:1 aac -b:a:1 128k \
   -map a:0 -c:a:2 aac -b:a:2 128k \
