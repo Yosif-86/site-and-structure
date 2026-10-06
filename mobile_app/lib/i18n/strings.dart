@@ -493,7 +493,6 @@ class AppStrings extends ChangeNotifier {
     // Settings list
     'settings_payment_info': 'معلومات الدفع',
     'settings_payment_info_sub': 'أرقام زين كاش وكي كارد لاستلام أرباحك',
-    'settings_payment_teacher_only': 'متاح لحسابات المدرّسين فقط',
     'settings_support': 'الدعم',
     'settings_support_sub': 'تواصل معنا للمساعدة',
     'settings_appearance': 'المظهر',
