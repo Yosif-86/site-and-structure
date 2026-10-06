@@ -70,24 +70,81 @@
     if(dest) location.replace(dest);
   })();
 
+  // Second step: after the password, a 6-digit code is emailed and must be
+  // typed in (same rule as the app for teacher/admin accounts).
+  const codeEl = document.getElementById('code');
+  const codeField = document.getElementById('codeField');
+  const passField = document.getElementById('passwordField');
+  const resendBtn = document.getElementById('resendBtn');
+  let codeEmail = null;
+  let cooldownUntil = 0;
+
+  async function sendCode(email){
+    const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+    if(error){
+      show(error.status === 429 ? 'انتظر دقيقة قبل طلب رمز جديد.' : 'تعذر إرسال الرمز، حاول مرة أخرى.');
+      return false;
+    }
+    cooldownUntil = Date.now() + 60000;
+    return true;
+  }
+
+  function showCodeStep(email){
+    codeEmail = email;
+    passField.hidden = true;
+    codeField.hidden = false;
+    resendBtn.hidden = false;
+    emailEl.readOnly = true;
+    btn.textContent = 'تأكيد الرمز';
+    codeEl.value = '';
+    codeEl.focus();
+    show('أرسلنا رمزًا من 6 أرقام إلى بريدك. لم يصلك؟ تحقق من مجلد Spam.', true);
+  }
+
+  async function verifyCode(){
+    const token = codeEl.value.replace(/\s/g, '');
+    if(!/^\d{6}$/.test(token)){ show('أدخل الرمز المكوّن من 6 أرقام.'); return; }
+    const { data, error } = await sb.auth.verifyOtp({ email: codeEmail, token, type: 'email' });
+    if(error || !data.session){
+      show(/expired/i.test(error?.message || '') ? 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.' : 'رمز التحقق غير صحيح.');
+      return;
+    }
+    const dest = destination(await staffProfile(data.user.id));
+    if(!dest){
+      await sb.auth.signOut();
+      show('هذه الصفحة للإدارة فقط. استخدم التطبيق.');
+      return;
+    }
+    await logLoginEvent(data.user.id, data.user.email);
+    location.replace(dest);
+  }
+
+  resendBtn.addEventListener('click', async () => {
+    if(!codeEmail) return;
+    const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
+    if(wait > 0){ show('يمكنك طلب رمز جديد بعد ' + wait + ' ثانية.'); return; }
+    if(await sendCode(codeEmail)) show('أرسلنا رمزًا جديدًا.', true);
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = emailEl.value.trim();
-    const password = passEl.value;
-    if(!email || !password){ show('أدخل بريدك الإلكتروني وكلمة المرور.'); return; }
     btn.disabled = true;
     show('');
     try{
+      if(codeEmail){ await verifyCode(); return; }
+      const email = emailEl.value.trim();
+      const password = passEl.value;
+      if(!email || !password){ show('أدخل بريدك الإلكتروني وكلمة المرور.'); return; }
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if(error){ show('البريد الإلكتروني أو كلمة المرور غير صحيحة.'); return; }
       const dest = destination(await staffProfile(data.user.id));
+      // Password alone never opens the dashboards: sign out, then email a code.
+      await sb.auth.signOut();
       if(!dest){
-        await sb.auth.signOut();
         show('هذه الصفحة للإدارة فقط. استخدم التطبيق.');
         return;
       }
-      await logLoginEvent(data.user.id, data.user.email);
-      location.replace(dest);
+      if(await sendCode(email)) showCodeStep(email);
     }finally{
       btn.disabled = false;
     }

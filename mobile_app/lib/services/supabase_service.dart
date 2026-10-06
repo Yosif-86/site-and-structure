@@ -26,10 +26,9 @@ const String kApiBaseUrl = 'https://site-and-structure.vercel.app';
 // goes through phone verification again.
 const bool kPhoneOtpEnabled = true;
 
-// Paused: see _requiresLoginEmailOtp's doc comment. Flip back on once the
-// email-link flow (or a proper code, after custom SMTP is set up) has been
-// verified against a real inbox.
-const bool kTeacherAdminEmailOtpEnabled = false;
+// Teacher/admin sign-in needs a 6-digit code emailed through the custom
+// SMTP (Resend). Turn off to fall back to password only.
+const bool kTeacherAdminEmailOtpEnabled = true;
 
 /// Every account must sign in again this long after signing in, however
 /// actively it uses the app (session timeout).
@@ -52,10 +51,10 @@ const String _sessionTokenKey = 'ss_session_token';
 const String _savedEmailKey = 'ss_saved_login_email';
 const String _savedPasswordKey = 'ss_saved_login_password';
 
-/// Result of login() / awaitEmailLoginLink(): either it's done (success),
+/// Result of login() / verifyLoginEmailCode(): either it's done (success),
 /// it failed (error, an i18n key or a raw message), or the password checked
-/// out but a teacher/admin account still needs its emailed link opened
-/// (needsEmailOtp + email) before awaitEmailLoginLink() can finish it.
+/// out but a teacher/admin account still needs the emailed 6-digit code
+/// (needsEmailOtp + email), checked by verifyLoginEmailCode().
 class LoginResult {
   final bool success;
   final bool needsEmailOtp;
@@ -420,13 +419,8 @@ class SupabaseService extends ChangeNotifier {
 
   /// Teacher/admin accounts can publish paid content and see revenue, so a
   /// leaked password alone shouldn't be enough to get in -- every login for
-  /// those two roles needs a one-time email link as a second factor, on top
-  /// of the password. Regular students are unaffected.
-  ///
-  /// Paused pre-launch: Supabase's default "Magic link or OTP" template
-  /// only ever sends the link half (a typed code needs custom SMTP, not
-  /// set up yet), and the flow hasn't been tested end-to-end against a
-  /// real inbox. Flip this back on once that's verified.
+  /// those two roles needs a 6-digit code emailed to the account, on top of
+  /// the password (or Google). Regular students are unaffected.
   Future<bool> _requiresLoginEmailOtp(String userId) async {
     if (!kTeacherAdminEmailOtpEnabled) return false;
     try {
@@ -475,9 +469,6 @@ class SupabaseService extends ChangeNotifier {
     if (email.trim().isEmpty || password.trim().isEmpty) {
       return const LoginResult(error: 'err_enter_email_pass');
     }
-    // A fresh attempt should never inherit an abandoned previous one's
-    // pending-email-link state.
-    _awaitingEmailLinkConfirmation = false;
     final trimmedEmail = email.trim();
     try {
       final res = await client.auth
@@ -488,10 +479,10 @@ class SupabaseService extends ChangeNotifier {
 
       if (await _requiresLoginEmailOtp(user.id)) {
         // Password confirmed but not enough on its own for this role --
-        // drop the session and only grant one once the emailed link is
-        // actually opened, tracked by awaitEmailLoginLink() below.
+        // drop the session; verifyLoginEmailCode() grants one once the
+        // emailed code is typed in.
         await client.auth.signOut();
-        final err = await _sendLoginEmailLink(trimmedEmail);
+        final err = await _sendLoginEmailCode(trimmedEmail);
         if (err != null) return LoginResult(error: err);
         return LoginResult(needsEmailOtp: true, email: trimmedEmail);
       }
@@ -504,53 +495,48 @@ class SupabaseService extends ChangeNotifier {
     }
   }
 
-  /// Supabase's own "Magic link or OTP" template is link-only in this
-  /// project (no {{ .Token }} -- editing it needs custom SMTP, which isn't
-  /// set up), so the teacher/admin second factor is "open the emailed link
-  /// on this device", not a typed code. emailRedirectTo points it at the
-  /// app's own deep link scheme (already registered for Google sign-in)
-  /// instead of the default Site URL, so tapping it reopens the app rather
-  /// than a browser tab.
-  Future<String?> _sendLoginEmailLink(String email) async {
+  /// Emails the 6-digit sign-in code (Supabase "Magic link or OTP"
+  /// template, which shows only {{ .Token }}). Never creates an account.
+  Future<String?> _sendLoginEmailCode(String email) async {
     try {
-      await client.auth.signInWithOtp(
-          email: email,
-          shouldCreateUser: false,
-          emailRedirectTo: kGoogleRedirectUrl);
+      await client.auth.signInWithOtp(email: email, shouldCreateUser: false);
       return null;
     } on AuthException catch (e) {
+      if (e.statusCode == '429') return 'err_otp_wait';
       return e.message;
+    } catch (_) {
+      return 'err_login_network';
     }
   }
 
-  /// Resends the login email link (e.g. the user asked for a new one) --
-  /// same call _sendLoginEmailLink() makes the first time.
-  Future<String?> resendLoginEmailOtp(String email) => _sendLoginEmailLink(email);
+  /// Sends a fresh code (the user asked for a new one).
+  Future<String?> resendLoginEmailOtp(String email) => _sendLoginEmailCode(email);
 
-  // True from the moment a teacher/admin's password (or Google) sign-in is
-  // gated pending the emailed link, until that link is opened and the
-  // resulting session is finished below -- without this, the SAME signedIn
-  // event the link produces would just re-trigger the gate check in
-  // listenForOAuthCompletion() and loop forever instead of ever finishing.
-  bool _awaitingEmailLinkConfirmation = false;
-
-  /// Call after login()/signInWithGoogle() returns LoginResult.needsEmailOtp
-  /// -- resolves once the user opens the emailed link on this device and
-  /// the resulting session clears the same device-cap/login-log finish as
-  /// an ordinary login.
-  Future<LoginResult> awaitEmailLoginLink() {
-    _awaitingEmailLinkConfirmation = true;
-    return _awaitDeepLinkSignIn(const Duration(minutes: 5));
-  }
-
-  Future<LoginResult> _awaitDeepLinkSignIn(Duration timeout) {
-    final completer = Completer<LoginResult>();
-    _oauthCompleter = completer;
-    return completer.future.timeout(timeout, onTimeout: () {
-      _oauthCompleter = null;
-      _awaitingEmailLinkConfirmation = false;
-      return const LoginResult(error: 'err_oauth_cancelled');
-    });
+  /// Checks the typed code; on success finishes the sign-in exactly like a
+  /// plain password login (device cap, login log).
+  Future<LoginResult> verifyLoginEmailCode(String email, String code) async {
+    final token = code.replaceAll(RegExp(r'\s'), '');
+    if (!RegExp(r'^\d{6}$').hasMatch(token)) {
+      return const LoginResult(error: 'err_otp_incorrect');
+    }
+    try {
+      final res = await client.auth
+          .verifyOTP(email: email, token: token, type: OtpType.email)
+          .timeout(const Duration(seconds: 20));
+      if (res.session == null || res.user == null) {
+        return const LoginResult(error: 'err_otp_incorrect');
+      }
+      return await _finishPasswordLogin(res, email);
+    } on AuthException catch (e) {
+      final m = e.message.toLowerCase();
+      if (m.contains('expired')) return const LoginResult(error: 'err_otp_expired');
+      if (e.statusCode == '429') {
+        return const LoginResult(error: 'err_otp_too_many_attempts');
+      }
+      return const LoginResult(error: 'err_otp_incorrect');
+    } catch (_) {
+      return const LoginResult(error: 'err_login_network');
+    }
   }
 
   Future<String?> signUp({
@@ -647,16 +633,11 @@ class SupabaseService extends ChangeNotifier {
       final session = state.session;
       final user = session?.user;
       if (session == null || user == null) {
-        _awaitingEmailLinkConfirmation = false;
         completer.complete(const LoginResult(error: 'Login failed.'));
         return;
       }
       try {
-        // The link tap that finishes an email-gated login fires this exact
-        // same signedIn event -- skip straight to the finish below instead
-        // of re-running the gate check (which would just sign out and
-        // re-send the link forever).
-        if (!_awaitingEmailLinkConfirmation) {
+        {
           // Only google/password signUp() ever creates the profiles row; a
           // first-time Google sign-in needs the same row or every profile /
           // is_teacher / phone_verified lookup elsewhere just sees null.
@@ -675,15 +656,13 @@ class SupabaseService extends ChangeNotifier {
             });
           }
 
-          // Same email-link gate password login goes through -- otherwise a
-          // teacher/admin could skip it entirely just by using Google instead.
+          // Same emailed-code gate password login goes through -- otherwise
+          // a teacher/admin could skip it just by using Google instead.
           final email = user.email ?? '';
           if (email.isNotEmpty && await _requiresLoginEmailOtp(user.id)) {
-            _awaitingEmailLinkConfirmation = true;
             await client.auth.signOut();
-            final err = await _sendLoginEmailLink(email);
+            final err = await _sendLoginEmailCode(email);
             if (err != null) {
-              _awaitingEmailLinkConfirmation = false;
               completer.complete(LoginResult(error: err));
               return;
             }
@@ -691,7 +670,6 @@ class SupabaseService extends ChangeNotifier {
             return;
           }
         }
-        _awaitingEmailLinkConfirmation = false;
 
         final allowed = await _isDeviceAllowed(session.accessToken);
         if (!allowed) {
@@ -703,7 +681,6 @@ class SupabaseService extends ChangeNotifier {
         notifyListeners();
         completer.complete(const LoginResult(success: true));
       } catch (e) {
-        _awaitingEmailLinkConfirmation = false;
         // Google accepted the account but the device check (or profile
         // setup) failed: never leave a half-signed-in session behind.
         await client.auth.signOut().catchError((_) {});
@@ -716,7 +693,6 @@ class SupabaseService extends ChangeNotifier {
       final completer = _oauthCompleter;
       if (completer == null || completer.isCompleted) return;
       _oauthCompleter = null;
-      _awaitingEmailLinkConfirmation = false;
       _linkErrorShownByWaiter = true;
       completer.complete(const LoginResult(error: 'err_link_expired'));
     });
@@ -727,7 +703,6 @@ class SupabaseService extends ChangeNotifier {
   /// LoginResult contract as login(), including the email-link step for
   /// teacher/admin accounts.
   Future<LoginResult> signInWithGoogle() async {
-    _awaitingEmailLinkConfirmation = false;
     final completer = Completer<LoginResult>();
     _oauthCompleter = completer;
     try {

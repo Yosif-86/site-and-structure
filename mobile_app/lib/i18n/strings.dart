@@ -106,8 +106,11 @@ class AppStrings extends ChangeNotifier {
     'err_otp_too_many_attempts': 'محاولات كثيرة جدًا، اطلب رمزًا جديدًا.',
     'err_otp_incorrect': 'رمز التحقق غير صحيح.',
     'login_otp_title': 'تأكيد الدخول',
-    'login_otp_sub':
-        'أرسلنا رابط تسجيل دخول إلى بريدك الإلكتروني. افتح البريد على هذا الجهاز واضغط على الرابط لإكمال تسجيل الدخول:',
+    'login_otp_sub': 'أرسلنا رمزًا من 6 أرقام إلى بريدك الإلكتروني. أدخله لإكمال تسجيل الدخول:',
+    'login_otp_hint': 'الرمز من 6 أرقام',
+    'login_otp_spam': 'لم يصلك؟ تحقق من مجلد الرسائل غير المرغوب فيها (Spam).',
+    'btn_verify_code': 'تأكيد',
+    'err_otp_wait': 'انتظر دقيقة قبل طلب رمز جديد.',
     'success_account_title': 'تم إنشاء الحساب',
     'success_account_sub': 'تم تسجيلك وتسجيل دخولك بنجاح.',
     'btn_close': 'إغلاق',

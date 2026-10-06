@@ -50,14 +50,19 @@
       <label for="email">البريد الإلكتروني</label>
       <input id="email" type="email" autocomplete="username" required>
     </div>
-    <div class="field">
+    <div class="field" id="passwordField">
       <label for="password">كلمة المرور</label>
       <input id="password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="field" id="codeField" hidden>
+      <label for="code">رمز التحقق المرسل إلى بريدك (6 أرقام)</label>
+      <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}">
     </div>
     <p class="msg" id="msg" role="alert"></p>
     <button class="btn btn-accent" id="submitBtn" type="submit">تسجيل الدخول</button>
     <div class="links">
       <button type="button" id="forgotBtn">نسيت كلمة المرور؟</button>
+      <button type="button" id="resendBtn" hidden>إعادة إرسال الرمز</button>
       <a href="/">العودة للرئيسية</a>
     </div>
   </form>
