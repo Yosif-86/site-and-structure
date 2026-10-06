@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/line_art.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/blueprint_logo.dart';
 import 'info_screens.dart';
@@ -953,11 +954,26 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
+  /// Forgot password: line illustration, question title, email, send, back.
   Widget _forgotForm() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(_t('auth_forgot_title'), sub: _t('auth_forgot_sub')),
+        _reveal(
+            0,
+            const Center(
+                child: LockKeyArt(width: 230, ink: _ink, accent: _glow, hole: _bg))),
+        const SizedBox(height: 14),
+        _reveal(1, Column(children: [
+          Text(_t('forgot_password'),
+              textAlign: TextAlign.center,
+              style: AppFonts.body(size: 26, color: _ink, weight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          Text(_t('auth_forgot_sub'),
+              textAlign: TextAlign.center,
+              style: AppFonts.body(size: 13.5, color: _soft)),
+        ])),
+        const SizedBox(height: 28),
         _field(
           label: _t('label_email'),
           controller: _emailCtrl,
@@ -969,13 +985,25 @@ class _AuthScreenState extends State<AuthScreen>
         _errorText(),
         const SizedBox(height: 22),
         _primaryButton(_t('btn_send_reset'), _submitForgot),
-        const SizedBox(height: 14),
-        Center(
-            child: _textLink(
-                _t('back_to_login'), () => _switchMode(_AuthMode.login))),
+        const SizedBox(height: 16),
+        Center(child: _backToLogin()),
       ],
     );
   }
+
+  /// "‹ Back to login" (the chevron flips with the text direction).
+  Widget _backToLogin() => TextButton.icon(
+        style: TextButton.styleFrom(
+          foregroundColor: _ink,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        onPressed: () => _switchMode(_AuthMode.login),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14, color: _ink),
+        label: Text(_t('back_to_login'),
+            style: AppFonts.body(size: 14, color: _ink, weight: FontWeight.w600)),
+      );
 
   Widget _forgotSentBox() {
     return Column(
