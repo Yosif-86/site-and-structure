@@ -1,0 +1,49 @@
+# iPhone builds on Codemagic (no Mac needed). Builds the Flutter app in
+# mobile_app/, signs it for the App Store and uploads it to TestFlight.
+#
+# One-time setup in Codemagic (after the Apple Developer account exists):
+#   1. Teams > Integrations > App Store Connect: add an API key and name it
+#      "Arc Platform ASC" (App Store Connect > Users and Access > Integrations
+#      > App Store Connect API, role App Manager).
+#   2. App settings > Environment variables: APP_STORE_APP_ID = the numeric
+#      Apple ID of the app (App Store Connect > App Information).
+#   3. Bundle ID com.siteandstructure.siteAndStructure with Push Notifications
+#      enabled must exist in the Apple Developer portal.
+
+workflows:
+  ios-release:
+    name: iOS release (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    working_directory: mobile_app
+    integrations:
+      app_store_connect: Arc Platform ASC
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.siteandstructure.siteAndStructure
+    triggering:
+      events: []  # manual builds only
+    scripts:
+      - name: Get packages
+        script: flutter pub get
+      - name: Tests
+        script: flutter test
+      - name: Signing profiles
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" || echo 0)
+          flutter build ipa --release \
+            --build-number=$((LATEST + 1)) \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

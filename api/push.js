@@ -132,6 +132,7 @@ module.exports = async (req, res) => {
                   sound: 'default',
                 },
               },
+              apns: { payload: { aps: { sound: 'default' } } },
             },
           }),
         }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -47,10 +48,22 @@ class PushService {
     }
     _ready = true;
     FirebaseMessaging.onBackgroundMessage(_onBackgroundMessage);
+    // iPhone shows the banner itself while the app is open, so no local
+    // copy is needed there (see _showForeground).
+    if (Platform.isIOS) {
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions(
+              alert: true, badge: true, sound: true);
+    }
 
     await _local.initialize(
       const InitializationSettings(
-          android: AndroidInitializationSettings('ic_stat_arc')),
+          android: AndroidInitializationSettings('ic_stat_arc'),
+          // Permission is asked by Firebase in _onAuth, not here.
+          iOS: DarwinInitializationSettings(
+              requestAlertPermission: false,
+              requestBadgePermission: false,
+              requestSoundPermission: false)),
       onDidReceiveNotificationResponse: (_) => onOpen?.call(),
     );
     await _local
@@ -83,11 +96,25 @@ class PushService {
     try {
       // Android 13+ asks the user once.
       await FirebaseMessaging.instance.requestPermission();
+      // On iPhone Firebase has no token until Apple's push token arrives,
+      // which can take a few seconds after permission is granted.
+      if (Platform.isIOS) {
+        for (var i = 0;
+            i < 10 && await FirebaseMessaging.instance.getAPNSToken() == null;
+            i++) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      }
       _token ??= await FirebaseMessaging.instance.getToken();
       final token = _token;
-      if (token == null) return;
-      await SupabaseService.instance.client.rpc('register_push_token',
-          params: {'p_token': token, 'p_platform': 'android'});
+      if (token == null) {
+        _registeredFor = null;
+        return;
+      }
+      await SupabaseService.instance.client.rpc('register_push_token', params: {
+        'p_token': token,
+        'p_platform': Platform.isIOS ? 'ios' : 'android',
+      });
     } catch (e) {
       // Offline or the push table not added yet: retried on next sign-in.
       _registeredFor = null;
@@ -112,7 +139,7 @@ class PushService {
 
   Future<void> _showForeground(RemoteMessage m) async {
     final n = m.notification;
-    if (n == null) return;
+    if (n == null || Platform.isIOS) return;
     await _local.show(
       m.hashCode,
       n.title,

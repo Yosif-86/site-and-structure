@@ -63,6 +63,7 @@ class AppStrings extends ChangeNotifier {
     'invite_invalid_title': 'رمز الدعوة غير صالح أو منتهي الصلاحية.',
     'or_divider': 'أو',
     'continue_with_google': 'المتابعة باستخدام جوجل',
+    'continue_with_apple': 'المتابعة باستخدام Apple',
     'err_oauth_cancelled': 'تم إلغاء تسجيل الدخول.',
     'auth_forgot_title': 'إعادة تعيين كلمة المرور',
     'auth_forgot_sub':

@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../i18n/strings.dart';
@@ -51,6 +53,9 @@ class _AuthScreenState extends State<AuthScreen>
   late _AuthMode _mode =
       widget.startInSignup ? _AuthMode.signup : _AuthMode.login;
   bool _loading = false;
+  // A Google / Apple sign-in page is open: shows the cancel link (on
+  // iPhone the page sits inside the app, so closing it never resumes us).
+  bool _oauthWaiting = false;
   String? _error;
   bool _rememberLogin = false;
 
@@ -280,10 +285,11 @@ class _AuthScreenState extends State<AuthScreen>
     });
   }
 
-  Future<void> _submitGoogle() async {
+  Future<void> _submitOAuth({bool apple = false}) async {
     if (_loading) return;
     setState(() {
       _loading = true;
+      _oauthWaiting = true;
       _error = null;
     });
     // Back in the app without a session a few seconds later = the Google
@@ -297,12 +303,17 @@ class _AuthScreenState extends State<AuthScreen>
     });
     final LoginResult result;
     try {
-      result = await SupabaseService.instance.signInWithGoogle();
+      result = apple
+          ? await SupabaseService.instance.signInWithApple()
+          : await SupabaseService.instance.signInWithGoogle();
     } finally {
       lifecycle.dispose();
     }
     if (!mounted) return;
-    setState(() => _loading = false);
+    setState(() {
+      _loading = false;
+      _oauthWaiting = false;
+    });
     if (result.error != null) {
       setState(() => _error = _t(result.error!));
       return;
@@ -657,7 +668,7 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   Widget _googleButton() => _darkPillButton(
-        onPressed: _loading ? null : _submitGoogle,
+        onPressed: _loading ? null : _submitOAuth,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -668,6 +679,48 @@ class _AuthScreenState extends State<AuthScreen>
                     size: 14.5, color: _ink, weight: FontWeight.w600)),
           ],
         ),
+      );
+
+  // Apple's own style: white pill, black logo and text.
+  Widget _appleButton() => Material(
+        color: Colors.white,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: _loading ? null : () => _submitOAuth(apple: true),
+          child: SizedBox(
+            height: 52,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const FaIcon(FontAwesomeIcons.apple,
+                    size: 19, color: Colors.black),
+                const SizedBox(width: 10),
+                Text(_t('continue_with_apple'),
+                    style: AppFonts.body(
+                        size: 14.5,
+                        color: Colors.black,
+                        weight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget _socialButtons() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _googleButton(),
+          if (SupabaseService.kAppleSignInEnabled && Platform.isIOS) ...[
+            const SizedBox(height: 10),
+            _appleButton(),
+          ],
+          if (_oauthWaiting)
+            Center(
+              child: _textLink(_t('cancel'),
+                  SupabaseService.instance.cancelGoogleSignIn),
+            ),
+        ],
       );
 
   Widget _orDivider() {
@@ -783,7 +836,7 @@ class _AuthScreenState extends State<AuthScreen>
           const SizedBox(height: 22),
           _reveal(5, _primaryButton(_t('auth_login_title'), _submitLogin)),
           _reveal(6, _orDivider()),
-          _reveal(7, _googleButton()),
+          _reveal(7, _socialButtons()),
           _reveal(8, _switchLine(_t('no_account'), _t('sign_up'), _AuthMode.signup)),
         ],
       ),
@@ -889,7 +942,7 @@ class _AuthScreenState extends State<AuthScreen>
           const SizedBox(height: 22),
           _primaryButton(_t('auth_signup_title'), _submitSignup),
           _orDivider(),
-          _googleButton(),
+          _socialButtons(),
           _switchLine(_t('have_account'), _t('auth_login_title'), _AuthMode.login),
         ],
       ),

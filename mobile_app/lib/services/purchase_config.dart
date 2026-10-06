@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 
 import 'supabase_service.dart';
@@ -16,8 +18,13 @@ class PurchaseConfig extends ChangeNotifier {
   bool _enabled = false;
   bool _reviewer = false;
 
+  /// Apple requires its own in-app purchase for digital courses, so the
+  /// iPhone app never shows buying: students buy outside the iPhone app
+  /// and watch on iPhone.
+  static final bool _platformAllowsBuying = kIsWeb || !Platform.isIOS;
+
   /// Whether this user may see prices and buy.
-  bool get enabled => _enabled && !_reviewer;
+  bool get enabled => _enabled && !_reviewer && _platformAllowsBuying;
 
   /// The raw setting (for the admin toggle).
   bool get setting => _enabled;

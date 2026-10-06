@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart' show closeInAppWebView;
 import 'package:uuid/uuid.dart';
 
 import 'net_status.dart';
@@ -621,6 +622,20 @@ class SupabaseService extends ChangeNotifier {
   static const String kGoogleRedirectUrl = 'siteandstructure://login-callback';
   Completer<LoginResult>? _oauthCompleter;
 
+  /// Sign in with Apple (iPhone only; Apple requires it next to Google).
+  /// Turn on once the Apple provider is set up in Supabase (Services ID,
+  /// key, team ID), otherwise the button would open an error page.
+  static const bool kAppleSignInEnabled = false;
+
+  /// On iPhone the sign-in page opens inside the app (Apple rejects apps
+  /// that send users out to Safari to log in) and is closed here once the
+  /// deep link lands. Android keeps the external browser.
+  bool get _oauthInApp => !kIsWeb && Platform.isIOS;
+
+  void _closeOAuthBrowser() {
+    if (_oauthInApp) unawaited(closeInAppWebView().catchError((_) {}));
+  }
+
   /// Call once at app start (see main.dart) so a Google sign-in started from
   /// anywhere has somewhere to report back to once the deep link lands.
   void listenForOAuthCompletion() {
@@ -629,6 +644,7 @@ class SupabaseService extends ChangeNotifier {
       if (completer == null || completer.isCompleted) return;
       if (state.event != AuthChangeEvent.signedIn) return;
       _oauthCompleter = null;
+      _closeOAuthBrowser();
 
       final session = state.session;
       final user = session?.user;
@@ -693,6 +709,7 @@ class SupabaseService extends ChangeNotifier {
       final completer = _oauthCompleter;
       if (completer == null || completer.isCompleted) return;
       _oauthCompleter = null;
+      _closeOAuthBrowser();
       _linkErrorShownByWaiter = true;
       completer.complete(const LoginResult(error: 'err_link_expired'));
     });
@@ -702,14 +719,21 @@ class SupabaseService extends ChangeNotifier {
   /// listenForOAuthCompletion), not when the browser merely opens -- same
   /// LoginResult contract as login(), including the email-link step for
   /// teacher/admin accounts.
-  Future<LoginResult> signInWithGoogle() async {
+  Future<LoginResult> signInWithGoogle() => _signInWithOAuth(OAuthProvider.google);
+
+  /// Same flow as Google (profile row, staff email code, device check).
+  Future<LoginResult> signInWithApple() => _signInWithOAuth(OAuthProvider.apple);
+
+  Future<LoginResult> _signInWithOAuth(OAuthProvider provider) async {
     final completer = Completer<LoginResult>();
     _oauthCompleter = completer;
     try {
       await client.auth.signInWithOAuth(
-        OAuthProvider.google,
+        provider,
         redirectTo: kGoogleRedirectUrl,
-        authScreenLaunchMode: LaunchMode.externalApplication,
+        authScreenLaunchMode: _oauthInApp
+            ? LaunchMode.inAppBrowserView
+            : LaunchMode.externalApplication,
       );
     } on AuthException catch (e) {
       _oauthCompleter = null;
@@ -719,6 +743,7 @@ class SupabaseService extends ChangeNotifier {
       const Duration(minutes: 3),
       onTimeout: () {
         _oauthCompleter = null;
+        _closeOAuthBrowser();
         return const LoginResult(error: 'err_oauth_cancelled');
       },
     );
@@ -730,6 +755,7 @@ class SupabaseService extends ChangeNotifier {
     final c = _oauthCompleter;
     if (c == null || c.isCompleted) return;
     _oauthCompleter = null;
+    _closeOAuthBrowser();
     c.complete(const LoginResult(error: 'err_oauth_cancelled'));
   }
 
