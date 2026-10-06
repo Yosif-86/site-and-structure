@@ -6,7 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const LOGO = 'https://arcplatformiq.com/email-logo.png';
+// Primary logo (cream text, orange mark) on a transparent background.
+const LOGO = 'https://arcplatformiq.com/email-logo-lockup-clear.png';
+// Gmail dark mode flips solid dark backgrounds to light; a background
+// image is left alone, so the header stays dark and the cream logo readable.
+const DARK_TILE = 'https://arcplatformiq.com/email-bg-dark.png';
 const SITE = 'https://arcplatformiq.com';
 const SUPPORT = 'support@arcplatformiq.com';
 
@@ -36,8 +40,8 @@ function layout({ title, intro, button, link, code, note }) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F1EC">
   <tr><td align="center" style="padding:28px 12px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" dir="rtl" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Tahoma,Arial,sans-serif;text-align:right">
-      <tr><td align="center" style="background:${INK};padding:22px 16px">
-        <img src="${LOGO}" width="72" height="72" alt="منصة آرك" style="display:block;border:0;border-radius:14px">
+      <tr><td align="center" bgcolor="${INK}" background="${DARK_TILE}" style="background:${INK} url('${DARK_TILE}') repeat;padding:18px 16px">
+        <img src="${LOGO}" width="250" alt="Arc Platform - منصة آرك" style="display:block;border:0;width:250px;max-width:100%;height:auto">
       </td></tr>
       <tr><td style="padding:28px 28px 8px">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
