@@ -52,6 +52,8 @@ class NotificationsScreen extends StatelessWidget {
         return const AdminScreen(openView: 'uploads');
       case 'course_file_review':
         return const AdminScreen(openView: 'files');
+      case 'content_report':
+        return const AdminScreen(openView: 'reports');
       case 'course_file':
         return const TeacherScreen(openView: 'courses');
       case 'lecture_published':

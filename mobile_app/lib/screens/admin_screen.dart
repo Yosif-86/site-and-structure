@@ -68,6 +68,7 @@ enum _View {
   editRequests,
   attention,
   files,
+  reports,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -83,6 +84,7 @@ class _AdminScreenState extends State<AdminScreen> {
     'editRequests' => _View.editRequests,
     'uploads' => _View.uploads,
     'files' => _View.files,
+    'reports' => _View.reports,
     _ => _View.dashboard,
   };
 
@@ -100,6 +102,7 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _invites = [];
   List<Map<String, dynamic>> _pendingUploads = [];
   List<Map<String, dynamic>> _pendingFiles = [];
+  List<Map<String, dynamic>> _reports = [];
   List<Map<String, dynamic>> _discountCodes = [];
   List<Map<String, dynamic>> _errorLogs = [];
   Map<String, String> _emailByUser = {};
@@ -250,6 +253,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final redemptions = (results[10] as List).cast<Map<String, dynamic>>();
       final securityEvents = await _loadSecurityEvents();
       final pendingFiles = await _loadPendingFiles();
+      final reports = await _loadReports();
 
       final emailByUser = <String, String>{};
       for (final l in logins) {
@@ -295,6 +299,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _invites = invites;
         _pendingUploads = uploads;
         _pendingFiles = pendingFiles;
+        _reports = reports;
         _discountCodes = codes;
         _errorLogs = errors;
         // New three-field details, seeded from the old single method/number
@@ -368,6 +373,33 @@ class _AdminScreenState extends State<AdminScreen> {
       return const [];
     }
   }
+
+  /// Open content reports (add-reviewer-and-reports.sql).
+  Future<List<Map<String, dynamic>>> _loadReports() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .from('content_reports')
+          .select('id, reporter_id, course_id, reason, details, created_at, courses(title, slug, teacher_id)')
+          .eq('status', 'open')
+          .order('created_at');
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _closeReport(Map<String, dynamic> r, String status) =>
+      _once('report-${r['id']}', () async {
+    try {
+      await SupabaseService.instance.client.from('content_reports').update({
+        'status': status,
+        'handled_at': DateTime.now().toUtc().toIso8601String(),
+      }).eq('id', r['id']);
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  });
 
   Future<void> _reviewFile(Map<String, dynamic> f, bool approve) =>
       _once('file-${f['id']}', () async {
@@ -933,6 +965,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('pending_lectures');
       case _View.files:
         return t('pending_files');
+      case _View.reports:
+        return t('reports_title');
       case _View.flagged:
         return t('flagged_logins');
       case _View.devices:
@@ -994,6 +1028,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.invites => _buildInvites(t),
         _View.uploads => _buildUploads(t),
         _View.files => _buildPendingFiles(t),
+        _View.reports => _buildReports(t),
         _View.flagged => _buildFlagged(t),
         _View.devices => _buildDevices(t),
         _View.discountCodes => _buildDiscountCodes(t),
@@ -1080,7 +1115,7 @@ class _AdminScreenState extends State<AdminScreen> {
             stats: [
               (Money.iqd(revenue), t('est_revenue')),
               ('$activeStudents', t('active_students')),
-              ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length + _pendingFiles.length}',
+              ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length + _pendingFiles.length + _reports.length}',
                   t('dash_needs_attention')),
             ],
             statTaps: [
@@ -1116,6 +1151,9 @@ class _AdminScreenState extends State<AdminScreen> {
           tile(ArcIcon.lessons, '${_pendingFiles.length}', t('pending_files'),
               AppColors.teal, _View.files,
               alert: _pendingFiles.isNotEmpty),
+          tile(ArcIcon.warning, '${_reports.length}', t('reports_title'),
+              AppColors.error, _View.reports,
+              alert: _reports.isNotEmpty),
         ]),
         DashSection(t('dash_sec_people')),
         DashGrid(children: [
@@ -1510,7 +1548,8 @@ class _AdminScreenState extends State<AdminScreen> {
         _pendingReview.length +
         _editRequests.length +
         _pendingUploads.length +
-        _pendingFiles.length;
+        _pendingFiles.length +
+        _reports.length;
     if (total == 0) return _empty(t('attention_none'), ArcIcon.check);
     String teacherOf(dynamic id) =>
         (_profileByUser[id]?['full_name'] as String?) ?? '—';
@@ -1554,6 +1593,17 @@ class _AdminScreenState extends State<AdminScreen> {
                     '—',
                 t('attention_lecture'),
                 _View.uploads),
+        ],
+        if (_reports.isNotEmpty) ...[
+          DashSection('${t('reports_title')} (${_reports.length})'),
+          for (final r in _reports)
+            item(
+                ArcIcon.warning,
+                AppColors.error,
+                ((r['courses'] as Map?)?['title'] as String?) ?? '—',
+                t('report_reason_${r['reason']}'),
+                t('attention_report'),
+                _View.reports),
         ],
         if (_pendingFiles.isNotEmpty) ...[
           DashSection('${t('pending_files')} (${_pendingFiles.length})'),
@@ -1964,6 +2014,49 @@ class _AdminScreenState extends State<AdminScreen> {
           ],
           DashButton(t('btn_reject'),
               danger: true, icon: ArcIcon.close, onPressed: () => _rejectLecture(l)),
+        ],
+      );
+    });
+  }
+
+  Widget _buildReports(String Function(String) t) {
+    if (_reports.isEmpty) return _empty(t('no_reports'), ArcIcon.check);
+    return _list(_reports.length, (i) {
+      final r = _reports[i];
+      final course = (r['courses'] as Map?) ?? const {};
+      final reporter = _profileByUser[r['reporter_id']];
+      final tag = _idTag(reporter);
+      final teacher =
+          (_profileByUser[course['teacher_id']]?['full_name'] as String?) ?? '—';
+      final busy = _busy.contains('report-${r['id']}');
+      final details = (r['details'] as String?)?.trim() ?? '';
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.warning, accent: AppColors.error),
+        title: course['title'] as String? ?? '—',
+        subtitle: teacher,
+        trailing: StatusPill(t('report_reason_${r['reason']}'), tone: StatusTone.bad),
+        meta: [
+          if (details.isNotEmpty) details,
+          [
+            (reporter?['full_name'] as String?) ?? _emailByUser[r['reporter_id']] ?? '—',
+            if (tag != null) tag,
+          ].join(' · '),
+          _date(r['created_at'] as String?, time: true),
+        ],
+        actions: [
+          if (course['slug'] != null)
+            DashButton(t('btn_open_course'),
+                icon: ArcIcon.courses,
+                onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) =>
+                        CourseDetailScreen(slug: course['slug'] as String)))),
+          DashButton(t('btn_resolve'),
+              primary: true,
+              icon: ArcIcon.check,
+              onPressed: busy ? null : () => _closeReport(r, 'resolved')),
+          DashButton(t('btn_dismiss_report'),
+              icon: ArcIcon.close,
+              onPressed: busy ? null : () => _closeReport(r, 'dismissed')),
         ],
       );
     });

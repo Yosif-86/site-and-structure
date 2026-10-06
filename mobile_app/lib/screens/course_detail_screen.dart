@@ -14,13 +14,13 @@ import '../models/lecture.dart';
 import '../services/error_reporter.dart';
 import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
-import '../services/payment_rules.dart';
 import '../services/money.dart';
 import '../services/net_status.dart';
 import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
 import '../services/tap_guard.dart';
 import '../theme.dart';
+import '../widgets/report_sheet.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
@@ -148,6 +148,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             .eq('course_slug', course.slug)
             .maybeSingle();
         status = enr?['status'] as String?;
+        // Store-review account: every course opens without an enrollment.
+        if (status != 'active') {
+          try {
+            final me = await sb
+                .from('profiles')
+                .select('is_reviewer')
+                .eq('id', user.id)
+                .maybeSingle();
+            if (me?['is_reviewer'] == true) status = 'active';
+          } catch (_) {
+            // Column not added yet (add-reviewer-and-reports.sql).
+          }
+        }
         if (status == null) {
           try {
             final rej = await sb
@@ -298,7 +311,16 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     return Directionality(
       textDirection:
           AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
-      child: GlassScaffold(appBar: AppBar(), body: body),
+      child: GlassScaffold(
+          appBar: AppBar(actions: [
+            if (_course != null && SupabaseService.instance.currentUser != null)
+              IconButton(
+                tooltip: _t('report_tooltip'),
+                icon: const Icon(Icons.outlined_flag_rounded),
+                onPressed: () => showReportSheet(context, _course!.id),
+              ),
+          ]),
+          body: body),
     );
   }
 

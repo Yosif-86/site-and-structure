@@ -82,7 +82,7 @@ module.exports = async (req, res) => {
 
   const { data: profile } = await admin
     .from('profiles')
-    .select('active_session_token, is_admin')
+    .select('*')
     .eq('id', userId)
     .maybeSingle();
   if (!profile || profile.active_session_token !== sessionToken) {
@@ -109,7 +109,9 @@ module.exports = async (req, res) => {
     return;
   }
 
-  if (!lecture.is_free && !isPreview) {
+  // Store-review account (profiles.is_reviewer, set by the admin): watches
+  // every published lecture without an enrollment.
+  if (!lecture.is_free && !isPreview && profile.is_reviewer !== true) {
     const { data: course } = await admin
       .from('courses')
       .select('slug')
