@@ -52,6 +52,9 @@ class DeepLinks {
     }
   }
 
+  /// Opens a web page in the browser.
+  static Future<bool> web(String url) => _launchFirst([Uri.parse(url)]);
+
   static Future<bool> instagram(String username) {
     final u = handle(username);
     return _launchFirst([

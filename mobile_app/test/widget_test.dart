@@ -46,7 +46,9 @@ void main() {
         'settings_support',
         'settings_privacy',
         'settings_payment_info',
-        'privacy_draft_notice',
+        'btn_full_privacy',
+        'btn_full_terms',
+        'btn_refund_policy',
       ]) {
         expect(t(key), isNot(key), reason: 'missing i18n string for "$key"');
       }

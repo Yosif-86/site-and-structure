@@ -88,14 +88,28 @@ class _ContactButton extends StatelessWidget {
   }
 }
 
-/// Plain-language summary of what the app does with user data.
-///
-/// PLACEHOLDER COPY — pending real legal review. Every claim below is
-/// deliberately written to match what the app actually does today (single
-/// device per account, login-event geolocation, screenshot blocking and
-/// watermarking on video screens, manual payment screenshots), but this is a
-/// summary for users, not a reviewed privacy policy. Replace before any
-/// store submission that requires one.
+/// The full policies live on the website (privacy, terms, refund).
+const String kSiteUrl = 'https://arcplatformiq.com';
+
+/// Button that opens one of the full policy pages on the website.
+class _FullTextButton extends StatelessWidget {
+  final String label;
+  final String path;
+  const _FullTextButton(this.label, this.path);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () => DeepLinks.web('$kSiteUrl/$path'),
+          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          label: Text(label),
+        ),
+      );
+}
+
+/// Plain-language summary of what the app does with user data; the full
+/// policy is on the website (privacy.html).
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key});
 
@@ -105,23 +119,6 @@ class PrivacyScreen extends StatelessWidget {
     return _InfoScaffold(
       title: t('privacy_title'),
       children: [
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, size: 18, color: AppColors.red),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  t('privacy_draft_notice'),
-                  style: AppFonts.body(size: 12, color: AppColors.muted),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
         GlassCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,6 +132,8 @@ class PrivacyScreen extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        _FullTextButton(t('btn_full_privacy'), 'privacy.html'),
       ],
     );
   }
@@ -165,13 +164,15 @@ const List<(String, String)> _termsSections = [
   ('حماية المحتوى',
       'يُمنع مشاركة الحساب، أو تصوير المحاضرات والملفات أو تسجيلها أو نسخها أو نشرها بأي شكل. المحتوى يحمل علامة مائية باسمك ورقم هاتفك، وأي تسريب يعرّض صاحب الحساب لإيقافه نهائيًا وللمساءلة القانونية.'),
   ('الدفع والاسترداد',
-      'يتم الدفع عبر زين كاش أو كي كارد، ويُفعَّل الاشتراك بعد التحقق من الدفعة. جميع المدفوعات نهائية وغير قابلة للاسترداد بعد تفعيل الدورة.'),
+      'يتم الدفع عبر زين كاش أو كي كارد، ويُفعَّل الاشتراك بعد التحقق من الدفعة. يمكنك طلب استرجاع المبلغ خلال 7 أيام من التفعيل إذا لم تشاهد أكثر من 25% من محاضرات الدورة، وفق سياسة الاسترجاع.'),
   ('المدرّسون',
-      'المدرّس مسؤول عن محتوى دوراته وصحته. تراجع الإدارة الدورات والمحاضرات قبل نشرها، وتحتفظ المنصة بنسبة 20% من سعر كل دورة.'),
+      'المدرّس مسؤول عن محتوى دوراته وصحته. تراجع الإدارة الدورات والمحاضرات والملفات قبل نشرها، وتحتفظ المنصة بنسبة 20% من السعر الكامل لكل اشتراك، والخصومات تُخصم من حصة المدرّس.'),
   ('الملكية الفكرية',
       'جميع المحاضرات والملفات ملك لأصحابها ولمنصة آرك، والاشتراك يمنحك حق المشاهدة الشخصية داخل التطبيق فقط.'),
   ('إيقاف الحساب',
       'يحق للمنصة إيقاف أي حساب يخالف هذه الشروط دون استرداد المبلغ.'),
+  ('القانون',
+      'تخضع هذه الشروط لقوانين جمهورية العراق.'),
   ('التعديلات',
       'قد نحدّث هذه الشروط، وسنُعلم المستخدمين بأي تغيير مهم.'),
 ];
@@ -188,7 +189,7 @@ const List<(String, String)> _faqItems = [
   ('هل يمكنني استخدام حسابي على أكثر من جهاز؟',
       'لا، الحساب يعمل على جهاز واحد فقط.'),
   ('هل يمكن استرداد المبلغ؟',
-      'لا، جميع المدفوعات نهائية بعد تفعيل الدورة.'),
+      'نعم، خلال 7 أيام من تفعيل الاشتراك إذا لم تشاهد أكثر من 25% من محاضرات الدورة. راسلنا من صفحة الدعم، والتفاصيل في سياسة الاسترجاع من الإعدادات ثم شروط الاستخدام.'),
   ('الفيديو لا يعمل أو يتقطع؟',
       'تأكد من اتصالك بالإنترنت، وجرّب جودة أقل من زر الجودة في المشغّل.'),
   ('لماذا لا أستطيع أخذ لقطة شاشة؟',
@@ -229,6 +230,10 @@ class TermsScreen extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 14),
+        _FullTextButton(t('btn_full_terms'), 'terms.html'),
+        const SizedBox(height: 10),
+        _FullTextButton(t('btn_refund_policy'), 'refund.html'),
       ],
     );
   }
