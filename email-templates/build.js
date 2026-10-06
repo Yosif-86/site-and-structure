@@ -26,12 +26,9 @@ function layout({ title, intro, button, link, code, note }) {
          <div dir="ltr" style="display:inline-block;background:#FFF4EC;border:1px solid #F3C9B2;color:${INK};font-family:Consolas,'Courier New',monospace;font-size:30px;font-weight:bold;letter-spacing:8px;padding:14px 26px;border-radius:10px">${code}</div>
        </td></tr>`
     : '';
-  const fallback = button
-    ? `<tr><td style="padding:0 0 18px;font-size:13px;line-height:1.8;color:${MUTED}">
-         إذا لم يعمل الزر، انسخ هذا الرابط والصقه في المتصفح:<br>
-         <a href="${link}" dir="ltr" style="color:${ORANGE};word-break:break-all">${link}</a>
-       </td></tr>`
-    : '';
+  // No raw-link fallback: the link is Supabase's verify address
+  // (qdarzhzttjpkgfihupgp.supabase.co), which would show the old name.
+  const fallback = '';
   return `<!doctype html>
 <html lang="ar" dir="rtl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
