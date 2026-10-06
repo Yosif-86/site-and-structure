@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/learning_service.dart';
@@ -97,6 +98,10 @@ class StatChip extends StatelessWidget {
 
 Widget _priceText(Course course, {double size = 13}) {
   final t = AppStrings.instance.t;
+  // Review switch: no price on paid courses while buying is hidden.
+  if (!course.isFree && !PurchaseConfig.instance.enabled) {
+    return const SizedBox.shrink();
+  }
   return course.isFree
       ? Text(t('card_free'),
           style: AppFonts.body(
@@ -175,10 +180,12 @@ class FeaturedCourseCard extends StatelessWidget {
             PositionedDirectional(
               top: 12,
               end: 12,
-              child: GlassChip(
-                  label: course.isFree ? t('card_free') : Money.text(course.price, fallback: ''),
-                  color: course.isFree ? AppColors.teal : null,
-                  onImage: !course.isFree),
+              child: course.isFree || PurchaseConfig.instance.enabled
+                  ? GlassChip(
+                      label: course.isFree ? t('card_free') : Money.text(course.price, fallback: ''),
+                      color: course.isFree ? AppColors.teal : null,
+                      onImage: !course.isFree)
+                  : const SizedBox.shrink(),
             ),
             Positioned(
               left: 16,

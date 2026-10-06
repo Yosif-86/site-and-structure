@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
+import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
 import '../services/money.dart';
@@ -17,6 +18,7 @@ import '../services/bidi.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
+import '../widgets/glass_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
@@ -1124,6 +1126,35 @@ class _AdminScreenState extends State<AdminScreen> {
               () => _goto(_View.attention),
             ],
           ),
+        ),
+        const SizedBox(height: 12),
+        ListenableBuilder(
+          listenable: PurchaseConfig.instance,
+          builder: (context, _) {
+            final on = PurchaseConfig.instance.setting;
+            return GlassCard(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: on,
+                activeThumbColor: AppColors.teal,
+                title: Text(t('purchase_switch_title'),
+                    style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+                subtitle: Text(
+                    t(on ? 'purchase_switch_on' : 'purchase_switch_off'),
+                    style: AppFonts.body(size: 12, color: AppColors.muted)),
+                onChanged: _busy.contains('purchase-switch')
+                    ? null
+                    : (v) => _once('purchase-switch', () async {
+                          try {
+                            await PurchaseConfig.instance.set(v);
+                          } catch (e) {
+                            _showError(ErrorReporter.userMessage(e, page: 'admin'));
+                          }
+                        }),
+              ),
+            );
+          },
         ),
         if (myPendingPayments > 0) ...[
           const SizedBox(height: 12),

@@ -8,6 +8,7 @@ import 'screens/auth_screen.dart';
 import 'screens/catalogue_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/set_new_password_screen.dart';
+import 'services/purchase_config.dart';
 import 'services/error_reporter.dart';
 import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
@@ -49,6 +50,10 @@ Future<void> main() async {
     NotificationService.instance;
     NetStatus.instance.start();
     ScreenSecurity.init();
+    // Review switch: hide buying until the setting is read.
+    unawaited(PurchaseConfig.instance.load());
+    SupabaseService.instance.client.auth.onAuthStateChange
+        .listen((_) => PurchaseConfig.instance.load());
     // Phone notifications; tapping one opens the bell list.
     PushService.instance.onOpen = () => navigatorKey.currentState?.push(
         MaterialPageRoute(builder: (_) => const NotificationsScreen()));

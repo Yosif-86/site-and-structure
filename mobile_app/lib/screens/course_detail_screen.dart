@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../models/lecture.dart';
@@ -118,6 +119,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           .select('*')
           .eq('course_id', course.id)
           .order('order_index', ascending: true);
+      await PurchaseConfig.instance.load();
       final lectures = (lectureRows as List)
           .map((r) => Lecture.fromJson(r as Map<String, dynamic>))
           .toList();
@@ -260,6 +262,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   Future<void> _openEnroll() async {
     if (!TapGuard.allow()) return;
+    // Review switch: paid courses can't be bought in the app right now.
+    if (!(_course?.isFree ?? true) && !PurchaseConfig.instance.enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_t('course_subscribers_only'))));
+      return;
+    }
     if (!SupabaseService.instance.isLoggedIn) {
       await Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
@@ -421,6 +429,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           child: _EnrollPanel(
             course: course,
             status: _enrollmentStatus,
+            purchasesOn: PurchaseConfig.instance.enabled,
             onEnroll: _openEnroll,
             onContinue: heroLecture == null || !_isActive
                 ? null
@@ -650,12 +659,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 class _EnrollPanel extends StatelessWidget {
   final Course course;
   final String? status;
+  final bool purchasesOn;
   final VoidCallback onEnroll;
   final VoidCallback? onContinue;
   final String? continueLabel;
   const _EnrollPanel({
     required this.course,
     required this.status,
+    required this.purchasesOn,
     required this.onEnroll,
     required this.onContinue,
     required this.continueLabel,
@@ -691,6 +702,16 @@ class _EnrollPanel extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: Text(t('pending_note'),
+              style: AppFonts.body(size: 13.5, color: AppColors.muted)),
+        ),
+      ]);
+    } else if (!course.isFree && !purchasesOn) {
+      // Review switch: no price, no button.
+      content = Row(children: [
+        Icon(Icons.lock_outline_rounded, color: AppColors.muted, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(t('course_subscribers_only'),
               style: AppFonts.body(size: 13.5, color: AppColors.muted)),
         ),
       ]);
