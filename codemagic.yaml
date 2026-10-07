@@ -7,7 +7,7 @@
 #      > App Store Connect API, role App Manager).
 #   2. App settings > Environment variables: APP_STORE_APP_ID = the numeric
 #      Apple ID of the app (App Store Connect > App Information).
-#   3. Bundle ID com.siteandstructure.siteAndStructure with Push Notifications
+#   3. Bundle ID com.arcplatformiq.app with Push Notifications
 #      enabled must exist in the Apple Developer portal.
 
 workflows:
@@ -52,7 +52,7 @@ workflows:
       cocoapods: default
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.siteandstructure.siteAndStructure
+        bundle_identifier: com.arcplatformiq.app
     triggering:
       events: []  # manual builds only
     scripts:
