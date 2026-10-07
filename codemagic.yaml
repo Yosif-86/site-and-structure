@@ -11,6 +11,34 @@
 #      enabled must exist in the Apple Developer portal.
 
 workflows:
+  # Unsigned build for a personal test install before the paid Apple account:
+  # download the IPA artifact and install it with Sideloadly (free Apple ID,
+  # works 7 days, no push notifications or Sign in with Apple).
+  ios-test-unsigned:
+    name: iOS test build (unsigned IPA)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    working_directory: mobile_app
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events: []  # manual builds only
+    scripts:
+      - name: Get packages
+        script: flutter pub get
+      - name: Build unsigned app
+        script: flutter build ios --release --no-codesign
+      - name: Package IPA
+        script: |
+          cd build/ios/iphoneos
+          rm -rf Payload && mkdir Payload
+          cp -R Runner.app Payload/
+          zip -qr "$CM_BUILD_DIR/arc-unsigned.ipa" Payload
+    artifacts:
+      - $CM_BUILD_DIR/arc-unsigned.ipa
+
   ios-release:
     name: iOS release (TestFlight)
     instance_type: mac_mini_m2
