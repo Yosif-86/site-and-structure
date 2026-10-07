@@ -31,6 +31,7 @@ dependencies:
   flutter_local_notifications: 19.4.0
   font_awesome_flutter: 11.0.0
   syncfusion_flutter_pdf: ^33.2.13
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:

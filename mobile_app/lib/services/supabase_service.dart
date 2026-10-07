@@ -7,6 +7,7 @@ import 'package:android_id/android_id.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' show closeInAppWebView;
@@ -719,7 +720,80 @@ class SupabaseService extends ChangeNotifier {
   /// listenForOAuthCompletion), not when the browser merely opens -- same
   /// LoginResult contract as login(), including the email-link step for
   /// teacher/admin accounts.
-  Future<LoginResult> signInWithGoogle() => _signInWithOAuth(OAuthProvider.google);
+  /// Web OAuth client of Google Cloud project arc-platform-39b9e (the one
+  /// Supabase's Google provider uses). Native sign-in asks Google for an ID
+  /// token for this client, so Supabase accepts it. Client IDs are public.
+  static const String kGoogleWebClientId =
+      '982425355302-nn9u5ksh0jhmv44cd8vvv049bbc69ad0.apps.googleusercontent.com';
+  bool _googleInitialized = false;
+  // While the native account picker runs, the auth screen's "came back
+  // without a session" check must not cancel the attempt.
+  bool _nativeGoogleInProgress = false;
+
+  /// Android: Google's own account picker, then Supabase signInWithIdToken;
+  /// the Google page shows "Arc Platform" instead of the supabase.co address.
+  /// Anything other than the user cancelling falls back to the browser flow,
+  /// so a configuration problem can never block sign-in. iPhone keeps the
+  /// in-app browser until an iOS OAuth client exists.
+  Future<LoginResult> signInWithGoogle() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      return _signInWithOAuth(OAuthProvider.google);
+    }
+    final String? idToken;
+    _nativeGoogleInProgress = true;
+    try {
+      final g = GoogleSignIn.instance;
+      if (!_googleInitialized) {
+        await g.initialize(serverClientId: kGoogleWebClientId);
+        _googleInitialized = true;
+      }
+      final account = await g.authenticate();
+      idToken = account.authentication.idToken;
+      // Next time the picker shows every account again.
+      unawaited(g.signOut().catchError((_) {}));
+    } on GoogleSignInException catch (e) {
+      _nativeGoogleInProgress = false;
+      if (e.code == GoogleSignInExceptionCode.canceled ||
+          e.code == GoogleSignInExceptionCode.interrupted) {
+        return const LoginResult(error: 'err_oauth_cancelled');
+      }
+      debugPrint('google: native sign-in failed (${e.code}), using browser');
+      return _signInWithOAuth(OAuthProvider.google);
+    } catch (e) {
+      _nativeGoogleInProgress = false;
+      debugPrint('google: native sign-in failed ($e), using browser');
+      return _signInWithOAuth(OAuthProvider.google);
+    }
+    if (idToken == null) {
+      _nativeGoogleInProgress = false;
+      return _signInWithOAuth(OAuthProvider.google);
+    }
+    // Same completion path as the browser flow: listenForOAuthCompletion
+    // picks up the signedIn event (profile row, staff email code, device).
+    final completer = Completer<LoginResult>();
+    _oauthCompleter = completer;
+    try {
+      await client.auth
+          .signInWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+    } on AuthException catch (e) {
+      _oauthCompleter = null;
+      _nativeGoogleInProgress = false;
+      return LoginResult(error: e.message);
+    } catch (_) {
+      _oauthCompleter = null;
+      _nativeGoogleInProgress = false;
+      return const LoginResult(error: 'err_login_network');
+    }
+    try {
+      return await completer.future.timeout(const Duration(seconds: 60),
+          onTimeout: () {
+        _oauthCompleter = null;
+        return const LoginResult(error: 'err_login_network');
+      });
+    } finally {
+      _nativeGoogleInProgress = false;
+    }
+  }
 
   /// Same flow as Google (profile row, staff email code, device check).
   Future<LoginResult> signInWithApple() => _signInWithOAuth(OAuthProvider.apple);
@@ -752,6 +826,7 @@ class SupabaseService extends ChangeNotifier {
   /// The user came back from the Google page without finishing: end the
   /// attempt now instead of leaving the sign-in screen locked for minutes.
   void cancelGoogleSignIn() {
+    if (_nativeGoogleInProgress) return;
     final c = _oauthCompleter;
     if (c == null || c.isCompleted) return;
     _oauthCompleter = null;
