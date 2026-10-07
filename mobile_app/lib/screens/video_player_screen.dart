@@ -66,6 +66,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _watermarkLabel = '';
   bool _captureNotice = false;
   bool _isFullscreen = false;
+  // Full screen only: pinch out to fill the screen (trims top and bottom on
+  // phones wider than the video), pinch in to see the whole frame again.
+  bool _fillScreen = false;
   // Fullscreen chosen with the button (locked to landscape) rather than by
   // turning the device. Leaving it with the button locks portrait so the
   // screen doesn't flip straight back.
@@ -657,16 +660,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       );
     }
 
-    final videoArea = AspectRatio(
-      aspectRatio: _hlsController?.value.aspectRatio ?? 16 / 9,
-      child: Stack(
+    final ratio = _hlsController?.value.aspectRatio ?? 16 / 9;
+    final fill = _isFullscreen && _fillScreen;
+    final stack = Stack(
         fit: StackFit.expand,
         children: [
-          if (_hlsController != null) VideoPlayer(_hlsController!),
+          if (_hlsController != null)
+            fill
+                ? ClipRect(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: ratio * 1000,
+                        height: 1000,
+                        child: VideoPlayer(_hlsController!),
+                      ),
+                    ),
+                  )
+                : VideoPlayer(_hlsController!),
           if (_hlsController != null)
             _GestureLayer(
               controller: _hlsController!,
               onSingleTap: _toggleControlsVisible,
+              onPinch: _isFullscreen
+                  ? (zoomIn) {
+                      if (zoomIn != _fillScreen) setState(() => _fillScreen = zoomIn);
+                    }
+                  : null,
             ),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
           if (_captureNotice)
@@ -808,8 +828,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             ),
           ],
         ],
-      ),
     );
+    // Filling: the whole screen is the video area and the picture is
+    // cropped to it. Otherwise the area keeps the video's own shape.
+    final videoArea = fill
+        ? SizedBox.expand(child: stack)
+        : AspectRatio(aspectRatio: ratio, child: stack);
 
     // Center (not SizedBox.expand) so AspectRatio keeps room to size itself
     // within the available space instead of being forced to fill it and
@@ -827,7 +851,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 class _GestureLayer extends StatefulWidget {
   final VideoPlayerController controller;
   final VoidCallback onSingleTap;
-  const _GestureLayer({required this.controller, required this.onSingleTap});
+  /// Two-finger pinch: true = pinched out (fill), false = pinched in.
+  final ValueChanged<bool>? onPinch;
+  const _GestureLayer(
+      {required this.controller, required this.onSingleTap, this.onPinch});
 
   @override
   State<_GestureLayer> createState() => _GestureLayerState();
@@ -835,6 +862,7 @@ class _GestureLayer extends StatefulWidget {
 
 class _GestureLayerState extends State<_GestureLayer> {
   Offset? _lastTapPosition;
+  double _pinchScale = 1;
   bool _showSeekHint = false;
   bool _seekForward = true;
 
@@ -865,6 +893,19 @@ class _GestureLayerState extends State<_GestureLayer> {
               if (_lastTapPosition == null) return;
               _seek(_lastTapPosition!.dx > constraints.maxWidth / 2);
             },
+            onScaleStart: widget.onPinch == null ? null : (_) => _pinchScale = 1,
+            onScaleUpdate: widget.onPinch == null
+                ? null
+                : (d) {
+                    if (d.pointerCount >= 2) _pinchScale = d.scale;
+                  },
+            onScaleEnd: widget.onPinch == null
+                ? null
+                : (_) {
+                    if (_pinchScale > 1.08) widget.onPinch!(true);
+                    if (_pinchScale < 0.92) widget.onPinch!(false);
+                    _pinchScale = 1;
+                  },
             child: _showSeekHint
                 ? Align(
                     alignment: _seekForward ? Alignment.centerRight : Alignment.centerLeft,
