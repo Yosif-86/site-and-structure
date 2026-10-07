@@ -183,8 +183,6 @@ const List<(String, String)> _faqItems = [
       'منصة تعليمية هندسية تقدّم دورات مسجّلة يقدّمها مهندسون ومدرّسون مختصون.'),
   ('هل يمكنني استخدام حسابي على أكثر من جهاز؟',
       'لا، الحساب يعمل على جهاز واحد فقط.'),
-  ('هل يمكن استرداد المبلغ؟',
-      'المدفوعات نهائية بعد تفعيل الدورة، إلا إذا حدث خلل تقني لم نتمكن من إصلاحه، أو حُذفت الدورة خلال 30 يومًا من اشتراكك، أو رُفض طلبك. التفاصيل في سياسة الاسترجاع (الإعدادات ثم شروط الاستخدام).'),
   ('الفيديو لا يعمل أو يتقطع؟',
       'تأكد من اتصالك بالإنترنت، وجرّب جودة أقل من زر الجودة في المشغّل.'),
   ('لماذا لا أستطيع أخذ لقطة شاشة؟',
@@ -202,7 +200,19 @@ const List<(String, String)> _faqPaymentItems = [
       'بعد مراجعة الدفعة، وسيصلك إشعار عند الموافقة أو الرفض.'),
   ('رُفض طلب الدفع، ماذا أفعل؟',
       'يظهر سبب الرفض في الإشعارات وفي صفحة الدورة. صحّح المشكلة وأرسل الطلب من جديد.'),
+  ('هل يمكن استرداد المبلغ؟',
+      'المدفوعات نهائية بعد تفعيل الدورة، إلا إذا حدث خلل تقني لم نتمكن من إصلاحه، أو حُذفت الدورة خلال 30 يومًا من اشتراكك، أو رُفض طلبك. التفاصيل في سياسة الاسترجاع (الإعدادات ثم شروط الاستخدام).'),
 ];
+
+/// While buying is off (store review, and always on iPhone) the terms leave
+/// out everything about paying: the payment section goes, and these
+/// sections get a version without the money part.
+const _termsPaymentSection = 'الدفع والاسترداد';
+const Map<String, String> _termsWithoutPayment = {
+  'المدرّسون':
+      'المدرّس مسؤول عن محتوى دوراته وصحته. تراجع الإدارة الدورات والمحاضرات والملفات قبل نشرها.',
+  'إيقاف الحساب': 'يحق للمنصة إيقاف أي حساب يخالف هذه الشروط.',
+};
 
 /// Terms of use (also linked from the sign-up checkbox).
 class TermsScreen extends StatelessWidget {
@@ -211,6 +221,14 @@ class TermsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
+    final buying = PurchaseConfig.instance.enabled;
+    final sections = [
+      for (final s in _termsSections)
+        if (buying)
+          s
+        else if (s.$1 != _termsPaymentSection)
+          (s.$1, _termsWithoutPayment[s.$1] ?? s.$2),
+    ];
     return _InfoScaffold(
       title: t('terms_title'),
       children: [
@@ -218,16 +236,16 @@ class TermsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (var i = 0; i < _termsSections.length; i++)
+              for (var i = 0; i < sections.length; i++)
                 Padding(
                   padding: EdgeInsets.only(top: i == 0 ? 0 : 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${i + 1}. ${_termsSections[i].$1}',
+                      Text('${i + 1}. ${sections[i].$1}',
                           style: AppFonts.heading(size: 18)),
                       const SizedBox(height: 6),
-                      Text(_termsSections[i].$2,
+                      Text(sections[i].$2,
                           style: AppFonts.body(
                               size: 13.5, color: AppColors.muted)),
                     ],
@@ -238,8 +256,10 @@ class TermsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 14),
         _FullTextButton(t('btn_full_terms'), 'terms.html'),
-        const SizedBox(height: 10),
-        _FullTextButton(t('btn_refund_policy'), 'refund.html'),
+        if (buying) ...[
+          const SizedBox(height: 10),
+          _FullTextButton(t('btn_refund_policy'), 'refund.html'),
+        ],
       ],
     );
   }

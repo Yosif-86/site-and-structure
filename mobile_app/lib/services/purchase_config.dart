@@ -59,11 +59,18 @@ class PurchaseConfig extends ChangeNotifier {
 
   /// Admin only (the database rejects anyone else).
   Future<void> set(bool on) async {
-    await SupabaseService.instance.client.from('app_config').update({
-      'value': on,
-      'updated_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('key', 'purchases_enabled');
-    _enabled = on;
+    final saved = await SupabaseService.instance.client
+        .from('app_config')
+        .update({
+          'value': on,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('key', 'purchases_enabled')
+        .select('value');
+    // A refused update changes no row and raises no error: show what the
+    // database really holds, not what was asked for.
+    _enabled = (saved as List).isNotEmpty ? saved.first['value'] == true : _enabled;
     notifyListeners();
+    if (saved.isEmpty) throw StateError('purchase switch not saved');
   }
 }

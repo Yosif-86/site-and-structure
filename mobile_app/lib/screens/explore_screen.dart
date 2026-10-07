@@ -5,6 +5,7 @@ import '../models/course.dart';
 import '../services/error_reporter.dart';
 import '../services/text_search.dart';
 import '../services/learning_service.dart';
+import '../services/purchase_config.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -85,8 +86,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
         .where((w) => w.isNotEmpty)
         .toList();
     return (_courses ?? const <Course>[]).where((c) {
-      if (_filter == _PriceFilter.free && !c.isFree) return false;
-      if (_filter == _PriceFilter.paid && c.isFree) return false;
+      final filter =
+          PurchaseConfig.instance.enabled ? _filter : _PriceFilter.all;
+      if (filter == _PriceFilter.free && !c.isFree) return false;
+      if (filter == _PriceFilter.paid && c.isFree) return false;
       if (words.isEmpty) return true;
       final hay = _normalize([
         c.localizedTitle(ar),
@@ -133,8 +136,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ? null
                       : IconButton(
                           tooltip: t('btn_clear'),
-                          icon: Icon(Icons.close_rounded,
-                              color: AppColors.muted),
+                          icon:
+                              Icon(Icons.close_rounded, color: AppColors.muted),
                           onPressed: () {
                             _searchCtrl.clear();
                             setState(() => _query = '');
@@ -147,24 +150,28 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                _FilterPill(
-                    label: t('filter_all'),
-                    selected: _filter == _PriceFilter.all,
-                    onTap: () => setState(() => _filter = _PriceFilter.all)),
-                _FilterPill(
-                    label: t('card_free'),
-                    selected: _filter == _PriceFilter.free,
-                    onTap: () => setState(() => _filter = _PriceFilter.free)),
-                _FilterPill(
-                    label: t('filter_paid'),
-                    selected: _filter == _PriceFilter.paid,
-                    onTap: () => setState(() => _filter = _PriceFilter.paid)),
-              ],
-            ),
+            // Free / paid filter only while buying is on; during store
+            // review (and always on iPhone) there is no "paid" to show.
+            if (PurchaseConfig.instance.enabled) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _FilterPill(
+                      label: t('filter_all'),
+                      selected: _filter == _PriceFilter.all,
+                      onTap: () => setState(() => _filter = _PriceFilter.all)),
+                  _FilterPill(
+                      label: t('card_free'),
+                      selected: _filter == _PriceFilter.free,
+                      onTap: () => setState(() => _filter = _PriceFilter.free)),
+                  _FilterPill(
+                      label: t('filter_paid'),
+                      selected: _filter == _PriceFilter.paid,
+                      onTap: () => setState(() => _filter = _PriceFilter.paid)),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             if (_error != null)
               GlassCard(

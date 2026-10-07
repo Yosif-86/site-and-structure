@@ -170,8 +170,10 @@ class NotificationBell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final svc = NotificationService.instance;
+    // Also the theme: the bell is a const widget, so without this it kept
+    // the old mode's colours after switching light / dark.
     return AnimatedBuilder(
-      animation: svc,
+      animation: Listenable.merge([svc, AppTheme.instance]),
       builder: (context, _) {
         final count = svc.unread;
         return Semantics(

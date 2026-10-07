@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
+import 'arc_mark.dart';
+
 /// Wraps the whole app. Shows a full-screen brand cover whenever the app is
 /// backgrounded/inactive, so the OS app-switcher thumbnail never shows real
 /// content — the app-wide half of the screenshot/recording privacy story
@@ -60,22 +62,8 @@ class _PrivacyOverlayState extends State<PrivacyOverlay>
           Positioned.fill(
             child: Container(
               color: const Color(0xFF14120F),
-              child: Center(
-                child: Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFE8622C), Color(0xFF8A3A1B)],
-                    ),
-                  ),
-                  child: const Icon(Icons.change_history,
-                      color: Colors.white, size: 28),
-                ),
-              ),
+              // The brand lockup, same as the login screen.
+              child: const Center(child: ArcLogo(height: 64)),
             ),
           ),
       ],

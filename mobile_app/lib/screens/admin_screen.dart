@@ -1137,7 +1137,7 @@ class _AdminScreenState extends State<AdminScreen> {
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 value: on,
-                activeThumbColor: AppColors.teal,
+                activeThumbColor: Colors.white,
                 title: Text(t('purchase_switch_title'),
                     style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
                 subtitle: Text(
