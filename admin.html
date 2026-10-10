@@ -294,6 +294,10 @@
           <div class="stat-icon c-muted">&#127909;</div>
           <div><div class="stat-num" id="statUploads">—</div><div class="stat-label" data-i18n="pending_uploads">Pending lecture uploads</div></div>
         </button>
+        <button class="stat-card" data-action="go-view" data-view="files">
+          <div class="stat-icon c-green">&#128196;</div>
+          <div><div class="stat-num" id="statFiles">—</div><div class="stat-label" data-i18n="pending_files">Files awaiting approval</div></div>
+        </button>
         <button class="stat-card" data-action="go-view" data-view="flagged">
           <div class="stat-icon">&#128681;</div>
           <div><div class="stat-num" id="statFlagged">—</div><div class="stat-label" data-i18n="flagged_logins">Flagged logins</div></div>
@@ -411,6 +415,26 @@
           <tr><th data-i18n="th_course">Course</th><th data-i18n="th_lecture">Lecture</th><th></th><th data-i18n="th_publish_video">Publish video</th></tr>
         </thead>
         <tbody id="uploadBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+</div>
+
+<div class="view" data-view="files">
+<section class="section">
+  <div class="wrap">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="files_tag">Course files</div>
+      <h2 data-i18n="pending_files">Files awaiting approval</h2>
+    </div>
+    <div class="table-wrap">
+      <table id="filesTable">
+        <thead>
+          <tr><th data-i18n="th_course">Course</th><th data-i18n="th_file">File</th><th data-i18n="th_lecture">Lecture</th><th data-i18n="th_access">Access</th><th></th><th></th></tr>
+        </thead>
+        <tbody id="filesBody"></tbody>
       </table>
     </div>
   </div>
@@ -662,6 +686,12 @@
       th_lecture: 'المحاضرة', th_publish_video: 'نشر الفيديو', no_pending_uploads: 'لا توجد رفوعات معلّقة.',
       download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ', copy_lecture_id: 'نسخ معرّف المحاضرة',
       r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
+      files_tag: 'ملفات الدورات', pending_files: 'ملفات بانتظار الموافقة', th_file: 'الملف', th_access: 'الوصول',
+      no_pending_files: 'لا توجد ملفات بانتظار الموافقة.', file_whole_course: 'الدورة كاملة',
+      file_downloadable: 'قابل للتحميل', file_view_only: 'عرض فقط', open_file: 'فتح',
+      file_not_ready: 'الملف قيد المعالجة، حاول بعد قليل.',
+      prompt_reject_file: 'سبب رفض الملف "{title}" (يصل للمدرّس):', file_approved: 'تمت الموافقة على الملف.',
+      file_rejected: 'تم رفض الملف.', alert_file_review_failed: 'فشل: ',
       alert_publish_video_failed: 'فشل: ', alert_publish_video_empty: 'أدخل مسار R2 أولاً.',
       th_students_enrolled: 'الطلاب', th_total_revenue: 'إجمالي الإيرادات', th_teacher_payout: 'حصة المدرس', th_your_profit: 'ربحك',
       no_revenue: 'لا توجد إيرادات بعد.', total_row_label: 'الإجمالي',
@@ -697,6 +727,7 @@
     if(typeof loadEditRequests === 'function') loadEditRequests();
     if(typeof loadInvites === 'function') loadInvites();
     if(typeof loadUploads === 'function') loadUploads();
+    if(typeof loadPendingFiles === 'function') loadPendingFiles();
     if(typeof loadFlagged === 'function') loadFlagged();
     if(typeof loadDevices === 'function') loadDevices();
     if(typeof loadDashboardStats === 'function') loadDashboardStats();
@@ -1151,6 +1182,65 @@
     }).join('');
   }
 
+  // Course files waiting for approval: same query and the same database
+  // function (admin_review_course_file) as the app's admin screen, so both
+  // stay in step and the teacher gets the same notification.
+  async function loadPendingFiles(){
+    const body = document.getElementById('filesBody');
+    const { data: files, error } = await sb.from('course_files')
+      .select('id, course_id, lecture_id, title, view_path, original_name, allow_download, created_at, lectures(title)')
+      .eq('status', 'pending_review')
+      .order('created_at');
+    const stat = document.getElementById('statFiles');
+    if(stat) stat.textContent = error ? '—' : (files || []).length;
+    if(error || !files || files.length === 0){
+      body.innerHTML = `<tr><td colspan="6" class="empty">${t('no_pending_files')}</td></tr>`;
+      return;
+    }
+    const courseIds = [...new Set(files.map(f => f.course_id).filter(Boolean))];
+    const { data: courses } = courseIds.length
+      ? await sb.from('courses').select('id, title').in('id', courseIds)
+      : { data: [] };
+    const titleById = {};
+    (courses || []).forEach(c => { titleById[c.id] = c.title; });
+    body.innerHTML = files.map(f => {
+      const lecture = (f.lectures && f.lectures.title) || t('file_whole_course');
+      const name = f.original_name ? `<div style="font-size:12px;color:var(--muted)">${escapeHtml(f.original_name)}</div>` : '';
+      return `
+        <tr>
+          <td>${escapeHtml(titleById[f.course_id] || '—')}</td>
+          <td>${escapeHtml(f.title || '—')}${name}</td>
+          <td>${escapeHtml(lecture)}</td>
+          <td>${f.allow_download ? t('file_downloadable') : t('file_view_only')}</td>
+          <td><button class="btn" data-action="open-pending-file" data-path="${escapeHtml(f.view_path || '')}">${t('open_file')}</button></td>
+          <td style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-accent" data-action="approve-file" data-id="${escapeHtml(f.id)}">${t('approve')}</button>
+            <button class="btn" data-action="reject-file" data-id="${escapeHtml(f.id)}" data-title="${escapeHtml(f.title || '')}">${t('reject')}</button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  async function openPendingFile(path){
+    if(!path){ alert(t('file_not_ready')); return; }
+    const { data, error } = await sb.storage.from('course-files').createSignedUrl(path, 120);
+    if(error){ alert(t('alert_download_failed') + error.message); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }
+
+  async function reviewFile(id, approve, title){
+    let reason = null;
+    if(!approve){
+      reason = prompt(t('prompt_reject_file').replace('{title}', title || ''));
+      if(reason === null) return;
+      reason = reason.trim() || null;
+    }
+    const { error } = await sb.rpc('admin_review_course_file', { p_file_id: id, p_approve: approve, p_reason: reason });
+    if(error){ alert(t('alert_file_review_failed') + error.message); return; }
+    alert(t(approve ? 'file_approved' : 'file_rejected'));
+    loadPendingFiles();
+  }
+
   async function loadFlagged(){
     const { data: flagged } = await sb.from('login_events')
       .select('email, city, country, distance_km, created_at')
@@ -1602,6 +1692,7 @@
     loadEditRequests();
     loadInvites();
     loadUploads();
+    loadPendingFiles();
     loadFlagged();
     loadDevices();
     loadDashboardStats();
@@ -1649,6 +1740,9 @@
     'clear-error-log': () => clearErrorLog(),
     'save-my-payment': () => saveMyPayment(),
     'download-upload': (el) => downloadUpload(el.dataset.path),
+    'open-pending-file': (el) => openPendingFile(el.dataset.path),
+    'approve-file': (el) => reviewFile(el.dataset.id, true),
+    'reject-file': (el) => reviewFile(el.dataset.id, false, el.dataset.title),
     'publish-video': (el) => {
       const row = el.closest('tr');
       publishVideo(el.dataset.id, row.querySelector('.r2-input'), el.dataset.path);
