@@ -94,7 +94,8 @@ module.exports = async (req, res) => {
       .maybeSingle();
     if (!profErr && prof) {
       const n = Number(prof.max_devices);
-      if (Number.isInteger(n) && n >= 1 && n <= 5) maxDevices = n;
+      // Up to 20 (store-review account); matches profiles_max_devices_check.
+      if (Number.isInteger(n) && n >= 1 && n <= 20) maxDevices = n;
       existingToken = prof.active_session_token || null;
     }
   }
