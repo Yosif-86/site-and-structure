@@ -126,7 +126,7 @@
   .form-box{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:20px;}
   .form-box label{display:block; font-family:'IBM Plex Mono'; font-size:10.5px; color:var(--muted2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; margin-top:14px;}
   .form-box label:first-child{margin-top:0;}
-  .form-box input[type=text], .form-box select{
+  .form-box input[type=text], .form-box select, .form-box textarea{
     width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:'Work Sans'; font-size:14px;
   }
   .field-hint{color:var(--muted2); font-size:11.5px; margin-top:4px;}
@@ -313,6 +313,10 @@
         <button class="stat-card" data-action="go-view" data-view="errorLog">
           <div class="stat-icon">&#9888;</div>
           <div><div class="stat-num" id="statErrorLog">—</div><div class="stat-label" data-i18n="error_log">Error log</div></div>
+        </button>
+        <button class="stat-card" data-action="go-view" data-view="announce">
+          <div class="stat-icon c-yellow">&#128276;</div>
+          <div><div class="stat-num">+</div><div class="stat-label" data-i18n="announce_title">Send notification</div></div>
         </button>
         <button class="stat-card" data-action="go-view" data-view="myPayment">
           <div class="stat-icon c-green">&#128176;</div>
@@ -584,6 +588,36 @@
 </section>
 </div>
 
+<div class="view" data-view="announce">
+<section class="section">
+  <div class="wrap" style="max-width:520px;">
+    <button class="back-link" data-action="go-view" data-view="dashboard">&larr; <span data-i18n="back_to_dashboard">Back to dashboard</span></button>
+    <div class="section-head">
+      <div class="section-tag" data-i18n="manage_tag">Manage</div>
+      <h2 data-i18n="announce_title">Send notification</h2>
+    </div>
+    <div class="form-box">
+      <div class="field-hint" data-i18n="announce_sub" style="margin-bottom:10px;">Goes to the bell and to users' phones.</div>
+      <label data-i18n="announce_field_title">Title</label>
+      <input type="text" id="announceTitle" maxlength="80">
+      <label data-i18n="announce_field_body">Message</label>
+      <textarea id="announceBody" rows="4" maxlength="500"></textarea>
+      <label data-i18n="announce_to">To</label>
+      <select id="announceAudience">
+        <option value="me" data-i18n="announce_me">Only me (test)</option>
+        <option value="students" data-i18n="announce_students">Students</option>
+        <option value="teachers" data-i18n="announce_teachers">Teachers</option>
+        <option value="all" data-i18n="announce_all">Everyone</option>
+      </select>
+      <div id="announceErr" class="form-error"></div>
+      <div class="form-actions">
+        <button class="btn btn-accent" id="announceSend" data-action="send-announcement" data-i18n="announce_send">Send</button>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
 <div class="view" data-view="coursesList">
 <section class="section">
   <div class="wrap">
@@ -686,6 +720,11 @@
       th_lecture: 'المحاضرة', th_publish_video: 'نشر الفيديو', no_pending_uploads: 'لا توجد رفوعات معلّقة.',
       download: 'تحميل', alert_download_failed: 'فشل تحميل رابط التنزيل: ', copy_lecture_id: 'نسخ معرّف المحاضرة',
       r2_placeholder: 'مسار R2', save_and_publish: 'حفظ ونشر',
+      announce_title: 'إرسال إشعار', announce_sub: 'يصل إلى الجرس وإلى هواتف المستخدمين.',
+      announce_field_title: 'العنوان', announce_field_body: 'نص الإشعار', announce_to: 'إلى',
+      announce_me: 'أنا فقط (تجربة)', announce_students: 'الطلاب', announce_teachers: 'المدرّسون', announce_all: 'الجميع',
+      announce_send: 'إرسال', announce_need_title: 'اكتب عنوان الإشعار.',
+      announce_confirm: 'إرسال "{title}" إلى: {to}؟', announce_sent: 'أُرسل الإشعار إلى {n} حساب.',
       files_tag: 'ملفات الدورات', pending_files: 'ملفات بانتظار الموافقة', th_file: 'الملف', th_access: 'الوصول',
       no_pending_files: 'لا توجد ملفات بانتظار الموافقة.', file_whole_course: 'الدورة كاملة',
       file_downloadable: 'قابل للتحميل', file_view_only: 'عرض فقط', open_file: 'فتح',
@@ -1221,6 +1260,31 @@
     }).join('');
   }
 
+  // Same database function as the app's admin screen
+  // (admin_send_announcement): bell + phone push for the chosen group.
+  async function sendAnnouncement(){
+    const titleEl = document.getElementById('announceTitle');
+    const bodyEl = document.getElementById('announceBody');
+    const audience = document.getElementById('announceAudience').value;
+    const errEl = document.getElementById('announceErr');
+    const btn = document.getElementById('announceSend');
+    const title = titleEl.value.trim();
+    const body = bodyEl.value.trim();
+    errEl.textContent = '';
+    if(!title){ errEl.textContent = t('announce_need_title'); return; }
+    if(!confirm(t('announce_confirm').replace('{title}', title).replace('{to}', t('announce_' + audience)))) return;
+    btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('admin_send_announcement', { p_title: title, p_body: body, p_audience: audience });
+      if(error){ errEl.textContent = error.message; return; }
+      titleEl.value = '';
+      bodyEl.value = '';
+      alert(t('announce_sent').replace('{n}', data));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   async function openPendingFile(path){
     if(!path){ alert(t('file_not_ready')); return; }
     const { data, error } = await sb.storage.from('course-files').createSignedUrl(path, 120);
@@ -1741,6 +1805,7 @@
     'save-my-payment': () => saveMyPayment(),
     'download-upload': (el) => downloadUpload(el.dataset.path),
     'open-pending-file': (el) => openPendingFile(el.dataset.path),
+    'send-announcement': () => sendAnnouncement(),
     'approve-file': (el) => reviewFile(el.dataset.id, true),
     'reject-file': (el) => reviewFile(el.dataset.id, false, el.dataset.title),
     'publish-video': (el) => {

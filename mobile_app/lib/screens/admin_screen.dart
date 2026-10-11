@@ -1156,6 +1156,8 @@ class _AdminScreenState extends State<AdminScreen> {
             );
           },
         ),
+        const SizedBox(height: 12),
+        const _AnnouncementCard(),
         if (myPendingPayments > 0) ...[
           const SizedBox(height: 12),
           FadeSlideIn(
@@ -2444,6 +2446,136 @@ class _AdminScreenState extends State<AdminScreen> {
 }
 
 /// An invite code in a monospace box with a copy button beside it.
+/// Sends one notification (bell + phone push) to a chosen group through
+/// admin_send_announcement (add-admin-announcements.sql).
+class _AnnouncementCard extends StatefulWidget {
+  const _AnnouncementCard();
+
+  @override
+  State<_AnnouncementCard> createState() => _AnnouncementCardState();
+}
+
+class _AnnouncementCardState extends State<_AnnouncementCard> {
+  final _titleCtrl = TextEditingController();
+  final _bodyCtrl = TextEditingController();
+  String _audience = 'me';
+  bool _sending = false;
+
+  static const _audiences = ['me', 'students', 'teachers', 'all'];
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _bodyCtrl.dispose();
+    super.dispose();
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _send() async {
+    if (_sending) return;
+    final t = AppStrings.instance.t;
+    final title = _titleCtrl.text.trim();
+    final body = _bodyCtrl.text.trim();
+    if (title.isEmpty) {
+      _snack(t('announce_need_title'));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text('${t('announce_confirm')}${t('announce_$_audience')}',
+            style: TextStyle(color: AppColors.text)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(t('cancel'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(t('announce_send'))),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      final n = await SupabaseService.instance.client.rpc(
+          'admin_send_announcement',
+          params: {'p_title': title, 'p_body': body, 'p_audience': _audience});
+      _titleCtrl.clear();
+      _bodyCtrl.clear();
+      _snack(t('announce_sent').replaceAll('{n}', '$n'));
+    } catch (e) {
+      _snack(ErrorReporter.userMessage(e, page: 'admin'));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(t('announce_title'),
+              style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(t('announce_sub'),
+              style: AppFonts.body(size: 12, color: AppColors.muted)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _titleCtrl,
+            maxLength: 80,
+            decoration: InputDecoration(labelText: t('announce_field_title')),
+          ),
+          const SizedBox(height: 4),
+          TextField(
+            controller: _bodyCtrl,
+            maxLength: 500,
+            minLines: 2,
+            maxLines: 5,
+            decoration: InputDecoration(labelText: t('announce_field_body')),
+          ),
+          const SizedBox(height: 4),
+          Text(t('announce_to'),
+              style: AppFonts.body(size: 12.5, color: AppColors.muted)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in _audiences)
+                ChoiceChip(
+                  label: Text(t('announce_$a')),
+                  selected: _audience == a,
+                  onSelected: _sending
+                      ? null
+                      : (_) => setState(() => _audience = a),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: DashButton(t('announce_send'),
+                primary: true,
+                icon: ArcIcon.bell,
+                onPressed: _sending ? null : _send),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _InviteCode extends StatelessWidget {
   final String code;
   const _InviteCode({required this.code});
