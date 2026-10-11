@@ -1,4 +1,5 @@
 import Flutter
+import StoreKit
 import UIKit
 
 /// Native replacement for the broken screen_protector plugin's iOS half.
@@ -27,6 +28,18 @@ import UIKit
       // No iOS-specific setup call needed today (Android's setSecure is a no-op
       // here); this keeps the channel symmetric across platforms.
       result(nil)
+    }
+
+    // App Store country of the signed-in Apple ID ("USA" etc.): the app
+    // shows the outside-checkout button only for the US storefront.
+    let storefront = FlutterMethodChannel(
+      name: "site_and_structure/storefront", binaryMessenger: messenger)
+    storefront.setMethodCallHandler { call, result in
+      guard call.method == "countryCode" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(SKPaymentQueue.default().storefront?.countryCode)
     }
 
     NotificationCenter.default.addObserver(

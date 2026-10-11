@@ -7,6 +7,7 @@ import 'package:gal/gal.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
@@ -127,7 +128,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       try {
         final fileRows = await sb
             .from('course_files')
-            .select('id, title, kind, view_path, view_type, is_free, allow_download, original_name, status, lecture_id')
+            .select(
+                'id, title, kind, view_path, view_type, is_free, allow_download, original_name, status, lecture_id')
             .eq('course_id', course.id)
             .eq('status', 'published')
             .order('order_index');
@@ -264,8 +266,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     if (!TapGuard.allow()) return;
     // Review switch: paid courses can't be bought in the app right now.
     if (!(_course?.isFree ?? true) && !PurchaseConfig.instance.enabled) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_t('course_subscribers_only'))));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_t('course_subscribers_only'))));
       return;
     }
     if (!SupabaseService.instance.isLoggedIn) {
@@ -290,7 +292,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       builder: (_) => GlassSheet(
         child: course.isFree
             ? _FreeEnrollSheet(course: course, onDone: _load)
-            : _PaidEnrollSheet(course: course, onDone: _load),
+            : kWaylPayments
+                ? _WaylEnrollSheet(course: course, onDone: _load)
+                : _PaidEnrollSheet(course: course, onDone: _load),
       ),
     );
   }
@@ -345,7 +349,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final continueLecture =
         _lectures.where((l) => l.id == _continueWatchingId).firstOrNull;
     // An enrolled student who hasn't started gets "start" on lecture 1.
-    final startLecture = (_isActive && _lectures.isNotEmpty) ? _lectures.first : null;
+    final startLecture =
+        (_isActive && _lectures.isNotEmpty) ? _lectures.first : null;
     final heroLecture = continueLecture ?? startLecture ?? freeLecture;
     final heroLabel = continueLecture != null
         ? _t('continue_watching')
@@ -371,7 +376,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             tag: tag,
             thumbnailUrl: course.thumbnailUrl,
             playLabel: heroLabel,
-            onPlay: heroLecture == null ? null : () => _watchLecture(heroLecture),
+            onPlay:
+                heroLecture == null ? null : () => _watchLecture(heroLecture),
           ),
         ),
         const SizedBox(height: 16),
@@ -387,36 +393,39 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                     builder: (_) => TeacherProfileScreen(
                         teacherId: course.teacherId!, fallbackName: teacher))),
             child: Row(children: [
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                    colors: [AppColors.red, AppColors.teal],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight),
+              Container(
+                width: 38,
+                height: 38,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                      colors: [AppColors.red, AppColors.teal],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight),
+                ),
+                child: Text(teacher.characters.first.toUpperCase(),
+                    style: AppFonts.body(
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: Colors.white)),
               ),
-              child: Text(teacher.characters.first.toUpperCase(),
-                  style: AppFonts.body(
-                      size: 15, weight: FontWeight.w700, color: Colors.white)),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(teacher,
-                      style: AppFonts.body(size: 15, weight: FontWeight.w600)),
-                  Text(_t('instructor'),
-                      style: AppFonts.body(size: 12, color: AppColors.muted)),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(teacher,
+                        style:
+                            AppFonts.body(size: 15, weight: FontWeight.w600)),
+                    Text(_t('instructor'),
+                        style: AppFonts.body(size: 12, color: AppColors.muted)),
+                  ],
+                ),
               ),
-            ),
-            if (course.teacherId != null)
-              ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2),
-          ]),
+              if (course.teacherId != null)
+                ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2),
+            ]),
           ),
         ],
         const SizedBox(height: 16),
@@ -443,46 +452,46 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         FadeSlideIn(
           delayMs: 100,
           child: IntrinsicHeight(
-           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _StatTile(
-                  icon: ArcIcon.lessons,
-                  value: '${_lectures.length}',
-                  label: _t('lessons_label'),
-                  color: AppColors.red,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _StatTile(
+                    icon: ArcIcon.lessons,
+                    value: '${_lectures.length}',
+                    label: _t('lessons_label'),
+                    color: AppColors.red,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatTile(
-                  icon: ArcIcon.review,
-                  value: '${_files.length}',
-                  label: _t('files_label'),
-                  color: const Color(0xFFE0A030),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatTile(
+                    icon: ArcIcon.review,
+                    value: '${_files.length}',
+                    label: _t('files_label'),
+                    color: const Color(0xFFE0A030),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatTile(
-                  icon: ArcIcon.clock,
-                  value: durationLabel ?? '—',
-                  label: _t('duration_label'),
-                  color: AppColors.teal,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatTile(
+                    icon: ArcIcon.clock,
+                    value: durationLabel ?? '—',
+                    label: _t('duration_label'),
+                    color: AppColors.teal,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatTile(
-                  icon: ArcIcon.play,
-                  value: '$freeCount',
-                  label: _t('feature_free_preview'),
-                  color: AppColors.byline,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatTile(
+                    icon: ArcIcon.play,
+                    value: '$freeCount',
+                    label: _t('feature_free_preview'),
+                    color: AppColors.byline,
+                  ),
                 ),
-              ),
-            ],
-           ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 18),
@@ -524,8 +533,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     // A copy -- localizedMeta returns the model's own map, and the Duration
     // entry must survive for courseDurationLabel's fallback.
     final meta = Map<String, dynamic>.of(course.localizedMeta(ar) ?? {})
-      ..removeWhere((k, _) =>
-          const {'Duration', 'duration', 'المدة'}.contains(k));
+      ..removeWhere(
+          (k, _) => const {'Duration', 'duration', 'المدة'}.contains(k));
     return [
       if (desc != null && desc.isNotEmpty) ...[
         GlassCard(
@@ -537,8 +546,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                   style: AppFonts.body(size: 16, weight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(desc,
-                  style: AppFonts.body(
-                      size: 14.5, color: AppColors.muted)),
+                  style: AppFonts.body(size: 14.5, color: AppColors.muted)),
             ],
           ),
         ),
@@ -572,7 +580,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(p,
-                            style: AppFonts.body(size: 14, color: AppColors.text)),
+                            style:
+                                AppFonts.body(size: 14, color: AppColors.text)),
                       ),
                     ],
                   ),
@@ -749,8 +758,7 @@ class _EnrollPanel extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(course.isFree ? t('enroll_free') : t('enroll'),
-                  maxLines: 1),
+              Text(course.isFree ? t('enroll_free') : t('enroll'), maxLines: 1),
               const SizedBox(width: 8),
               const ArcIconView(ArcIcon.chevron,
                   size: 18, color: Colors.white, stroke: 2.2),
@@ -879,8 +887,9 @@ class _Tabs extends StatelessWidget {
                     child: Text(labels[i],
                         style: AppFonts.body(
                             size: 14,
-                            weight:
-                                i == selected ? FontWeight.w700 : FontWeight.w500,
+                            weight: i == selected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                             color: i == selected
                                 ? AppColors.red
                                 : AppColors.muted)),
@@ -901,8 +910,7 @@ class _CourseHero extends StatelessWidget {
   final String? thumbnailUrl;
   final String? playLabel;
   final VoidCallback? onPlay;
-  const _CourseHero(
-      {this.tag, this.thumbnailUrl, this.playLabel, this.onPlay});
+  const _CourseHero({this.tag, this.thumbnailUrl, this.playLabel, this.onPlay});
 
   @override
   Widget build(BuildContext context) {
@@ -929,8 +937,8 @@ class _CourseHero extends StatelessWidget {
               PositionedDirectional(
                 top: 14,
                 start: 14,
-                child: GlassChip(
-                    label: tag!, icon: ArcIcon.award, onImage: true),
+                child:
+                    GlassChip(label: tag!, icon: ArcIcon.award, onImage: true),
               ),
             if (onPlay != null)
               Center(
@@ -999,7 +1007,8 @@ class _CurriculumCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // Number by real order, not display order -- the continue-watching
     // lecture is pulled to the top but keeps its own episode number.
-    final sorted = [...lectures]..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
+    final sorted = [...lectures]
+      ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     final numberOf = {
       for (var i = 0; i < sorted.length; i++) sorted[i].id: i + 1
     };
@@ -1061,9 +1070,11 @@ class _LectureRow extends StatelessWidget {
 
     Widget leading;
     if (completed) {
-      leading = Icon(Icons.check_circle_rounded, size: 24, color: AppColors.teal);
+      leading =
+          Icon(Icons.check_circle_rounded, size: 24, color: AppColors.teal);
     } else if (!unlocked) {
-      leading = Icon(Icons.lock_outline_rounded, size: 20, color: AppColors.muted2);
+      leading =
+          Icon(Icons.lock_outline_rounded, size: 20, color: AppColors.muted2);
     } else {
       leading = Text(index.toString().padLeft(2, '0'),
           style: AppFonts.code(size: 13, color: AppColors.muted));
@@ -1141,7 +1152,8 @@ class _LectureRow extends StatelessWidget {
                   )
                 else
                   Text(t('locked'),
-                      style: AppFonts.body(size: 12.5, color: AppColors.muted2)),
+                      style:
+                          AppFonts.body(size: 12.5, color: AppColors.muted2)),
               ],
             ),
             if (pct != null) ...[
@@ -1168,6 +1180,10 @@ class _LectureRow extends StatelessWidget {
 }
 
 /// Free-course enroll confirmation sheet, mirrors openEnroll()'s free branch.
+/// Paid courses go through Wayl (online payment). false brings back the
+/// manual transfer + screenshot flow below.
+const bool kWaylPayments = true;
+
 class _FreeEnrollSheet extends StatefulWidget {
   final Course course;
   final VoidCallback onDone;
@@ -1253,6 +1269,231 @@ class _FreeEnrollSheetState extends State<_FreeEnrollSheet> {
                 ),
                 const SizedBox(height: 16),
               ]),
+      ),
+    );
+  }
+}
+
+/// Wayl checkout: the server prices the course (and an optional discount
+/// code) and returns a Wayl payment page, opened in the browser (Zain Cash,
+/// Qi Card, FIB...). When the student comes back, the server confirms the
+/// payment with Wayl before the course turns on (api/wayl-webhook.js).
+class _WaylEnrollSheet extends StatefulWidget {
+  final Course course;
+  final VoidCallback onDone;
+  const _WaylEnrollSheet({required this.course, required this.onDone});
+
+  @override
+  State<_WaylEnrollSheet> createState() => _WaylEnrollSheetState();
+}
+
+class _WaylEnrollSheetState extends State<_WaylEnrollSheet>
+    with WidgetsBindingObserver {
+  final _codeCtrl = TextEditingController();
+  bool _loading = false;
+  bool _checking = false;
+  String? _error;
+  String? _reference; // set once the payment page was opened
+  bool _paid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  // Back from the browser: see if the payment went through.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _reference != null && !_paid) {
+      _check(quiet: true);
+    }
+  }
+
+  String _messageFor(String? code) {
+    final t = AppStrings.instance.t;
+    return switch (code) {
+      'code_invalid' => t('err_invalid_discount'),
+      'already_enrolled' => t('wayl_already_enrolled'),
+      'amount_too_low' => t('wayl_amount_too_low'),
+      'payments_not_configured' => t('wayl_unavailable'),
+      'payment_provider_error' => t('wayl_provider_error'),
+      _ => t('err_generic'),
+    };
+  }
+
+  Future<void> _pay() async {
+    final token =
+        SupabaseService.instance.client.auth.currentSession?.accessToken;
+    if (token == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final res = await http
+          .post(Uri.parse('$kApiBaseUrl/api/wayl-checkout'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode({
+                'courseSlug': widget.course.slug,
+                if (_codeCtrl.text.trim().isNotEmpty)
+                  'code': _codeCtrl.text.trim(),
+              }))
+          .timeout(const Duration(seconds: 25));
+      Map<String, dynamic> body = {};
+      try {
+        body = jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {}
+      final url = body['url'] as String?;
+      if (res.statusCode != 200 || url == null) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = _messageFor(body['error'] as String?);
+        });
+        return;
+      }
+      _reference = body['referenceId'] as String?;
+      final opened =
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        if (!opened) _error = AppStrings.instance.t('wayl_provider_error');
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = NetStatus.isOffline(e)
+            ? AppStrings.instance.t('err_offline')
+            : AppStrings.instance.t('err_generic');
+      });
+    }
+  }
+
+  Future<void> _check({bool quiet = false}) async {
+    final ref = _reference;
+    if (ref == null || _checking) return;
+    setState(() {
+      _checking = true;
+      if (!quiet) _error = null;
+    });
+    try {
+      final res = await http
+          .get(Uri.parse(
+              '$kApiBaseUrl/api/wayl-webhook?ref=${Uri.encodeQueryComponent(ref)}'))
+          .timeout(const Duration(seconds: 20));
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      final status = body['status'] as String?;
+      setState(() {
+        _checking = false;
+        if (status == 'paid') {
+          _paid = true;
+        } else if (!quiet) {
+          _error = AppStrings.instance
+              .t(status == 'failed' ? 'wayl_failed' : 'wayl_pending');
+        }
+      });
+      if (status == 'paid') widget.onDone();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+        if (!quiet) _error = AppStrings.instance.t('wayl_pending');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final ar = AppStrings.instance.isAr;
+    return Padding(
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+          left: 24,
+          right: 24,
+          top: 24),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: _paid
+              ? Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.check_circle_outline,
+                      color: AppColors.teal, size: 44),
+                  const SizedBox(height: 12),
+                  Text(t('wayl_paid'), style: AppFonts.heading(size: 22)),
+                  const SizedBox(height: 16),
+                  OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(t('btn_close'))),
+                  const SizedBox(height: 12),
+                ])
+              : Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(widget.course.localizedTitle(ar),
+                      textAlign: TextAlign.center,
+                      style: AppFonts.heading(size: 22)),
+                  const SizedBox(height: 6),
+                  Text(Money.text(widget.course.price, fallback: ''),
+                      style: AppFonts.body(
+                          size: 18,
+                          weight: FontWeight.w700,
+                          color: AppColors.teal)),
+                  const SizedBox(height: 6),
+                  Text(t('wayl_methods'),
+                      textAlign: TextAlign.center,
+                      style: AppFonts.body(size: 13, color: AppColors.muted)),
+                  if (_reference == null) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _codeCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: InputDecoration(
+                          labelText: t('discount_code_optional')),
+                    ),
+                  ],
+                  if (_error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(_error!,
+                        textAlign: TextAlign.center,
+                        style: AppFonts.body(size: 12.5, color: AppColors.red)),
+                  ],
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                        onPressed: _loading ? null : _pay,
+                        child: Text(_loading
+                            ? t('wayl_opening')
+                            : (_reference == null
+                                ? t('wayl_pay')
+                                : t('wayl_pay_again')))),
+                  ),
+                  if (_reference != null) ...[
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                          onPressed: _checking ? null : () => _check(),
+                          child: Text(_checking
+                              ? t('wayl_checking')
+                              : t('wayl_check'))),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                ]),
+        ),
       ),
     );
   }
@@ -1351,15 +1592,16 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
         setState(() => _discountError = t('err_invalid_discount'));
         return;
       }
-      final res = await http.post(
-        Uri.parse('$kApiBaseUrl/api/redeem-discount-code'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: jsonEncode(
-            {'code': code, 'courseId': widget.course.id}),
-      ).timeout(const Duration(seconds: 20));
+      final res = await http
+          .post(
+            Uri.parse('$kApiBaseUrl/api/redeem-discount-code'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $accessToken',
+            },
+            body: jsonEncode({'code': code, 'courseId': widget.course.id}),
+          )
+          .timeout(const Duration(seconds: 20));
       Map<String, dynamic> body = const {};
       try {
         body = jsonDecode(res.body) as Map<String, dynamic>;
@@ -1478,8 +1720,7 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
     final ext = _proof!.name.contains('.')
         ? _proof!.name.split('.').last.toLowerCase()
         : 'jpg';
-    final fileName =
-        '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final fileName = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$ext';
     var uploaded = false;
     try {
       await sb.storage
@@ -1571,14 +1812,20 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                       Text(widget.course.localizedTitle(ar),
-                          style: AppFonts.body(size: 20, weight: FontWeight.w800)),
+                          style:
+                              AppFonts.body(size: 20, weight: FontWeight.w800)),
                       const SizedBox(height: 4),
                       Row(children: [
                         Text(t('amount_to_pay'),
-                            style: AppFonts.body(size: 13, color: AppColors.muted)),
+                            style: AppFonts.body(
+                                size: 13, color: AppColors.muted)),
                         const SizedBox(width: 6),
-                        Text(_discountedPrice != null ? Money.iqd(_discountedPrice!) : Money.text(widget.course.price, fallback: ''),
-                            style: AppFonts.code(size: 15, color: AppColors.red)),
+                        Text(
+                            _discountedPrice != null
+                                ? Money.iqd(_discountedPrice!)
+                                : Money.text(widget.course.price, fallback: ''),
+                            style:
+                                AppFonts.code(size: 15, color: AppColors.red)),
                       ]),
                       const SizedBox(height: 18),
                       if (_payInfoLoading)
@@ -1597,7 +1844,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                                     label: t('zain_cash'),
                                     sub: t('zain_sub'),
                                     selected: _method == 'zain',
-                                    onTap: () => setState(() => _method = 'zain'))),
+                                    onTap: () =>
+                                        setState(() => _method = 'zain'))),
                           if (_hasZain && _hasQi) const SizedBox(width: 10),
                           if (_hasQi)
                             Expanded(
@@ -1605,7 +1853,8 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                                     label: t('qi_card'),
                                     sub: t('qi_sub'),
                                     selected: _method == 'qi',
-                                    onTap: () => setState(() => _method = 'qi'))),
+                                    onTap: () =>
+                                        setState(() => _method = 'qi'))),
                         ]),
                         if (_method != null) ...[
                           const SizedBox(height: 18),
@@ -1624,20 +1873,23 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                           ),
                         ],
                         const SizedBox(height: 18),
-                        _StepLabel(n: _method == null ? 2 : 3, text: t('step_confirm')),
+                        _StepLabel(
+                            n: _method == null ? 2 : 3,
+                            text: t('step_confirm')),
                         Row(children: [
                           Expanded(
                             child: TextField(
                               controller: _discountCtrl,
                               enabled: !_discountApplied,
-                              decoration:
-                                  InputDecoration(labelText: t('discount_code')),
+                              decoration: InputDecoration(
+                                  labelText: t('discount_code')),
                               textCapitalization: TextCapitalization.characters,
                             ),
                           ),
                           const SizedBox(width: 8),
                           OutlinedButton(
-                              onPressed: _discountApplied ? null : _applyDiscount,
+                              onPressed:
+                                  _discountApplied ? null : _applyDiscount,
                               child: Text(t('apply'))),
                         ]),
                         if (_discountError != null)
@@ -1669,15 +1921,15 @@ class _PaidEnrollSheetState extends State<_PaidEnrollSheet> {
                                   size: 12.5, color: AppColors.error)),
                         ],
                         const SizedBox(height: 18),
-                      ElevatedButton(
-                          onPressed: _loading ? null : _submit,
-                          child: _loading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white))
-                              : Text(t('confirm_payment'))),
+                        ElevatedButton(
+                            onPressed: _loading ? null : _submit,
+                            child: _loading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2, color: Colors.white))
+                                : Text(t('confirm_payment'))),
                       ],
                       const SizedBox(height: 16),
                     ]),
@@ -1804,7 +2056,8 @@ class _SendToCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12)),
                 ),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const ArcIconView(ArcIcon.copy, size: 17, color: Colors.white),
+                  const ArcIconView(ArcIcon.copy,
+                      size: 17, color: Colors.white),
                   const SizedBox(width: 6),
                   Text(t('btn_copy')),
                 ]),
@@ -1896,7 +2149,8 @@ class _NoPayInfo extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: const Color(0xFFE0A030).withValues(alpha: 0.12),
-        border: Border.all(color: const Color(0xFFE0A030).withValues(alpha: 0.45)),
+        border:
+            Border.all(color: const Color(0xFFE0A030).withValues(alpha: 0.45)),
       ),
       child: Row(children: [
         const ArcIconView(ArcIcon.warning,
@@ -1926,7 +2180,8 @@ class _RejectedBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ArcIconView(ArcIcon.alert, size: 22, color: AppColors.error, active: true),
+          ArcIconView(ArcIcon.alert,
+              size: 22, color: AppColors.error, active: true),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -1934,7 +2189,9 @@ class _RejectedBanner extends StatelessWidget {
               children: [
                 Text(t('payment_rejected_title'),
                     style: AppFonts.body(
-                        size: 14, weight: FontWeight.w700, color: AppColors.error)),
+                        size: 14,
+                        weight: FontWeight.w700,
+                        color: AppColors.error)),
                 const SizedBox(height: 4),
                 Text(reason, style: AppFonts.body(size: 13)),
                 const SizedBox(height: 6),

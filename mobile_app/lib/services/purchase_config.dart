@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import 'supabase_service.dart';
 
@@ -18,13 +19,25 @@ class PurchaseConfig extends ChangeNotifier {
   bool _enabled = false;
   bool _reviewer = false;
 
-  /// Apple requires its own in-app purchase for digital courses, so the
-  /// iPhone app never shows buying: students buy outside the iPhone app
-  /// and watch on iPhone.
-  static final bool _platformAllowsBuying = kIsWeb || !Platform.isIOS;
+  /// iPhone: Apple allows a button to an outside checkout (Wayl) only for
+  /// App Store accounts in the United States (Epic v. Apple, May 2025), so
+  /// buying shows only when the device's App Store country is USA. Most
+  /// iPhone users in Iraq use US Apple IDs. iPhone ignores the review switch
+  /// above, which exists for Google Play.
+  bool _iosUsStorefront = false;
+  static const _storefront = MethodChannel('site_and_structure/storefront');
 
   /// Whether this user may see prices and buy.
-  bool get enabled => _enabled && !_reviewer && _platformAllowsBuying;
+  /// Test builds only (--dart-define=FORCE_BUY=true): show the Wayl button
+  /// on Android regardless of the switch, to try a test-mode payment.
+  static const bool _forceBuy = bool.fromEnvironment('FORCE_BUY');
+
+  bool get enabled {
+    if (_reviewer) return false;
+    if (_forceBuy) return true;
+    if (!kIsWeb && Platform.isIOS) return _iosUsStorefront;
+    return _enabled;
+  }
 
   /// The raw setting (for the admin toggle).
   bool get setting => _enabled;
@@ -40,6 +53,14 @@ class PurchaseConfig extends ChangeNotifier {
       _enabled = row?['value'] == true;
     } catch (_) {
       // Table not added yet or offline: keep the last value.
+    }
+    if (!kIsWeb && Platform.isIOS) {
+      try {
+        final code = await _storefront.invokeMethod<String>('countryCode');
+        _iosUsStorefront = code == 'USA' || code == 'US';
+      } catch (_) {
+        _iosUsStorefront = false;
+      }
     }
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
