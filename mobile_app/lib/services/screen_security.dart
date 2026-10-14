@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
+import 'error_reporter.dart';
 import 'supabase_service.dart';
 
 /// Talks to the native code in MainActivity.kt (Android) and AppDelegate.swift
@@ -38,8 +39,33 @@ class ScreenSecurity {
   static String? currentScreen;
   static DateTime? _lastReport;
 
+  /// Builds made only for App Store screenshots pass
+  /// --dart-define=STORE_SHOTS=true to leave the iPhone shield off.
+  static const _storeShots = bool.fromEnvironment('STORE_SHOTS');
+
   /// Call once at start-up so capture attempts are reported app-wide.
-  static void init() => _ensureHandler();
+  /// iPhone: also turns on the full-app screenshot/recording shield and
+  /// logs to error_logs if a new iOS ever stops it from working.
+  static void init() {
+    _ensureHandler();
+    if (!kIsWeb && Platform.isIOS && !_storeShots) {
+      // After the first frame, so the window exists.
+      Future.delayed(const Duration(seconds: 1), _enableShield);
+    }
+  }
+
+  static Future<void> _enableShield() async {
+    try {
+      final ok = await _channel.invokeMethod<bool>('enableShield') ?? false;
+      if (!ok) {
+        await ErrorReporter.report(
+            StateError('iOS screen shield not active'), null,
+            page: 'screen_shield');
+      }
+    } catch (e, st) {
+      await ErrorReporter.report(e, st, page: 'screen_shield');
+    }
+  }
 
   static void _ensureHandler() {
     if (kIsWeb || _handlerSet) return;
