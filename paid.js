@@ -8,10 +8,25 @@
   var text = document.getElementById('payText');
   var openApp = document.getElementById('openApp');
 
+  // Android Chrome only opens the app from an intent: link; iPhone uses
+  // the plain scheme.
+  var appLink = /Android/i.test(navigator.userAgent)
+    ? 'intent://payment#Intent;scheme=siteandstructure;package=com.arcplatformiq.app;end'
+    : 'siteandstructure://payment';
+  openApp.href = appLink;
+
   function show(t, s, app) {
     title.textContent = t;
     text.textContent = s;
     openApp.style.display = app ? "" : "none";
+  }
+
+  // On a phone, go straight back to the app; the button stays as a fallback
+  // if the browser blocks the automatic switch.
+  function backToApp() {
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      setTimeout(function () { location.href = appLink; }, 1200);
+    }
   }
 
   if (!/^arc_[0-9a-f-]{36}$/i.test(ref)) {
@@ -27,8 +42,10 @@
       .then(function (j) {
         if (j.status === 'paid') {
           show('تم الدفع بنجاح ✅', 'تم تفعيل الدورة على حسابك. افتح التطبيق وابدأ التعلم.', true);
+          backToApp();
         } else if (j.status === 'failed') {
           show('لم تكتمل عملية الدفع', 'لم يُخصم أي مبلغ. يمكنك المحاولة مرة أخرى من التطبيق.', true);
+          backToApp();
         } else if (tries < 12) {
           setTimeout(check, 2500);
         } else {
