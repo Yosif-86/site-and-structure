@@ -21,7 +21,9 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q
 const WAYL_API = 'https://api.thewayl.com/api/v1';
 const API_BASE = 'https://site-and-structure.vercel.app';
 const SITE = 'https://arcplatformiq.com';
-const SLUG = /^[a-z0-9][a-z0-9-]{0,120}$/i;
+// Letters and digits in any script: course slugs come from the title, so
+// Arabic titles give Arabic slugs (e.g. اوتوكاد-هندسي-efcdbf).
+const SLUG = /^[p{L}p{N}][p{L}p{N}-]{0,120}$/u;
 
 const KNOWN_ERRORS = new Set([
   'course_unavailable', 'course_free', 'already_enrolled', 'code_invalid',
