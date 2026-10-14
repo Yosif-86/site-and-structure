@@ -65,6 +65,9 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Arc Platform uses the camera only when you choose to take a photo for your profile or course.</string>
+	<!-- Required by Apple (ITMS-90683) because a plugin links location APIs; the app never asks for or uses location. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Arc Platform does not use your location. This permission is never requested.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Arc Platform uses the microphone only when a teacher records a lecture video with the camera.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
