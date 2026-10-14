@@ -160,23 +160,20 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final user = SupabaseService.instance.currentUser;
     if (user == null) return;
     try {
+      // Account number only ("#2274"): traceable from the admin search,
+      // and a leaked recording never shows the student's name or phone.
       final prof = await SupabaseService.instance.client
           .from('profiles')
-          .select('full_name, phone')
+          .select('public_id')
           .eq('id', user.id)
           .maybeSingle()
           .timeout(const Duration(seconds: 10));
-      final name = prof?['full_name'] as String?;
-      final phone = prof?['phone'] as String?;
-      final parts = [
-        if (name != null && name.isNotEmpty) name,
-        if (phone != null && phone.isNotEmpty) phone,
-      ];
       if (!mounted) return;
-      setState(() => _watermarkLabel = parts.isNotEmpty ? parts.join(' · ') : (user.email ?? ''));
+      setState(() => _watermarkLabel =
+          markFor(prof?['public_id']?.toString(), user.id));
     } catch (_) {
       if (!mounted) return;
-      setState(() => _watermarkLabel = user.email ?? '');
+      setState(() => _watermarkLabel = markFor(null, user.id));
     }
   }
 

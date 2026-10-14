@@ -54,21 +54,25 @@ String _extOf(Map<String, dynamic> f) {
 bool _viewable(Map<String, dynamic> f) =>
     f['view_type'] == 'pdf' || f['view_type'] == 'image';
 
-/// The signed-in user's name and phone ("Name · 07..."), drawn on the
-/// course files they view or download.
+/// The signed-in user's account number ("#2274"), drawn on the course files
+/// they view or download. The admin finds the account by searching #2274;
+/// a leaked file never shows the student's name or phone.
 Future<String> viewerMark() async {
   final user = SupabaseService.instance.currentUser;
   if (user == null) return '';
   final p = await SupabaseService.instance.client
       .from('profiles')
-      .select('full_name, phone')
+      .select('public_id')
       .eq('id', user.id)
       .maybeSingle();
-  return [p?['full_name'], p?['phone'] ?? user.email]
-      .whereType<String>()
-      .where((s) => s.isNotEmpty)
-      .join(' · ');
+  return markFor(p?['public_id']?.toString(), user.id);
 }
+
+/// "#2274", or the start of the account id if the number is missing.
+String markFor(String? publicId, String userId) =>
+    (publicId != null && publicId.isNotEmpty)
+        ? '#$publicId'
+        : '#${userId.substring(0, 8)}';
 
 /// Saves the file where the student picks (only when the teacher allowed
 /// it). The bytes come through a 60-second private link. A PDF gets the

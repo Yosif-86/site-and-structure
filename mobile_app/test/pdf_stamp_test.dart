@@ -22,7 +22,7 @@ void main() {
     src.dispose();
 
     final png = (await tester.runAsync(
-        () => PdfStamp.markPng('يوسف جمال علي · 07701234567')))!;
+        () => PdfStamp.markPng('#2274')))!;
     final out = PdfStamp.stampSync(input, png);
 
     final path = Platform.environment['STAMP_OUT'];
