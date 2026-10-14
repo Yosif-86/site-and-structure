@@ -8,14 +8,15 @@ import '../theme.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/glass_card.dart';
 
-/// Support contact. The email forwards to the Arc support inbox (Cloudflare
-/// Email Routing). TODO(Yosif): add the support WhatsApp number (planned for
-/// about a month after 2026-10-06; also SUPPORT_WHATSAPP in site.js).
+/// Support contacts (also SUPPORT_* in site.js). The email forwards to the
+/// Arc support inbox (Cloudflare Email Routing); WhatsApp and Telegram are
+/// the Arc support number's accounts.
 ///
 /// An empty value hides its button rather than showing a placeholder — a
 /// wrong number shipped in a release is worse than none. Fill it in and the
 /// button appears automatically, no other code change needed.
-const String kSupportWhatsappPhone = '';
+const String kSupportWhatsappPhone = '07761560088';
+const String kSupportTelegram = 'arcplatformiq';
 const String kSupportEmail = 'support@arcplatformiq.com';
 
 /// Support contact screen, reached from Settings.
@@ -27,6 +28,7 @@ class SupportScreen extends StatelessWidget {
     final t = AppStrings.instance.t;
     final hasWhatsapp = kSupportWhatsappPhone.trim().isNotEmpty;
     final hasEmail = kSupportEmail.trim().isNotEmpty;
+    final hasTelegram = kSupportTelegram.trim().isNotEmpty;
 
     return _InfoScaffold(
       title: t('support_title'),
@@ -36,7 +38,7 @@ class SupportScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(t('support_intro'), style: AppFonts.body(size: 13.5, color: AppColors.muted)),
-              if (!hasWhatsapp && !hasEmail) ...[
+              if (!hasWhatsapp && !hasTelegram && !hasEmail) ...[
                 const SizedBox(height: 16),
                 Text(
                   t('support_no_contact'),
@@ -49,6 +51,14 @@ class SupportScreen extends StatelessWidget {
                   brand: FontAwesomeIcons.whatsapp,
                   label: t('label_whatsapp'),
                   onTap: () => DeepLinks.whatsapp(kSupportWhatsappPhone),
+                ),
+              ],
+              if (hasTelegram) ...[
+                const SizedBox(height: 10),
+                _ContactButton(
+                  brand: FontAwesomeIcons.telegram,
+                  label: t('label_telegram'),
+                  onTap: () => DeepLinks.telegram(kSupportTelegram),
                 ),
               ],
               if (hasEmail) ...[

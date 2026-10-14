@@ -7,7 +7,8 @@
 const PLAY_STORE_URL = '';
 const APP_STORE_URL = '';
 const SUPPORT_EMAIL = 'support@arcplatformiq.com';
-const SUPPORT_WHATSAPP = ''; // Iraqi format, e.g. 07XXXXXXXXX
+const SUPPORT_WHATSAPP = '07761560088'; // Iraqi format, e.g. 07XXXXXXXXX
+const SUPPORT_TELEGRAM = 'arcplatformiq'; // t.me username
 
 (function(){
   // Password-reset emails that fall back to the Site URL land here with the
@@ -51,8 +52,16 @@ const SUPPORT_WHATSAPP = ''; // Iraqi format, e.g. 07XXXXXXXXX
     const v = el.querySelector('[data-value]');
     if(v) v.textContent = SUPPORT_WHATSAPP;
   });
+  document.querySelectorAll('[data-contact="telegram"]').forEach(el => {
+    if(!SUPPORT_TELEGRAM) return;
+    el.hidden = false;
+    const a = el.tagName === 'A' ? el : el.querySelector('a');
+    if(a){ a.href = 'https://t.me/' + SUPPORT_TELEGRAM; a.target = '_blank'; a.rel = 'noopener'; }
+    const v = el.querySelector('[data-value]');
+    if(v) v.textContent = '@' + SUPPORT_TELEGRAM;
+  });
   // Blocks that only make sense when at least one contact exists.
-  if(SUPPORT_EMAIL || SUPPORT_WHATSAPP){
+  if(SUPPORT_EMAIL || SUPPORT_WHATSAPP || SUPPORT_TELEGRAM){
     document.querySelectorAll('[data-if-contact]').forEach(el => { el.hidden = false; });
     document.querySelectorAll('[data-if-no-contact]').forEach(el => { el.hidden = true; });
   }
