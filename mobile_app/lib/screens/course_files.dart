@@ -6,7 +6,9 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:pdfx/pdfx.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../i18n/strings.dart';
@@ -26,7 +28,8 @@ import '../widgets/watermark_overlay.dart';
 /// phone drawn over them) and Word/Excel/PowerPoint/CAD (published as-is).
 /// The teacher decides per file whether students may download it; files
 /// the app can't display (Office, CAD) are always downloadable. Nothing is
-/// shared or printed from the app.
+/// shared or printed from the app, except that on iPhone a download goes
+/// through the share sheet (its "Save to Files").
 
 const _bucket = 'course-files';
 const _office = {'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'};
@@ -93,6 +96,23 @@ Future<void> downloadCourseFile(
     final name = (original != null && original.isNotEmpty)
         ? original
         : '${f['title'] ?? 'file'}.$ext';
+    if (Platform.isIOS) {
+      // iPhone: the document export picker saved nothing, so hand the
+      // file to the share sheet, whose "Save to Files" puts it in Files.
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/${name.replaceAll('/', '_')}');
+      await file.writeAsBytes(bytes, flush: true);
+      Rect? origin;
+      if (context.mounted) {
+        final box = context.findRenderObject() as RenderBox?;
+        if (box != null && box.hasSize) {
+          origin = box.localToGlobal(Offset.zero) & box.size;
+        }
+      }
+      await SharePlus.instance.share(ShareParams(
+          files: [XFile(file.path)], sharePositionOrigin: origin));
+      return;
+    }
     final saved = await FilePicker.platform
         .saveFile(fileName: name, bytes: bytes);
     if (saved != null) {
@@ -343,15 +363,23 @@ class _CourseFileViewerScreenState extends State<CourseFileViewerScreen> {
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor: const Color(0xFF1E1C19),
+        // The viewer is always dark, so the bar uses fixed light ink
+        // (the theme's text colour vanished on it in light mode).
         appBar: AppBar(
+          backgroundColor: const Color(0xFF1E1C19),
+          foregroundColor: const Color(0xFFFEE4BF),
+          iconTheme: const IconThemeData(color: Color(0xFFFEE4BF)),
           title: Text(widget.file['title'] as String? ?? '',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppFonts.body(
+                  size: 16, weight: FontWeight.w600, color: const Color(0xFFFEE4BF))),
           actions: [
             if (widget.file['allow_download'] == true)
               IconButton(
                 tooltip: _t('btn_download'),
                 onPressed: () => downloadCourseFile(context, widget.file),
-                icon: ArcIconView(ArcIcon.download, size: 22, color: AppColors.text),
+                icon: const ArcIconView(ArcIcon.download, size: 22, color: Color(0xFFFEE4BF)),
               ),
           ],
         ),
