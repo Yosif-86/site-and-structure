@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:url_launcher/url_launcher.dart' show closeInAppWebView;
 import 'package:uuid/uuid.dart';
 
@@ -625,9 +626,9 @@ class SupabaseService extends ChangeNotifier {
   Completer<LoginResult>? _oauthCompleter;
 
   /// Sign in with Apple (iPhone only; Apple requires it next to Google).
-  /// Turn on once the Apple provider is set up in Supabase (Services ID,
-  /// key, team ID), otherwise the button would open an error page.
-  static const bool kAppleSignInEnabled = false;
+  /// Native sheet + signInWithIdToken; the Supabase Apple provider only
+  /// needs the bundle ID com.arcplatformiq.app as its client ID.
+  static const bool kAppleSignInEnabled = true;
 
   /// On iPhone the sign-in page opens inside the app (Apple rejects apps
   /// that send users out to Safari to log in) and is closed here once the
@@ -734,9 +735,9 @@ class SupabaseService extends ChangeNotifier {
   // iPhone only: Google puts sha256(nonce) in the ID token and Supabase
   // checks it against this raw value.
   String? _googleRawNonce;
-  // While the native account picker runs, the auth screen's "came back
-  // without a session" check must not cancel the attempt.
-  bool _nativeGoogleInProgress = false;
+  // While a native sheet (Google or Apple) runs, the auth screen's "came
+  // back without a session" check must not cancel the attempt.
+  bool _nativeSignInInProgress = false;
 
   /// Android: Google's own account picker, then Supabase signInWithIdToken;
   /// the Google page shows "Arc Platform" instead of the supabase.co address.
@@ -748,7 +749,7 @@ class SupabaseService extends ChangeNotifier {
       return _signInWithOAuth(OAuthProvider.google);
     }
     final String? idToken;
-    _nativeGoogleInProgress = true;
+    _nativeSignInInProgress = true;
     try {
       final g = GoogleSignIn.instance;
       if (!_googleInitialized) {
@@ -768,7 +769,7 @@ class SupabaseService extends ChangeNotifier {
       // Next time the picker shows every account again.
       unawaited(g.signOut().catchError((_) {}));
     } on GoogleSignInException catch (e) {
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
       if (e.code == GoogleSignInExceptionCode.canceled ||
           e.code == GoogleSignInExceptionCode.interrupted) {
         return const LoginResult(error: 'err_oauth_cancelled');
@@ -776,31 +777,33 @@ class SupabaseService extends ChangeNotifier {
       debugPrint('google: native sign-in failed (${e.code}), using browser');
       return _signInWithOAuth(OAuthProvider.google);
     } catch (e) {
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
       debugPrint('google: native sign-in failed ($e), using browser');
       return _signInWithOAuth(OAuthProvider.google);
     }
     if (idToken == null) {
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
       return _signInWithOAuth(OAuthProvider.google);
     }
-    // Same completion path as the browser flow: listenForOAuthCompletion
-    // picks up the signedIn event (profile row, staff email code, device).
+    return _finishIdTokenSignIn(OAuthProvider.google, idToken, _googleRawNonce);
+  }
+
+  /// Same completion path as the browser flow: listenForOAuthCompletion
+  /// picks up the signedIn event (profile row, staff email code, device).
+  Future<LoginResult> _finishIdTokenSignIn(
+      OAuthProvider provider, String idToken, String? rawNonce) async {
     final completer = Completer<LoginResult>();
     _oauthCompleter = completer;
     try {
-      await client.auth
-          .signInWithIdToken(
-              provider: OAuthProvider.google,
-              idToken: idToken,
-              nonce: _googleRawNonce);
+      await client.auth.signInWithIdToken(
+          provider: provider, idToken: idToken, nonce: rawNonce);
     } on AuthException catch (e) {
       _oauthCompleter = null;
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
       return LoginResult(error: e.message);
     } catch (_) {
       _oauthCompleter = null;
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
       return const LoginResult(error: 'err_login_network');
     }
     try {
@@ -810,12 +813,47 @@ class SupabaseService extends ChangeNotifier {
         return const LoginResult(error: 'err_login_network');
       });
     } finally {
-      _nativeGoogleInProgress = false;
+      _nativeSignInInProgress = false;
     }
   }
 
-  /// Same flow as Google (profile row, staff email code, device check).
-  Future<LoginResult> signInWithApple() => _signInWithOAuth(OAuthProvider.apple);
+  /// iPhone: Apple's own sheet, then the same completion as Google
+  /// (profile row, staff email code, device check). Apple puts
+  /// sha256(nonce) in the token; Supabase checks it against the raw value.
+  Future<LoginResult> signInWithApple() async {
+    if (kIsWeb || !Platform.isIOS) {
+      return _signInWithOAuth(OAuthProvider.apple);
+    }
+    final rawNonce = const Uuid().v4();
+    final String? idToken;
+    _nativeSignInInProgress = true;
+    try {
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: sha256.convert(utf8.encode(rawNonce)).toString(),
+      );
+      idToken = credential.identityToken;
+    } on SignInWithAppleAuthorizationException catch (e) {
+      _nativeSignInInProgress = false;
+      if (e.code == AuthorizationErrorCode.canceled) {
+        return const LoginResult(error: 'err_oauth_cancelled');
+      }
+      debugPrint('apple: sign-in failed (${e.code}: ${e.message})');
+      return const LoginResult(error: 'err_login_network');
+    } catch (e) {
+      _nativeSignInInProgress = false;
+      debugPrint('apple: sign-in failed ($e)');
+      return const LoginResult(error: 'err_login_network');
+    }
+    if (idToken == null) {
+      _nativeSignInInProgress = false;
+      return const LoginResult(error: 'err_login_network');
+    }
+    return _finishIdTokenSignIn(OAuthProvider.apple, idToken, rawNonce);
+  }
 
   Future<LoginResult> _signInWithOAuth(OAuthProvider provider) async {
     final completer = Completer<LoginResult>();
@@ -845,7 +883,7 @@ class SupabaseService extends ChangeNotifier {
   /// The user came back from the Google page without finishing: end the
   /// attempt now instead of leaving the sign-in screen locked for minutes.
   void cancelGoogleSignIn() {
-    if (_nativeGoogleInProgress) return;
+    if (_nativeSignInInProgress) return;
     final c = _oauthCompleter;
     if (c == null || c.isCompleted) return;
     _oauthCompleter = null;
