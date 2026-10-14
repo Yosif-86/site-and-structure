@@ -1295,6 +1295,11 @@ class _WaylEnrollSheetState extends State<_WaylEnrollSheet>
   String? _error;
   String? _reference; // set once the payment page was opened
   bool _paid = false;
+  // A code checked with preview_discount_code; only an applied code is sent
+  // to checkout, so the student sees the final price before paying.
+  bool _applying = false;
+  String? _appliedCode;
+  int? _finalPrice;
 
   @override
   void initState() {
@@ -1329,6 +1334,49 @@ class _WaylEnrollSheetState extends State<_WaylEnrollSheet>
     };
   }
 
+  /// Same rule as the server (wayl_prepare_payment): percent of the list
+  /// price, rounded, never more than the price.
+  Future<void> _applyCode() async {
+    final code = _codeCtrl.text.trim().toUpperCase();
+    final price = Money.digitsOf(widget.course.price) ?? 0;
+    if (code.isEmpty || _applying) return;
+    setState(() {
+      _applying = true;
+      _error = null;
+    });
+    try {
+      final rows = await SupabaseService.instance.client.rpc(
+          'preview_discount_code',
+          params: {'p_code': code, 'p_course_id': widget.course.id});
+      final list = (rows as List).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      if (list.isEmpty) {
+        setState(() {
+          _applying = false;
+          _appliedCode = null;
+          _finalPrice = null;
+          _error = AppStrings.instance.t('err_invalid_discount');
+        });
+        return;
+      }
+      final value = (list.first['discount_value'] as num).toDouble();
+      final off = list.first['discount_type'] == 'percent'
+          ? (price * value / 100).round()
+          : value.round();
+      setState(() {
+        _applying = false;
+        _appliedCode = code;
+        _finalPrice = price - (off > price ? price : off);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _applying = false;
+        _error = ErrorReporter.userMessage(e, page: 'course');
+      });
+    }
+  }
+
   Future<void> _pay() async {
     final token =
         SupabaseService.instance.client.auth.currentSession?.accessToken;
@@ -1346,8 +1394,7 @@ class _WaylEnrollSheetState extends State<_WaylEnrollSheet>
               },
               body: jsonEncode({
                 'courseSlug': widget.course.slug,
-                if (_codeCtrl.text.trim().isNotEmpty)
-                  'code': _codeCtrl.text.trim(),
+                if (_appliedCode != null) 'code': _appliedCode,
               }))
           .timeout(const Duration(seconds: 25));
       Map<String, dynamic> body = {};
@@ -1445,23 +1492,60 @@ class _WaylEnrollSheetState extends State<_WaylEnrollSheet>
                       textAlign: TextAlign.center,
                       style: AppFonts.heading(size: 22)),
                   const SizedBox(height: 6),
-                  Text(Money.text(widget.course.price, fallback: ''),
-                      style: AppFonts.body(
-                          size: 18,
-                          weight: FontWeight.w700,
-                          color: AppColors.teal)),
+                  if (_finalPrice != null) ...[
+                    Text(Money.text(widget.course.price, fallback: ''),
+                        style: AppFonts.body(size: 14, color: AppColors.muted)
+                            .copyWith(decoration: TextDecoration.lineThrough)),
+                    Text(Money.iqd(_finalPrice!),
+                        style: AppFonts.body(
+                            size: 18,
+                            weight: FontWeight.w700,
+                            color: AppColors.teal)),
+                    Text(t('discount_applied'),
+                        style: AppFonts.body(size: 12, color: AppColors.teal)),
+                  ] else
+                    Text(Money.text(widget.course.price, fallback: ''),
+                        style: AppFonts.body(
+                            size: 18,
+                            weight: FontWeight.w700,
+                            color: AppColors.teal)),
                   const SizedBox(height: 6),
                   Text(t('wayl_methods'),
                       textAlign: TextAlign.center,
                       style: AppFonts.body(size: 13, color: AppColors.muted)),
                   if (_reference == null) ...[
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: _codeCtrl,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: InputDecoration(
-                          labelText: t('discount_code_optional')),
-                    ),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _codeCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          // Editing the code drops the applied discount.
+                          onChanged: (_) {
+                            if (_appliedCode != null) {
+                              setState(() {
+                                _appliedCode = null;
+                                _finalPrice = null;
+                              });
+                            }
+                          },
+                          decoration: InputDecoration(
+                              labelText: t('discount_code_optional')),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                          onPressed: _applying || _appliedCode != null
+                              ? null
+                              : _applyCode,
+                          child: _applying
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
+                              : Text(t('btn_apply_code'))),
+                    ]),
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 10),

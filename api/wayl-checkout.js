@@ -91,10 +91,12 @@ module.exports = async (req, res) => {
   }
 
   const referenceId = 'arc_' + crypto.randomUUID();
-  const lineItem = [{ label: String(p.course_title || 'Course').slice(0, 255).padEnd(3, ' '), amount: p.list_price, type: 'increase' }];
-  if (p.discount_amount > 0) {
-    lineItem.push({ label: 'Discount', amount: p.discount_amount, type: 'decrease' });
-  }
+  // One line at the amount actually paid: Wayl checks that the line items
+  // add up to the total, and a 'decrease' line was counted as an addition.
+  const title = String(p.course_title || 'Course');
+  const label = (p.discount_amount > 0 ? title + ' (after discount)' : title)
+    .slice(0, 255).padEnd(3, ' ');
+  const lineItem = [{ label, amount: p.amount, type: 'increase' }];
   const body = {
     env,
     referenceId,

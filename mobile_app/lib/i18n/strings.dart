@@ -228,6 +228,8 @@ class AppStrings extends ChangeNotifier {
     'wayl_unavailable': 'الدفع الإلكتروني غير متاح حاليًا.',
     'wayl_provider_error': 'تعذّر فتح صفحة الدفع. حاول مرة أخرى.',
     'discount_code_optional': 'رمز الخصم (اختياري)',
+    'btn_apply_code': 'تطبيق',
+    'discount_applied': 'تم تطبيق الخصم',
     'err_enter_discount_code': 'أدخل الكود أولاً.',
     'home_continue_learning': 'متابعة التعلم',
     // Home header / progress
