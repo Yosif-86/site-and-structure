@@ -16,25 +16,30 @@ class OfflineBanner extends StatelessWidget {
       child,
       ValueListenableBuilder<bool>(
         valueListenable: NetStatus.instance.online,
-        builder: (context, online, _) => AnimatedPositioned(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeOut,
-          top: online ? -80 : 0,
+        // Slide by the bar's own height: a fixed -80 left the bottom edge
+        // showing on iPhones whose top safe area is taller than that.
+        builder: (context, online, _) => Positioned(
+          top: 0,
           left: 0,
           right: 0,
-          child: IgnorePointer(
-            child: Material(
-              color: AppColors.red,
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  child: Text(
-                    AppStrings.instance.t('offline_banner'),
-                    textAlign: TextAlign.center,
-                    textDirection: TextDirection.rtl,
-                    style: AppFonts.body(size: 12.5, color: Colors.white),
+          child: AnimatedSlide(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            offset: online ? const Offset(0, -1.5) : Offset.zero,
+            child: IgnorePointer(
+              child: Material(
+                color: AppColors.red,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    child: Text(
+                      AppStrings.instance.t('offline_banner'),
+                      textAlign: TextAlign.center,
+                      textDirection: TextDirection.rtl,
+                      style: AppFonts.body(size: 12.5, color: Colors.white),
+                    ),
                   ),
                 ),
               ),
