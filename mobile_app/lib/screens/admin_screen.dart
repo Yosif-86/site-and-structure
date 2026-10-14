@@ -71,6 +71,7 @@ enum _View {
   attention,
   files,
   reports,
+  announce,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -983,6 +984,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('payment_requests');
       case _View.editRequests:
         return t('edit_requests');
+      case _View.announce:
+        return t('announce_title');
       case _View.dashboard:
         return t('nav_admin');
     }
@@ -1038,6 +1041,10 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.myPayment => _buildMyPayment(t),
         _View.payments => _buildPayments(t),
         _View.editRequests => _buildEditRequests(t),
+        _View.announce => ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: const [_AnnouncementCard()],
+          ),
         _View.attention => _buildAttention(t),
       },
     );
@@ -1156,8 +1163,6 @@ class _AdminScreenState extends State<AdminScreen> {
             );
           },
         ),
-        const SizedBox(height: 12),
-        const _AnnouncementCard(),
         if (myPendingPayments > 0) ...[
           const SizedBox(height: 12),
           FadeSlideIn(
@@ -1199,6 +1204,8 @@ class _AdminScreenState extends State<AdminScreen> {
               alert: pendingEnrollments > 0),
           tile(ArcIcon.mail, '$activeInvitesCount', t('teacher_invites'),
               AppColors.teal, _View.invites),
+          tile(ArcIcon.bell, '+', t('announce_title'), AppColors.red,
+              _View.announce),
         ]),
         DashSection(t('dash_sec_money')),
         DashGrid(children: [

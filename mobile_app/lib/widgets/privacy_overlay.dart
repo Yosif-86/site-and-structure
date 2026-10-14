@@ -59,11 +59,13 @@ class _PrivacyOverlayState extends State<PrivacyOverlay>
       children: [
         widget.child,
         if (_covered)
-          Positioned.fill(
-            child: Container(
-              color: const Color(0xFF14120F),
+          const Positioned.fill(
+            // Material (not Container) gives the logo's text a default text
+            // style; without one Flutter draws it with yellow underlines.
+            child: Material(
+              color: Color(0xFF14120F),
               // The brand lockup, same as the login screen.
-              child: const Center(child: ArcLogo(height: 64)),
+              child: Center(child: ArcLogo(height: 64)),
             ),
           ),
       ],

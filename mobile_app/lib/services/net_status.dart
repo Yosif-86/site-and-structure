@@ -23,13 +23,10 @@ class NetStatus {
   bool _probing = false;
 
   void start() {
-    _sub ??= Connectivity().onConnectivityChanged.listen((results) {
-      if (results.every((r) => r == ConnectivityResult.none)) {
-        _setOnline(false);
-      } else {
-        _probe();
-      }
-    });
+    // A connectivity event never decides on its own: iOS reports "none"
+    // while mobile data works, which left the banner up. Every change is
+    // confirmed with the real request below.
+    _sub ??= Connectivity().onConnectivityChanged.listen((_) => _probe());
     _probe();
   }
 
