@@ -4,6 +4,7 @@ import 'dart:io' show HttpException, Platform;
 import 'dart:math' show asin, cos, pi, sin, sqrt;
 
 import 'package:android_id/android_id.dart';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -725,7 +726,14 @@ class SupabaseService extends ChangeNotifier {
   /// token for this client, so Supabase accepts it. Client IDs are public.
   static const String kGoogleWebClientId =
       '982425355302-nn9u5ksh0jhmv44cd8vvv049bbc69ad0.apps.googleusercontent.com';
+  /// iPhone OAuth client (Google Cloud "Arc iOS", bundle
+  /// com.arcplatformiq.app); its reversed form is a URL scheme in Info.plist.
+  static const String kGoogleIosClientId =
+      '982425355302-1p7ne9dmmv64abt02giqjbr1g2saj19m.apps.googleusercontent.com';
   bool _googleInitialized = false;
+  // iPhone only: Google puts sha256(nonce) in the ID token and Supabase
+  // checks it against this raw value.
+  String? _googleRawNonce;
   // While the native account picker runs, the auth screen's "came back
   // without a session" check must not cancel the attempt.
   bool _nativeGoogleInProgress = false;
@@ -733,10 +741,10 @@ class SupabaseService extends ChangeNotifier {
   /// Android: Google's own account picker, then Supabase signInWithIdToken;
   /// the Google page shows "Arc Platform" instead of the supabase.co address.
   /// Anything other than the user cancelling falls back to the browser flow,
-  /// so a configuration problem can never block sign-in. iPhone keeps the
-  /// in-app browser until an iOS OAuth client exists.
+  /// so a configuration problem can never block sign-in. Same on iPhone,
+  /// with the iOS client and a nonce.
   Future<LoginResult> signInWithGoogle() async {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kIsWeb || !(Platform.isAndroid || Platform.isIOS)) {
       return _signInWithOAuth(OAuthProvider.google);
     }
     final String? idToken;
@@ -744,7 +752,15 @@ class SupabaseService extends ChangeNotifier {
     try {
       final g = GoogleSignIn.instance;
       if (!_googleInitialized) {
-        await g.initialize(serverClientId: kGoogleWebClientId);
+        if (Platform.isIOS) {
+          _googleRawNonce = const Uuid().v4();
+          await g.initialize(
+              clientId: kGoogleIosClientId,
+              serverClientId: kGoogleWebClientId,
+              nonce: sha256.convert(utf8.encode(_googleRawNonce!)).toString());
+        } else {
+          await g.initialize(serverClientId: kGoogleWebClientId);
+        }
         _googleInitialized = true;
       }
       final account = await g.authenticate();
@@ -774,7 +790,10 @@ class SupabaseService extends ChangeNotifier {
     _oauthCompleter = completer;
     try {
       await client.auth
-          .signInWithIdToken(provider: OAuthProvider.google, idToken: idToken);
+          .signInWithIdToken(
+              provider: OAuthProvider.google,
+              idToken: idToken,
+              nonce: _googleRawNonce);
     } on AuthException catch (e) {
       _oauthCompleter = null;
       _nativeGoogleInProgress = false;

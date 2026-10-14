@@ -34,6 +34,13 @@
 				<string>siteandstructure</string>
 			</array>
 		</dict>
+		<!-- Native Google sign-in: reversed iOS client ID (Google Cloud "Arc iOS"). -->
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.982425355302-1p7ne9dmmv64abt02giqjbr1g2saj19m</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
