@@ -650,6 +650,8 @@ class AppStrings extends ChangeNotifier {
     'complete_profile_title': 'أكمل حسابك',
     'complete_profile_sub': 'تأكد من اسمك وأضف رقم هاتفك. سنرسل لك رمز تحقق عبر واتساب أو رسالة نصية.',
     'complete_profile_phone_hint': 'رقم واحد لكل حساب، ولا يظهر للآخرين.',
+    'complete_profile_sub_apple': 'أضف رقم هاتفك. سنرسل لك رمز تحقق عبر واتساب أو رسالة نصية.',
+    'default_user_name': 'مستخدم آرك',
     'err_login_network': 'تعذّر إكمال تسجيل الدخول بسبب الاتصال. تحقق من الإنترنت وحاول مرة أخرى.',
     'preparing_video': 'جاري تجهيز الفيديو بدقة 1080p...',
     'lecture_sent_for_review': 'تم رفع المحاضرة وأُرسلت للإدارة للموافقة.',

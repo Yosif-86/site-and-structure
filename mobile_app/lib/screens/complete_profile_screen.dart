@@ -32,6 +32,7 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   final _phone = TextEditingController();
   bool _saving = false;
   String? _error;
+  final bool _isApple = SupabaseService.instance.isAppleAccount;
 
   String _t(String k) => AppStrings.instance.t(k);
 
@@ -91,8 +92,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
       setState(() => _error = _t('err_terms_required'));
       return;
     }
-    final name = _name.text.trim();
+    var name = _name.text.trim();
     final phone = SignupRules.normalizeIraqiPhone(_phone.text);
+    // Apple accounts never see the name field (App Review guideline 4):
+    // the name is Apple's, or a neutral default if the user hid it there.
+    if (_isApple && name.isEmpty) name = _t('default_user_name');
     if (name.isEmpty) {
       setState(() => _error = _t('err_name_required'));
       return;
@@ -169,16 +173,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                 title: _t('complete_profile_title'),
                 icon: ArcIcon.profile,
                 children: [
-                  Text(_t('complete_profile_sub'),
+                  Text(
+                      _t(_isApple
+                          ? 'complete_profile_sub_apple'
+                          : 'complete_profile_sub'),
                       style: AppFonts.body(size: 13, color: AppColors.muted)),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _name,
-                    textCapitalization: TextCapitalization.words,
-                    decoration:
-                        InputDecoration(labelText: _t('label_fullname')),
-                  ),
-                  const SizedBox(height: 12),
+                  if (!_isApple) ...[
+                    TextField(
+                      controller: _name,
+                      textCapitalization: TextCapitalization.words,
+                      decoration:
+                          InputDecoration(labelText: _t('label_fullname')),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   TextField(
                     controller: _phone,
                     textDirection: TextDirection.ltr,

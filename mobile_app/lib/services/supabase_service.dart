@@ -667,12 +667,22 @@ class SupabaseService extends ChangeNotifier {
               .select('id')
               .eq('id', user.id)
               .maybeSingle();
+          final appleName = _appleFullName;
+          _appleFullName = null;
           if (existing == null) {
             final meta = user.userMetadata ?? {};
             await client.from('profiles').insert({
               'id': user.id,
-              'full_name': meta['full_name'] ?? meta['name'] ?? '',
+              'full_name': meta['full_name'] ?? meta['name'] ?? appleName ?? '',
             });
+          } else if (appleName != null) {
+            // Row made by an earlier cut-off attempt: fill the name only if
+            // it is still empty, never overwrite one the user set.
+            await client
+                .from('profiles')
+                .update({'full_name': appleName})
+                .eq('id', user.id)
+                .eq('full_name', '');
           }
 
           // Same emailed-code gate password login goes through -- otherwise
@@ -738,6 +748,19 @@ class SupabaseService extends ChangeNotifier {
   // While a native sheet (Google or Apple) runs, the auth screen's "came
   // back without a session" check must not cancel the attempt.
   bool _nativeSignInInProgress = false;
+  // Name from Apple's sheet (Apple sends it only on the first authorization
+  // and never puts it in the ID token). Apple review: never ask for it again.
+  String? _appleFullName;
+
+  /// True for an account that signed in with Apple: the name comes from
+  /// Apple, so the app must not ask for it (App Review guideline 4).
+  bool get isAppleAccount {
+    final user = currentUser;
+    if (user == null) return false;
+    final providers = user.appMetadata['providers'];
+    return user.appMetadata['provider'] == 'apple' ||
+        (providers is List && providers.contains('apple'));
+  }
 
   /// Android: Google's own account picker, then Supabase signInWithIdToken;
   /// the Google page shows "Arc Platform" instead of the supabase.co address.
@@ -836,6 +859,12 @@ class SupabaseService extends ChangeNotifier {
         nonce: sha256.convert(utf8.encode(rawNonce)).toString(),
       );
       idToken = credential.identityToken;
+      final name = [credential.givenName, credential.familyName]
+          .whereType<String>()
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .join(' ');
+      _appleFullName = name.isEmpty ? null : name;
     } on SignInWithAppleAuthorizationException catch (e) {
       _nativeSignInInProgress = false;
       if (e.code == AuthorizationErrorCode.canceled) {
