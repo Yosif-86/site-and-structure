@@ -7,7 +7,7 @@ import 'supabase_service.dart';
 
 /// Review switch (app_config.purchases_enabled, add-purchase-switch.sql).
 /// When off, the app shows no prices, no enroll buttons for paid courses
-/// and no payment form: what store reviewers must see. Free courses and
+/// and no payment form, for every account. Free courses and
 /// already-enrolled students are unaffected. Flipped by an admin from the
 /// admin screen, no app update needed.
 class PurchaseConfig extends ChangeNotifier {
@@ -17,7 +17,6 @@ class PurchaseConfig extends ChangeNotifier {
   // Hidden until the setting has been read: if it can't be loaded, buying
   // stays hidden rather than showing to a reviewer by accident.
   bool _enabled = false;
-  bool _reviewer = false;
 
   /// iPhone: Apple allows a button to an outside checkout (Wayl) only for
   /// App Store accounts in the United States (Epic v. Apple, May 2025), so
@@ -32,8 +31,10 @@ class PurchaseConfig extends ChangeNotifier {
   /// on Android regardless of the switch, to try a test-mode payment.
   static const bool _forceBuy = bool.fromEnvironment('FORCE_BUY');
 
+  /// Store reviewers see exactly what real users on their storefront see:
+  /// hiding buying from the review account would be a concealed feature
+  /// (App Review guideline 2.5.19), so is_reviewer no longer affects it.
   bool get enabled {
-    if (_reviewer) return false;
     if (_forceBuy) return true;
     if (!kIsWeb && Platform.isIOS) return _iosUsStorefront;
     return _enabled;
@@ -61,19 +62,6 @@ class PurchaseConfig extends ChangeNotifier {
       } catch (_) {
         _iosUsStorefront = false;
       }
-    }
-    final user = SupabaseService.instance.currentUser;
-    if (user == null) {
-      _reviewer = false;
-    } else {
-      try {
-        final me = await sb
-            .from('profiles')
-            .select('is_reviewer')
-            .eq('id', user.id)
-            .maybeSingle();
-        _reviewer = me?['is_reviewer'] == true;
-      } catch (_) {}
     }
     notifyListeners();
   }
