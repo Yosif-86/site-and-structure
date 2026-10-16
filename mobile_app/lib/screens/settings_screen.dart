@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
@@ -13,7 +14,8 @@ import 'teacher_screen.dart';
 /// Settings list, embedded as the third page of the catalogue PageView — so
 /// it deliberately has no Scaffold or AppBar of its own.
 ///
-/// Order is fixed: payment info, support, appearance, privacy, log out.
+/// Order is fixed: payment info, support, appearance, share, privacy,
+/// terms, FAQ, log out.
 class SettingsScreen extends StatelessWidget {
   final bool loggedIn;
   final bool isTeacher;
@@ -103,20 +105,30 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        FadeSlideIn(
+        const FadeSlideIn(
           delayMs: 120,
-          child: _SettingsTile(
-            icon: AppTheme.instance.isDark ? ArcIcon.moon : ArcIcon.sun,
-            accent: AppColors.byline,
-            title: t('settings_appearance'),
-            subtitle: AppTheme.instance.isDark
-                ? t('settings_appearance_dark')
-                : t('settings_appearance_light'),
-            trailing: Switch(
-              value: AppTheme.instance.isDark,
-              onChanged: (_) => AppTheme.instance.toggle(),
+          child: _ThemeTile(),
+        ),
+        const SizedBox(height: 12),
+        FadeSlideIn(
+          delayMs: 150,
+          child: Builder(
+            // The share sheet needs an anchor on iPad-sized screens.
+            builder: (tileContext) => _SettingsTile(
+              icon: ArcIcon.share,
+              accent: AppColors.red,
+              title: t('settings_share'),
+              subtitle: t('settings_share_sub'),
+              onTap: () {
+                final box = tileContext.findRenderObject() as RenderBox?;
+                SharePlus.instance.share(ShareParams(
+                  text: t('share_app_text'),
+                  sharePositionOrigin: box == null
+                      ? null
+                      : box.localToGlobal(Offset.zero) & box.size,
+                ));
+              },
             ),
-            onTap: () => AppTheme.instance.toggle(),
           ),
         ),
         const SizedBox(height: 12),
@@ -191,7 +203,6 @@ class _SettingsTile extends StatelessWidget {
   final Color accent;
   final String title;
   final String? subtitle;
-  final Widget? trailing;
   final VoidCallback onTap;
 
   const _SettingsTile({
@@ -199,7 +210,6 @@ class _SettingsTile extends StatelessWidget {
     required this.accent,
     required this.title,
     this.subtitle,
-    this.trailing,
     required this.onTap,
   });
 
@@ -244,8 +254,112 @@ class _SettingsTile extends StatelessWidget {
               ],
             ),
           ),
-          trailing ??
-              ArcIconView(ArcIcon.chevron, size: 18, color: AppColors.muted2),
+          ArcIconView(ArcIcon.chevron, size: 18, color: AppColors.muted2),
+        ],
+      ),
+    );
+  }
+}
+
+/// Appearance: Auto (follow the phone), Light or Dark.
+class _ThemeTile extends StatelessWidget {
+  const _ThemeTile();
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+      listenable: AppTheme.instance, builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    final theme = AppTheme.instance;
+    final subtitle = switch (theme.mode) {
+      AppThemeMode.system => t('settings_appearance_system'),
+      AppThemeMode.light => t('settings_appearance_light'),
+      AppThemeMode.dark => t('settings_appearance_dark'),
+    };
+    final accent = AppColors.byline;
+    Widget option(AppThemeMode mode, String label) {
+      final on = theme.mode == mode;
+      return Expanded(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => theme.setMode(mode),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: on ? AppColors.red : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(label,
+                textAlign: TextAlign.center,
+                style: AppFonts.body(
+                    size: 13.5,
+                    weight: FontWeight.w600,
+                    color: on ? Colors.white : AppColors.muted)),
+          ),
+        ),
+      );
+    }
+
+    return GlassCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      accent.withValues(alpha: 0.24),
+                      accent.withValues(alpha: 0.08),
+                    ],
+                  ),
+                  border: Border.all(color: accent.withValues(alpha: 0.30)),
+                ),
+                child: Center(
+                    child: ArcIconView(
+                        theme.isDark ? ArcIcon.moon : ArcIcon.sun,
+                        color: accent,
+                        size: 22,
+                        active: true)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t('settings_appearance'),
+                        style:
+                            AppFonts.body(size: 16, weight: FontWeight.w600)),
+                    const SizedBox(height: 3),
+                    Text(subtitle,
+                        style: AppFonts.body(size: 12, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: AppColors.text.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.text.withValues(alpha: 0.10)),
+            ),
+            child: Row(children: [
+              option(AppThemeMode.system, t('theme_auto')),
+              option(AppThemeMode.light, t('theme_light')),
+              option(AppThemeMode.dark, t('theme_dark')),
+            ]),
+          ),
         ],
       ),
     );

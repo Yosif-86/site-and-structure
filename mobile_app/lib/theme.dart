@@ -109,7 +109,12 @@ const _light = _Palette(
 /// under 'ss_theme'; here it's flutter_secure_storage, the only storage
 /// dependency this app already has — a theme preference isn't sensitive,
 /// but there's no reason to add a second storage package just for this).
-class AppTheme extends ChangeNotifier {
+enum AppThemeMode { system, light, dark }
+
+/// Auto (follow the phone, the default), light or dark, saved under the
+/// same key: 'system', 'light' or 'dark'. Auto repaints live when the
+/// phone switches between light and dark.
+class AppTheme extends ChangeNotifier with WidgetsBindingObserver {
   AppTheme._();
   static final AppTheme instance = AppTheme._();
 
@@ -117,30 +122,52 @@ class AppTheme extends ChangeNotifier {
   final _storage = const FlutterSecureStorage(
       aOptions: AndroidOptions(resetOnError: true));
 
+  AppThemeMode _mode = AppThemeMode.system;
+  AppThemeMode get mode => _mode;
+
   bool _isDark = true;
   bool get isDark => _isDark;
 
   Future<void> init() async {
+    WidgetsBinding.instance.addObserver(this);
+    var mode = AppThemeMode.system;
     try {
       final saved = await _storage.read(key: _key);
-      if (saved == 'light') _setDark(false, persist: false);
+      if (saved == 'light') mode = AppThemeMode.light;
+      if (saved == 'dark') mode = AppThemeMode.dark;
     } catch (_) {
-      // Storage unavailable — fall back to the default (dark), same as the
-      // website falling back to 'dark' when localStorage throws.
+      // Storage unavailable: follow the phone.
+    }
+    setMode(mode, persist: false);
+  }
+
+  bool get _systemIsDark =>
+      WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+      Brightness.dark;
+
+  @override
+  void didChangePlatformBrightness() {
+    if (_mode == AppThemeMode.system) _apply(_systemIsDark);
+  }
+
+  void toggle() => setMode(_isDark ? AppThemeMode.light : AppThemeMode.dark);
+
+  void setMode(AppThemeMode mode, {bool persist = true}) {
+    _mode = mode;
+    _apply(switch (mode) {
+      AppThemeMode.system => _systemIsDark,
+      AppThemeMode.light => false,
+      AppThemeMode.dark => true,
+    });
+    if (persist) {
+      _storage.write(key: _key, value: mode.name).catchError((_) {});
     }
   }
 
-  void toggle() => _setDark(!_isDark);
-
-  void _setDark(bool dark, {bool persist = true}) {
+  void _apply(bool dark) {
     _isDark = dark;
     AppColors._apply(dark ? _dark : _light);
     notifyListeners();
-    if (persist) {
-      _storage
-          .write(key: _key, value: dark ? 'dark' : 'light')
-          .catchError((_) {});
-    }
   }
 }
 
