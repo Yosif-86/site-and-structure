@@ -9,9 +9,10 @@
 <meta property="og:title" content="Arc Platform | منصة دورات الهندسة المدنية">
 <meta property="og:description" content="دورات هندسة مدنية بالفيديو يقدمها مهندسون ممارسون. حمّل التطبيق وابدأ التعلم.">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#14120F">
+<meta name="theme-color" content="#14120F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FCFBF9" media="(prefers-color-scheme: light)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="site.css">
 <style>
   .hero{padding:88px 0 76px; border-bottom:1px solid var(--line); position:relative; overflow:hidden;}
@@ -60,6 +61,7 @@
       <span class="brand-name">ARC PLATFORM<small>منصة آرك</small></span>
     </a>
     <nav aria-label="الأقسام">
+      <a class="keep" href="/buy">الدورات</a>
       <a href="#features">المميزات</a>
       <a href="#how">كيف تبدأ</a>
       <a href="#teach">للمدرّسين</a>
@@ -108,6 +110,18 @@
             <div class="s-lines"><div class="s-line w60"></div><div class="s-line"></div></div>
           </div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="courses">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2>أحدث الدورات</h2>
+        <a class="more" href="/buy">عرض الكل <span aria-hidden="true">←</span></a>
+      </div>
+      <div class="course-grid" id="homeCourses">
+        <div class="skel"></div><div class="skel"></div><div class="skel"></div>
       </div>
     </div>
   </section>
@@ -180,6 +194,8 @@
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="site.js"></script>
+<script src="home-courses.js"></script>
 </body>
 </html>
