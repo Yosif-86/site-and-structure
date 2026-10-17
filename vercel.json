@@ -70,6 +70,10 @@
     {
       "source": "/login",
       "destination": "/login.html"
+    },
+    {
+      "source": "/buy",
+      "destination": "/buy.html"
     }
   ]
 }

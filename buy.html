@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>شراء الدورات | Arc Platform</title>
+<meta name="description" content="اشترِ دورات منصة آرك بالدفع الإلكتروني عبر Wayl، وتعلّم من التطبيق.">
+<meta name="theme-color" content="#14120F">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/site.css">
+<style>
+  .buy-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:40px 0 8px;}
+  .buy-head h1{font-size:clamp(26px,5vw,38px); line-height:1.3;}
+  .buy-head p{color:var(--muted); font-size:15px;}
+  .who{display:flex; align-items:center; gap:10px; font-size:14px; color:var(--muted);}
+  .who b{color:var(--text); font-weight:700;}
+  .link-btn{background:none; border:0; color:var(--red); font:inherit; font-weight:700; cursor:pointer; padding:4px;}
+  .courses{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:18px; padding:24px 0 72px;}
+  .course{background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:18px; overflow:hidden; cursor:pointer;
+    display:flex; flex-direction:column; text-align:start; font:inherit; color:inherit; padding:0; transition:transform .15s, border-color .15s;}
+  .course:hover{transform:translateY(-2px); border-color:var(--red);}
+  .course img,.course .ph{width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:var(--panel2);}
+  .course .body{padding:14px 16px 16px; display:flex; flex-direction:column; gap:4px; flex:1;}
+  .course h3{font-size:17px; line-height:1.5;}
+  .course .teacher{color:var(--muted); font-size:13.5px;}
+  .course .foot{display:flex; align-items:center; justify-content:space-between; margin-top:auto; padding-top:10px;}
+  .price{font-weight:800; color:var(--red); direction:ltr; unicode-bidi:isolate;}
+  .owned{font-size:12.5px; font-weight:700; color:var(--teal); border:1px solid currentColor; border-radius:999px; padding:2px 10px;}
+  .state{color:var(--muted); text-align:center; padding:60px 0;}
+  dialog{margin:auto; border:1px solid var(--glass-border); border-radius:20px; background:var(--panel); color:var(--text); padding:0;
+    width:min(460px, calc(100vw - 32px)); max-height:calc(100vh - 32px);}
+  dialog::backdrop{background:rgba(0,0,0,.55);}
+  .dlg{padding:22px; display:flex; flex-direction:column; gap:12px;}
+  .dlg h2{font-size:21px; line-height:1.4;}
+  .dlg img{width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:12px; background:var(--panel2);}
+  .dlg .desc{color:var(--muted); font-size:14.5px; white-space:pre-line; max-height:180px; overflow:auto;}
+  .row{display:flex; gap:8px;}
+  .field{width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--text); font:inherit; font-size:15px;}
+  .field:focus{outline:2px solid var(--red); outline-offset:1px;}
+  .sum{display:flex; justify-content:space-between; align-items:baseline; font-size:15px; color:var(--muted);}
+  .sum .price{font-size:22px;}
+  .old{text-decoration:line-through; color:var(--muted2); font-size:14px; margin-inline-start:8px; direction:ltr; unicode-bidi:isolate;}
+  .msg{font-size:14px; min-height:20px;}
+  .msg.err{color:#E5484D;} .msg.ok{color:var(--teal);}
+  .dlg .btn{justify-content:center; width:100%;}
+  .btn-plain{background:var(--panel2); border-color:var(--line); color:var(--text);}
+  .note{font-size:12.5px; color:var(--muted2); text-align:center;}
+  .or{display:flex; align-items:center; gap:10px; color:var(--muted2); font-size:13px;}
+  .or::before,.or::after{content:""; flex:1; height:1px; background:var(--line);}
+  .x{position:absolute; top:10px; inset-inline-end:10px; width:36px; height:36px; border-radius:50%; border:0; background:var(--panel2); color:var(--text); font-size:20px; cursor:pointer;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap head">
+    <a class="brand" href="/">
+      <svg class="brand-mark arc-mark" viewBox="211 249 400 400" aria-hidden="true" style="background:none;border-radius:0"><defs><clipPath id="arcClip"><rect x="200" y="240" width="420" height="388"></rect></clipPath></defs><path fill="none" stroke="#E8622C" stroke-width="44" stroke-linejoin="round" clip-path="url(#arcClip)" d="M347 456 L399 320 Q418 270 438 320 L540 575 C552 605 530 618 505 598 L420 532 C400 514 330 496 306 566 L280 645"></path></svg>
+      <span class="brand-name">ARC PLATFORM<small>منصة آرك</small></span>
+    </a>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="buy-head">
+    <div>
+      <h1>شراء الدورات</h1>
+      <p>ادفع هنا، ثم تعلّم من تطبيق منصة آرك بنفس حسابك.</p>
+    </div>
+    <div class="who" id="who"></div>
+  </div>
+  <div class="courses" id="courses"></div>
+  <p class="state" id="state">جارٍ تحميل الدورات…</p>
+</main>
+
+<!-- Course + purchase -->
+<dialog id="courseDlg">
+  <div class="dlg" style="position:relative">
+    <button class="x" type="button" data-close aria-label="إغلاق">×</button>
+    <img id="cImg" alt="">
+    <h2 id="cTitle"></h2>
+    <div class="teacher" id="cTeacher" style="color:var(--muted);font-size:14px"></div>
+    <div class="desc" id="cDesc"></div>
+    <div id="codeRow" class="row">
+      <input class="field" id="cCode" placeholder="كود الخصم (اختياري)" autocomplete="off" maxlength="40">
+      <button class="btn btn-plain" type="button" id="cApply">تطبيق</button>
+    </div>
+    <div class="sum"><span>المبلغ</span><span><span class="price" id="cPrice"></span><span class="old" id="cOld"></span></span></div>
+    <div class="msg" id="cMsg"></div>
+    <button class="btn btn-accent" type="button" id="cBuy">شراء الآن</button>
+    <p class="note">الدفع عبر Wayl: كي كارد، زين كاش، FIB، فيزا وماستركارد.</p>
+  </div>
+</dialog>
+
+<!-- Sign in -->
+<dialog id="authDlg">
+  <form class="dlg" id="authForm" style="position:relative" novalidate>
+    <button class="x" type="button" data-close aria-label="إغلاق">×</button>
+    <h2>سجّل الدخول لإكمال الشراء</h2>
+    <p style="color:var(--muted);font-size:14px">استخدم نفس حسابك في تطبيق منصة آرك.</p>
+    <button class="btn btn-plain" type="button" id="googleBtn">المتابعة باستخدام جوجل</button>
+    <div class="or">أو</div>
+    <input class="field" id="email" type="email" placeholder="البريد الإلكتروني" autocomplete="email" required>
+    <input class="field" id="password" type="password" placeholder="كلمة المرور" autocomplete="current-password" required>
+    <div class="msg" id="authMsg"></div>
+    <button class="btn btn-accent" type="submit" id="loginBtn">تسجيل الدخول</button>
+    <p class="note">ليس لديك حساب؟ أنشئ حسابك من تطبيق منصة آرك ثم عد إلى هذه الصفحة.</p>
+  </form>
+</dialog>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-links">
+      <a href="/">الرئيسية</a>
+      <a href="/privacy.html">سياسة الخصوصية</a>
+      <a href="/terms.html">شروط الاستخدام</a>
+    </div>
+    <small>&copy; <span id="year">2026</span> Arc Platform</small>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/site.js"></script>
+<script src="/buy.js"></script>
+</body>
+</html>
