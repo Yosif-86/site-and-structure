@@ -6,88 +6,161 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>شراء الدورات | Arc Platform</title>
 <meta name="description" content="اشترِ دورات منصة آرك بالدفع الإلكتروني عبر Wayl، وتعلّم من التطبيق.">
-<meta name="theme-color" content="#14120F">
+<meta name="theme-color" content="#14120F" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#FCFBF9" media="(prefers-color-scheme: light)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800&family=Cairo:wght@500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/site.css">
+<link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@300;400;500;600;700;800&family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  .buy-head{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:40px 0 8px;}
-  .buy-head h1{font-size:clamp(26px,5vw,38px); line-height:1.3;}
-  .buy-head p{color:var(--muted); font-size:15px;}
-  .who{display:flex; align-items:center; gap:10px; font-size:14px; color:var(--muted);}
-  .who b{color:var(--text); font-weight:700;}
-  .link-btn{background:none; border:0; color:var(--red); font:inherit; font-weight:700; cursor:pointer; padding:4px;}
-  .courses{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:18px; padding:24px 0 72px;}
-  .course{background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:18px; overflow:hidden; cursor:pointer;
-    display:flex; flex-direction:column; text-align:start; font:inherit; color:inherit; padding:0; transition:transform .15s, border-color .15s;}
-  .course:hover{transform:translateY(-2px); border-color:var(--red);}
-  .course img,.course .ph{width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:var(--panel2);}
-  .course .body{padding:14px 16px 16px; display:flex; flex-direction:column; gap:4px; flex:1;}
-  .course h3{font-size:17px; line-height:1.5;}
-  .course .teacher{color:var(--muted); font-size:13.5px;}
-  .course .foot{display:flex; align-items:center; justify-content:space-between; margin-top:auto; padding-top:10px;}
-  .price{font-weight:800; color:var(--red); direction:ltr; unicode-bidi:isolate;}
-  .owned{font-size:12.5px; font-weight:700; color:var(--teal); border:1px solid currentColor; border-radius:999px; padding:2px 10px;}
-  .state{color:var(--muted); text-align:center; padding:60px 0;}
-  dialog{margin:auto; border:1px solid var(--glass-border); border-radius:20px; background:var(--panel); color:var(--text); padding:0;
-    width:min(460px, calc(100vw - 32px)); max-height:calc(100vh - 32px);}
-  dialog::backdrop{background:rgba(0,0,0,.55);}
-  .dlg{padding:22px; display:flex; flex-direction:column; gap:12px;}
-  .dlg h2{font-size:21px; line-height:1.4;}
-  .dlg img{width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:12px; background:var(--panel2);}
-  .dlg .desc{color:var(--muted); font-size:14.5px; white-space:pre-line; max-height:180px; overflow:auto;}
+  /* Same palette as the app (mobile_app/lib/theme.dart); follows the
+     phone's light/dark setting like the app's Auto mode. */
+  :root{
+    --bg:#14120F; --panel:#1D1A16; --panel2:#26221C; --red:#E8622C; --teal:#6FA8A0;
+    --text:#FEE4BF; --muted:#AFA492; --muted2:#7D7362; --error:#E5484D;
+    --glass:rgba(29,26,22,.72); --edge:rgba(254,228,191,.10); --grid:rgba(254,228,191,.035);
+    --glow:rgba(232,98,44,.20);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#FCFBF9; --panel:#FFFFFF; --panel2:#F1ECE4; --red:#C94E1F; --teal:#3E7D74;
+      --text:#1E1912; --muted:#5C5344; --muted2:#8C8171;
+      --glass:rgba(255,255,255,.72); --edge:rgba(30,25,18,.12); --grid:rgba(30,25,18,.05);
+      --glow:rgba(232,98,44,.10);
+    }
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{min-height:100vh; font-family:'Alexandria',sans-serif; color:var(--text); line-height:1.6;
+    background:
+      radial-gradient(900px 520px at 100% 0%, var(--glow), transparent 70%),
+      linear-gradient(var(--grid) 1px, transparent 1px) 0 0/44px 44px,
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/44px 44px,
+      var(--bg);
+    -webkit-font-smoothing:antialiased;}
+  .latin{font-family:'Montserrat',sans-serif;}
+  button{font:inherit; color:inherit;}
+  .page{max-width:920px; margin:0 auto; padding:18px 16px 60px;}
+
+  /* header: logo lockup + round account button, like the app */
+  .top{display:flex; align-items:center; justify-content:space-between; padding:6px 0 18px;}
+  .lockup{display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--text);}
+  .lockup .words{display:flex; flex-direction:column; align-items:flex-end; line-height:1.15;}
+  .lockup .en{font-family:'Montserrat',sans-serif; font-weight:400; letter-spacing:.14em; font-size:15px; direction:ltr;}
+  .lockup .ar{font-weight:400; font-size:14px;}
+  .lockup .bar{width:1.5px; height:34px; background:var(--red);}
+  .lockup svg{width:34px; height:34px;}
+  .avatar{width:48px; height:48px; border-radius:50%; border:2px solid var(--muted2); background:transparent;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--muted); font-weight:700; font-size:18px;}
+  .avatar svg{width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8;}
+  .avatar.in{border-color:var(--red); color:var(--red);}
+
+  h1{font-size:clamp(30px,7vw,42px); font-weight:800; line-height:1.25;}
+  .sub{color:var(--muted); font-size:15px; margin-top:4px;}
+  .sec{display:flex; align-items:center; gap:10px; margin:28px 0 14px;}
+  .sec::before{content:""; width:4px; height:24px; border-radius:4px; background:var(--red);}
+  .sec h2{font-size:20px; font-weight:700;}
+  .count{min-width:30px; height:30px; padding:0 9px; border-radius:999px; border:1px solid var(--edge);
+    display:inline-flex; align-items:center; justify-content:center; font-size:13px; color:var(--muted);}
+
+  /* course cards: thumbnail, title, chips, price, chevron (app CourseCard) */
+  .courses{display:grid; grid-template-columns:minmax(0,1fr); gap:14px;}
+  @media (min-width:760px){ .courses{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .course{display:flex; align-items:center; gap:14px; min-width:0; text-align:start; width:100%; padding:12px; cursor:pointer;
+    background:var(--glass); border:1px solid var(--edge); border-radius:24px;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); transition:transform .15s, border-color .15s;}
+  .course:hover{transform:translateY(-2px); border-color:color-mix(in srgb, var(--red) 55%, transparent);}
+  @media (max-width:420px){ .thumb{width:104px !important; height:80px !important;} }
+  .thumb{width:128px; height:96px; border-radius:16px; object-fit:cover; flex:none; background:var(--panel2);}
+  .info{flex:1; min-width:0; display:flex; flex-direction:column; gap:7px;}
+  .info h3{font-size:16px; font-weight:700; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .chip{display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px; border:1px solid var(--edge);
+    font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .chip svg{width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round;}
+  .price{font-weight:800; font-size:15px; color:var(--red);}
+  .price.free{color:var(--teal);}
+  .num{direction:ltr; unicode-bidi:isolate;}
+  .owned{font-size:12px; font-weight:700; color:var(--teal); border:1px solid currentColor; border-radius:999px; padding:1px 9px; margin-inline-start:6px;}
+  .chev{width:18px; height:18px; flex:none; color:var(--muted2); fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+  .state{color:var(--muted); text-align:center; padding:50px 0;}
+
+  /* sheets */
+  dialog{margin:auto; border:1px solid var(--edge); border-radius:28px; background:var(--panel); color:var(--text); padding:0;
+    width:min(460px, calc(100vw - 24px)); max-height:calc(100vh - 24px); box-shadow:0 30px 80px rgba(0,0,0,.45);}
+  dialog::backdrop{background:rgba(0,0,0,.55); backdrop-filter:blur(3px);}
+  @media (max-width:560px){
+    dialog{margin:auto 0 0; width:100vw; max-width:100vw; border-radius:28px 28px 0 0; border-bottom:0;}
+  }
+  .dlg{padding:20px; display:flex; flex-direction:column; gap:12px; position:relative;}
+  .grab{width:44px; height:5px; border-radius:5px; background:var(--edge); margin:-6px auto 2px;}
+  .dlg h2{font-size:21px; font-weight:700; line-height:1.4;}
+  .dlg .hero{width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:18px; background:var(--panel2);}
+  .dlg .teacher{color:var(--muted); font-size:14px;}
+  .dlg .desc{color:var(--muted); font-size:14px; white-space:pre-line; max-height:150px; overflow:auto;}
   .row{display:flex; gap:8px;}
-  .field{width:100%; padding:12px 14px; border-radius:12px; border:1px solid var(--line); background:var(--bg); color:var(--text); font:inherit; font-size:15px;}
+  .field{width:100%; padding:13px 16px; border-radius:16px; border:1px solid var(--edge); background:var(--bg); color:var(--text); font:inherit; font-size:15px;}
   .field:focus{outline:2px solid var(--red); outline-offset:1px;}
-  .sum{display:flex; justify-content:space-between; align-items:baseline; font-size:15px; color:var(--muted);}
-  .sum .price{font-size:22px;}
-  .old{text-decoration:line-through; color:var(--muted2); font-size:14px; margin-inline-start:8px; direction:ltr; unicode-bidi:isolate;}
-  .msg{font-size:14px; min-height:20px;}
-  .msg.err{color:#E5484D;} .msg.ok{color:var(--teal);}
-  .dlg .btn{justify-content:center; width:100%;}
-  .btn-plain{background:var(--panel2); border-color:var(--line); color:var(--text);}
+  .sum{display:flex; justify-content:space-between; align-items:baseline; padding:12px 16px; border-radius:16px; background:var(--panel2);}
+  .sum span:first-child{color:var(--muted); font-size:14px;}
+  .sum .price{font-size:21px;}
+  .old{text-decoration:line-through; color:var(--muted2); font-size:13.5px; margin-inline-start:8px;}
+  .msg{font-size:13.5px; min-height:20px;}
+  .msg.err{color:var(--error);} .msg.ok{color:var(--teal);}
+  .btn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px 18px; border-radius:16px; border:1px solid transparent;
+    font-weight:700; font-size:15.5px; cursor:pointer; transition:transform .12s, opacity .12s;}
+  .btn:active{transform:scale(.98);}
+  .btn[aria-disabled="true"]{opacity:.55; pointer-events:none;}
+  .btn-accent{background:linear-gradient(135deg,#F2B544,#E8622C 50%,#B8461A); color:#fff; box-shadow:0 10px 24px -10px rgba(232,98,44,.8);}
+  .btn-plain{background:var(--panel2); border-color:var(--edge);}
+  .btn-small{width:auto; padding:0 16px; flex:none;}
+  .btn svg{width:20px; height:20px;}
   .note{font-size:12.5px; color:var(--muted2); text-align:center;}
   .or{display:flex; align-items:center; gap:10px; color:var(--muted2); font-size:13px;}
-  .or::before,.or::after{content:""; flex:1; height:1px; background:var(--line);}
-  .x{position:absolute; top:10px; inset-inline-end:10px; width:36px; height:36px; border-radius:50%; border:0; background:var(--panel2); color:var(--text); font-size:20px; cursor:pointer;}
+  .or::before,.or::after{content:""; flex:1; height:1px; background:var(--edge);}
+  .x{position:absolute; top:14px; inset-inline-end:14px; width:36px; height:36px; border-radius:50%; border:1px solid var(--edge);
+    background:var(--panel2); font-size:20px; line-height:1; cursor:pointer; z-index:1;}
+
+  footer{max-width:920px; margin:0 auto; padding:0 16px 36px; display:flex; flex-wrap:wrap; gap:8px 18px; justify-content:space-between; color:var(--muted2); font-size:13px;}
+  footer a{color:var(--muted); text-decoration:none;} footer a:hover{color:var(--red);}
+  footer nav{display:flex; gap:18px; flex-wrap:wrap;}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap head">
-    <a class="brand" href="/">
-      <svg class="brand-mark arc-mark" viewBox="211 249 400 400" aria-hidden="true" style="background:none;border-radius:0"><defs><clipPath id="arcClip"><rect x="200" y="240" width="420" height="388"></rect></clipPath></defs><path fill="none" stroke="#E8622C" stroke-width="44" stroke-linejoin="round" clip-path="url(#arcClip)" d="M347 456 L399 320 Q418 270 438 320 L540 575 C552 605 530 618 505 598 L420 532 C400 514 330 496 306 566 L280 645"></path></svg>
-      <span class="brand-name">ARC PLATFORM<small>منصة آرك</small></span>
+<div class="page">
+  <header class="top">
+    <a class="lockup" href="/" aria-label="منصة آرك">
+      <svg viewBox="211 249 400 400" aria-hidden="true"><defs><clipPath id="arcClip"><rect x="200" y="240" width="420" height="388"></rect></clipPath></defs><path fill="none" stroke="#E8622C" stroke-width="44" stroke-linejoin="round" clip-path="url(#arcClip)" d="M347 456 L399 320 Q418 270 438 320 L540 575 C552 605 530 618 505 598 L420 532 C400 514 330 496 306 566 L280 645"></path></svg>
+      <span class="bar"></span>
+      <span class="words"><span class="en">ARC PLATFORM</span><span class="ar">منصة آرك</span></span>
     </a>
-  </div>
-</header>
+    <button class="avatar" id="avatar" type="button" aria-label="الحساب">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="8.3" r="3.6"/><path d="M4.8 20.2 C5.4 16.6 8.4 14.6 12 14.6 C15.6 14.6 18.6 16.6 19.2 20.2"/></svg>
+    </button>
+  </header>
 
-<main class="wrap">
-  <div class="buy-head">
-    <div>
-      <h1>شراء الدورات</h1>
-      <p>ادفع هنا، ثم تعلّم من تطبيق منصة آرك بنفس حسابك.</p>
-    </div>
-    <div class="who" id="who"></div>
-  </div>
+  <h1>الدورات</h1>
+  <p class="sub">اشترِ الدورة هنا، ثم تعلّم من تطبيق منصة آرك بنفس حسابك.</p>
+
+  <div class="sec"><h2>جميع الدورات</h2><span class="count" id="count">0</span></div>
   <div class="courses" id="courses"></div>
   <p class="state" id="state">جارٍ تحميل الدورات…</p>
-</main>
+</div>
 
 <!-- Course + purchase -->
 <dialog id="courseDlg">
-  <div class="dlg" style="position:relative">
+  <div class="dlg">
+    <div class="grab"></div>
     <button class="x" type="button" data-close aria-label="إغلاق">×</button>
-    <img id="cImg" alt="">
+    <img class="hero" id="cImg" alt="">
     <h2 id="cTitle"></h2>
-    <div class="teacher" id="cTeacher" style="color:var(--muted);font-size:14px"></div>
+    <div class="teacher" id="cTeacher"></div>
+    <div class="chips" id="cChips"></div>
     <div class="desc" id="cDesc"></div>
     <div id="codeRow" class="row">
       <input class="field" id="cCode" placeholder="كود الخصم (اختياري)" autocomplete="off" maxlength="40">
-      <button class="btn btn-plain" type="button" id="cApply">تطبيق</button>
+      <button class="btn btn-plain btn-small" type="button" id="cApply">تطبيق</button>
     </div>
-    <div class="sum"><span>المبلغ</span><span><span class="price" id="cPrice"></span><span class="old" id="cOld"></span></span></div>
+    <div class="sum"><span>المبلغ</span><span><span class="price num" id="cPrice"></span><span class="old num" id="cOld"></span></span></div>
     <div class="msg" id="cMsg"></div>
     <button class="btn btn-accent" type="button" id="cBuy">شراء الآن</button>
     <p class="note">الدفع عبر Wayl: كي كارد، زين كاش، FIB، فيزا وماستركارد.</p>
@@ -96,11 +169,15 @@
 
 <!-- Sign in -->
 <dialog id="authDlg">
-  <form class="dlg" id="authForm" style="position:relative" novalidate>
+  <form class="dlg" id="authForm" novalidate>
+    <div class="grab"></div>
     <button class="x" type="button" data-close aria-label="إغلاق">×</button>
     <h2>سجّل الدخول لإكمال الشراء</h2>
-    <p style="color:var(--muted);font-size:14px">استخدم نفس حسابك في تطبيق منصة آرك.</p>
-    <button class="btn btn-plain" type="button" id="googleBtn">المتابعة باستخدام جوجل</button>
+    <p class="teacher">استخدم نفس حسابك في تطبيق منصة آرك.</p>
+    <button class="btn btn-plain" type="button" id="googleBtn">
+      <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.1 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+      المتابعة باستخدام جوجل
+    </button>
     <div class="or">أو</div>
     <input class="field" id="email" type="email" placeholder="البريد الإلكتروني" autocomplete="email" required>
     <input class="field" id="password" type="password" placeholder="كلمة المرور" autocomplete="current-password" required>
@@ -110,19 +187,27 @@
   </form>
 </dialog>
 
-<footer>
-  <div class="wrap foot">
-    <div class="foot-links">
-      <a href="/">الرئيسية</a>
-      <a href="/privacy.html">سياسة الخصوصية</a>
-      <a href="/terms.html">شروط الاستخدام</a>
-    </div>
-    <small>&copy; <span id="year">2026</span> Arc Platform</small>
+<!-- Signed-in account -->
+<dialog id="meDlg">
+  <div class="dlg">
+    <div class="grab"></div>
+    <button class="x" type="button" data-close aria-label="إغلاق">×</button>
+    <h2>حسابك</h2>
+    <p class="teacher" id="meEmail"></p>
+    <button class="btn btn-plain" type="button" id="signOut">تسجيل الخروج</button>
   </div>
+</dialog>
+
+<footer>
+  <nav>
+    <a href="/">الرئيسية</a>
+    <a href="/privacy.html">سياسة الخصوصية</a>
+    <a href="/terms.html">شروط الاستخدام</a>
+  </nav>
+  <span>&copy; 2026 Arc Platform</span>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="/site.js"></script>
 <script src="/buy.js"></script>
 </body>
 </html>

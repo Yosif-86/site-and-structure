@@ -1,7 +1,8 @@
-// Website course purchase (buy.html): anyone can browse the paid courses;
-// buying needs the same account as the app. The price is always worked out
-// by the server (api/wayl-checkout -> wayl_prepare_payment), never taken
-// from this page. After Wayl the buyer lands on paid.html.
+// Website course purchase (buy.html), styled like the app: anyone can
+// browse the courses; buying needs the same account as the app. The price
+// is always worked out by the server (api/wayl-checkout ->
+// wayl_prepare_payment), never taken from this page. After Wayl the buyer
+// lands on paid.html.
 //
 // Like staff-login.js, signing in here does NOT claim a device slot
 // (/api/check-device): this page only buys, it never shows course content,
@@ -12,15 +13,23 @@
     'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q'
   );
   var STORAGE = 'https://qdarzhzttjpkgfihupgp.supabase.co/';
+  var SVG = 'http://www.w3.org/2000/svg';
+  // Same line icons as the app (widgets/arc_icons.dart).
+  var ICONS = {
+    lessons: ['M6.5 4.5 H17.5 Q19.5 4.5 19.5 6.5 V17.5 Q19.5 19.5 17.5 19.5 H6.5 Q4.5 19.5 4.5 17.5 V6.5 Q4.5 4.5 6.5 4.5 Z', 'M10.3 9 L15 12 L10.3 15 Z'],
+    files: ['M8 5 H6.5 Q5 5 5 6.5 V19 Q5 20.5 6.5 20.5 H17.5 Q19 20.5 19 19 V6.5 Q19 5 17.5 5 H16', 'M9 3.5 H15 V6.5 H9 Z', 'M9 13.5 L11.2 15.7 L15.2 11.5'],
+    clock: ['M12 3.2 A8.8 8.8 0 1 1 11.99 3.2 Z', 'M12 7.5 V12 L15 14']
+  };
 
   var $ = function (id) { return document.getElementById(id); };
-  var list = $('courses'), state = $('state'), who = $('who');
-  var courseDlg = $('courseDlg'), authDlg = $('authDlg');
+  var list = $('courses'), state = $('state');
+  var courseDlg = $('courseDlg'), authDlg = $('authDlg'), meDlg = $('meDlg');
 
   var courses = [];
+  var stats = {};       // course id -> { lessons, files, seconds }
   var owned = {};       // slug -> true for active enrollments
   var user = null;
-  var current = null;   // course open in the dialog
+  var current = null;   // course open in the sheet
   var applied = null;   // { code, amount } after a valid discount code
   var busy = false;
 
@@ -29,8 +38,6 @@
     return isNaN(n) ? 0 : n;
   }
   function money(n) { return n.toLocaleString('en-US') + ' د.ع'; }
-  function title(c) { return c.title || ''; }
-  function teacher(c) { return c.teacher_name || ''; }
   function paid(c) { return !c.is_free && digits(c.price) > 0; }
   function thumb(c) {
     var u = String(c.thumbnail_url || '');
@@ -39,6 +46,38 @@
   function setMsg(el, text, kind) {
     el.textContent = text || '';
     el.className = 'msg' + (kind ? ' ' + kind : '');
+  }
+  function duration(sec) {
+    var m = Math.round(sec / 60), h = Math.floor(m / 60);
+    if (h && m % 60) return h + ' س ' + (m % 60) + ' د';
+    return h ? h + ' س' : Math.max(m, 1) + ' د';
+  }
+  function icon(name, cls) {
+    var s = document.createElementNS(SVG, 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    if (cls) s.setAttribute('class', cls);
+    (ICONS[name] || []).forEach(function (d) {
+      var p = document.createElementNS(SVG, 'path');
+      p.setAttribute('d', d);
+      s.appendChild(p);
+    });
+    return s;
+  }
+  function chip(name, text) {
+    var c = document.createElement('span');
+    c.className = 'chip';
+    var t = document.createElement('span');
+    t.textContent = text;
+    c.append(icon(name), t);
+    return c;
+  }
+  function chipsFor(c) {
+    var st = stats[c.id] || {};
+    var out = [];
+    if (st.lessons) out.push(chip('lessons', st.lessons + ' درس'));
+    if (st.files) out.push(chip('files', st.files + ' ملف'));
+    if (st.seconds) out.push(chip('clock', duration(st.seconds)));
+    return out;
   }
 
   var ERRORS = {
@@ -52,29 +91,32 @@
   };
 
   // ---------- account ----------
-  function renderWho() {
-    who.textContent = '';
+  function renderAvatar() {
+    var a = $('avatar');
+    a.classList.toggle('in', !!user);
     if (user) {
-      var name = document.createElement('span');
-      name.innerHTML = 'مسجّل باسم <b></b>';
-      name.querySelector('b').textContent = user.email || '';
-      var out = document.createElement('button');
-      out.className = 'link-btn';
-      out.type = 'button';
-      out.textContent = 'تسجيل الخروج';
-      out.onclick = function () {
-        sb.auth.signOut().finally(function () { user = null; owned = {}; renderWho(); renderList(); });
-      };
-      who.append(name, out);
+      var name = (user.user_metadata && (user.user_metadata.full_name || user.user_metadata.name)) || user.email || '';
+      a.textContent = (name.trim()[0] || '؟').toUpperCase();
+      a.setAttribute('aria-label', 'حسابك');
     } else {
-      var inBtn = document.createElement('button');
-      inBtn.className = 'link-btn';
-      inBtn.type = 'button';
-      inBtn.textContent = 'تسجيل الدخول';
-      inBtn.onclick = function () { openAuth(); };
-      who.append(inBtn);
+      a.textContent = '';
+      a.append(icon('profile'));
+      a.setAttribute('aria-label', 'تسجيل الدخول');
     }
   }
+  ICONS.profile = ['M12 4.7 A3.6 3.6 0 1 1 11.99 4.7 Z', 'M4.8 20.2 C5.4 16.6 8.4 14.6 12 14.6 C15.6 14.6 18.6 16.6 19.2 20.2'];
+
+  $('avatar').addEventListener('click', function () {
+    if (!user) { openAuth(); return; }
+    $('meEmail').textContent = user.email || '';
+    meDlg.showModal();
+  });
+  $('signOut').addEventListener('click', function () {
+    sb.auth.signOut().finally(function () {
+      user = null; owned = {};
+      meDlg.close(); renderAvatar(); renderList();
+    });
+  });
 
   function loadOwned() {
     owned = {};
@@ -87,7 +129,6 @@
   function openAuth() {
     setMsg($('authMsg'), '');
     authDlg.showModal();
-    $('email').focus();
   }
 
   $('authForm').addEventListener('submit', function (e) {
@@ -119,7 +160,7 @@
   function afterSignIn() {
     return sb.auth.getUser().then(function (r) {
       user = r.data && r.data.user ? r.data.user : null;
-      renderWho();
+      renderAvatar();
       return loadOwned();
     }).then(function () {
       renderList();
@@ -130,28 +171,39 @@
   // ---------- courses ----------
   function renderList() {
     list.textContent = '';
+    $('count').textContent = String(courses.length);
     courses.forEach(function (c) {
       var card = document.createElement('button');
       card.type = 'button';
       card.className = 'course';
       var src = thumb(c);
       var img = document.createElement(src ? 'img' : 'div');
-      if (src) { img.src = src; img.alt = ''; img.loading = 'lazy'; img.onerror = function () { img.removeAttribute('src'); }; }
-      else img.className = 'ph';
-      var body = document.createElement('div');
-      body.className = 'body';
-      var h = document.createElement('h3'); h.textContent = title(c);
-      var t = document.createElement('div'); t.className = 'teacher'; t.textContent = teacher(c);
-      var foot = document.createElement('div'); foot.className = 'foot';
-      var p = document.createElement('span'); p.className = 'price';
-      p.textContent = paid(c) ? money(digits(c.price)) : 'مجانية';
-      foot.append(p);
+      img.className = 'thumb';
+      if (src) { img.src = src; img.alt = ''; img.loading = 'lazy'; }
+      var info = document.createElement('div');
+      info.className = 'info';
+      var h = document.createElement('h3'); h.textContent = c.title || '';
+      h.dir = 'auto';
+      if (/^[\x00-\x7F]*$/.test(c.title || '')) h.classList.add('latin');
+      var chips = document.createElement('div'); chips.className = 'chips';
+      chipsFor(c).forEach(function (x) { chips.append(x); });
+      var price = document.createElement('div');
+      var p = document.createElement('span');
+      p.className = 'price num' + (paid(c) ? '' : ' free');
+      p.textContent = paid(c) ? money(digits(c.price)) : 'مجاني';
+      price.append(p);
       if (owned[c.slug]) {
         var o = document.createElement('span'); o.className = 'owned'; o.textContent = 'مشترك';
-        foot.append(o);
+        price.append(o);
       }
-      body.append(h, t, foot);
-      card.append(img, body);
+      info.append(h, chips, price);
+      var chev = document.createElementNS(SVG, 'svg');
+      chev.setAttribute('viewBox', '0 0 24 24');
+      chev.setAttribute('class', 'chev');
+      var cp = document.createElementNS(SVG, 'path');
+      cp.setAttribute('d', 'M14.5 6 L8.5 12 L14.5 18');
+      chev.appendChild(cp);
+      card.append(img, info, chev);
       card.onclick = function () { openCourse(c); };
       list.append(card);
     });
@@ -177,11 +229,15 @@
     var src = thumb(c);
     $('cImg').style.display = src ? '' : 'none';
     if (src) $('cImg').src = src;
-    $('cTitle').textContent = title(c);
-    $('cTeacher').textContent = teacher(c);
+    $('cTitle').textContent = c.title || '';
+    $('cTeacher').textContent = c.teacher_name ? 'المدرّس: ' + c.teacher_name : '';
+    var chips = $('cChips');
+    chips.textContent = '';
+    chipsFor(c).forEach(function (x) { chips.append(x); });
     $('cDesc').textContent = c.description || '';
     var mine = !!owned[c.slug], free = !paid(c);
-    if (free) { $('cPrice').textContent = 'مجانية'; $('cOld').textContent = ''; } else showPrice();
+    $('cPrice').className = 'price num' + (free ? ' free' : '');
+    if (free) { $('cPrice').textContent = 'مجاني'; $('cOld').textContent = ''; } else showPrice();
     $('cBuy').style.display = mine || free ? 'none' : '';
     $('codeRow').style.display = mine || free ? 'none' : '';
     setMsg($('cMsg'), mine ? ERRORS.already_enrolled : free ? ERRORS.course_free : '', mine || free ? 'ok' : '');
@@ -234,7 +290,7 @@
       busy = false;
       btn.removeAttribute('aria-disabled');
       if (res && res.status === 401) {
-        user = null; renderWho(); setMsg($('cMsg'), ''); openAuth(); return;
+        user = null; renderAvatar(); setMsg($('cMsg'), ''); openAuth(); return;
       }
       var key = res && res.j && res.j.error;
       if (key === 'already_enrolled') { owned[current.slug] = true; renderList(); }
@@ -246,13 +302,39 @@
   document.querySelectorAll('[data-close]').forEach(function (b) {
     b.addEventListener('click', function () { b.closest('dialog').close(); });
   });
+  // Tap outside a sheet closes it.
+  [courseDlg, authDlg, meDlg].forEach(function (d) {
+    d.addEventListener('click', function (e) { if (e.target === d) d.close(); });
+  });
   courseDlg.addEventListener('close', function () { if (!authDlg.open) current = null; });
+
+  // Lesson count, total length and file count per course, like the app's cards.
+  function loadStats(ids) {
+    if (!ids.length) return Promise.resolve();
+    return Promise.all([
+      sb.from('lectures').select('course_id, duration_seconds, r2_path').in('course_id', ids),
+      sb.from('course_files').select('course_id, status').in('course_id', ids)
+    ]).then(function (res) {
+      (res[0].data || []).forEach(function (l) {
+        if (!l.r2_path) return;
+        var s = stats[l.course_id] || (stats[l.course_id] = { lessons: 0, files: 0, seconds: 0 });
+        s.lessons += 1;
+        s.seconds += Number(l.duration_seconds) || 0;
+      });
+      (res[1].data || []).forEach(function (f) {
+        if (f.status !== 'published') return;
+        var s = stats[f.course_id] || (stats[f.course_id] = { lessons: 0, files: 0, seconds: 0 });
+        s.files += 1;
+      });
+    }).catch(function () {});
+  }
 
   // ---------- start ----------
   function start() {
+    renderAvatar();
     sb.auth.getUser().then(function (r) {
       user = r.data && r.data.user ? r.data.user : null;
-      renderWho();
+      renderAvatar();
       return Promise.all([
         loadOwned(),
         sb.from('courses')
@@ -265,6 +347,8 @@
       if (r.error) throw r.error;
       // Paid courses first; free ones are listed too (taken from the app).
       courses = (r.data || []).slice().sort(function (a, b) { return paid(b) - paid(a); });
+      return loadStats(courses.map(function (c) { return c.id; }));
+    }).then(function () {
       renderList();
       // Back from Google sign-in: reopen the course that was being bought.
       var slug = new URLSearchParams(location.search).get('c');
