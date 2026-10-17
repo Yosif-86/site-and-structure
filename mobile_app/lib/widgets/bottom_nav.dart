@@ -164,12 +164,45 @@ class _Lens extends StatelessWidget {
   }
 }
 
-class _NavTab extends StatelessWidget {
+/// Plays the icon's short motion once each time the tab becomes active.
+mixin _IconMotion<T extends StatefulWidget> on State<T>, SingleTickerProviderStateMixin<T> {
+  late final AnimationController motion = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 650));
+
+  void playMotion() {
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return;
+    motion.forward(from: 0);
+  }
+
+  /// Null when still, so the painter draws the plain icon.
+  double? get motionValue => motion.isAnimating ? motion.value : null;
+
+  @override
+  void dispose() {
+    motion.dispose();
+    super.dispose();
+  }
+}
+
+class _NavTab extends StatefulWidget {
   final BottomNavItem item;
   const _NavTab({required this.item});
 
   @override
+  State<_NavTab> createState() => _NavTabState();
+}
+
+class _NavTabState extends State<_NavTab>
+    with SingleTickerProviderStateMixin, _IconMotion {
+  @override
+  void didUpdateWidget(covariant _NavTab old) {
+    super.didUpdateWidget(old);
+    if (widget.item.active && !old.item.active) playMotion();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final color = item.active ? AppColors.red : AppColors.muted;
     return Semantics(
       button: true,
@@ -191,8 +224,14 @@ class _NavTab extends StatelessWidget {
                 duration: const Duration(milliseconds: 260),
                 curve: Curves.easeOutCubic,
                 scale: item.active ? 1.08 : 1,
-                child: ArcIconView(item.icon,
-                    size: 23, color: color, active: item.active),
+                child: AnimatedBuilder(
+                  animation: motion,
+                  builder: (context, _) => ArcIconView(item.icon,
+                      size: 23,
+                      color: color,
+                      active: item.active,
+                      motion: motionValue),
+                ),
               ),
             ),
             const SizedBox(height: 3),
@@ -223,8 +262,16 @@ class _CenterButton extends StatefulWidget {
   State<_CenterButton> createState() => _CenterButtonState();
 }
 
-class _CenterButtonState extends State<_CenterButton> {
+class _CenterButtonState extends State<_CenterButton>
+    with SingleTickerProviderStateMixin, _IconMotion {
   bool _down = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The compass needle takes a little longer to spin and settle.
+    motion.duration = const Duration(milliseconds: 900);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +281,10 @@ class _CenterButtonState extends State<_CenterButton> {
       child: Tooltip(
         message: widget.item.tooltip,
         child: GestureDetector(
-          onTap: widget.item.onTap,
+          onTap: () {
+            playMotion();
+            widget.item.onTap();
+          },
           onTapDown: (_) => setState(() => _down = true),
           onTapUp: (_) => setState(() => _down = false),
           onTapCancel: () => setState(() => _down = false),
@@ -263,8 +313,15 @@ class _CenterButtonState extends State<_CenterButton> {
                 ],
               ),
               child: Center(
-                child: ArcIconView(widget.item.icon,
-                    size: 28, color: Colors.white, active: true, stroke: 2),
+                child: AnimatedBuilder(
+                  animation: motion,
+                  builder: (context, _) => ArcIconView(widget.item.icon,
+                      size: 28,
+                      color: Colors.white,
+                      active: true,
+                      stroke: 2,
+                      motion: motionValue),
+                ),
               ),
             ),
           ),

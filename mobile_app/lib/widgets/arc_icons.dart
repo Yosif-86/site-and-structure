@@ -66,6 +66,10 @@ class ArcIconView extends StatelessWidget {
   final bool active;
   final double stroke;
 
+  /// Progress (0 to 1) of the icon's own short motion, or null when still.
+  /// Only the bottom bar icons have one (see [_motion]).
+  final double? motion;
+
   const ArcIconView(
     this.icon, {
     super.key,
@@ -73,6 +77,7 @@ class ArcIconView extends StatelessWidget {
     required this.color,
     this.active = false,
     this.stroke = 1.8,
+    this.motion,
   });
 
   @override
@@ -82,7 +87,7 @@ class ArcIconView extends StatelessWidget {
         Directionality.of(context) == TextDirection.rtl;
     Widget paint = CustomPaint(
       size: Size.square(size),
-      painter: _ArcIconPainter(icon, color, active, stroke),
+      painter: _ArcIconPainter(icon, color, active, stroke, motion),
     );
     if (mirror) {
       paint = Transform.flip(flipX: true, child: paint);
@@ -381,7 +386,8 @@ class _ArcIconPainter extends CustomPainter {
   final Color color;
   final bool active;
   final double stroke;
-  _ArcIconPainter(this.icon, this.color, this.active, this.stroke);
+  final double? motion;
+  _ArcIconPainter(this.icon, this.color, this.active, this.stroke, this.motion);
 
   static final _cache = <String, Path>{};
 
@@ -398,13 +404,21 @@ class _ArcIconPainter extends CustomPainter {
     final soft = Paint()..color = color.withValues(alpha: 0.24);
     final solid = Paint()..color = color;
 
-    for (final s in _icons[icon]!) {
+    final shapes = _icons[icon]!;
+    for (var i = 0; i < shapes.length; i++) {
+      final s = shapes[i];
       final path = s.d != null
           ? _cache.putIfAbsent(s.d!, () => _parse(s.d!))
           : (Path()..addOval(Rect.fromCircle(center: Offset(s.cx, s.cy), radius: s.r)));
+      final t = motion;
+      if (t != null) {
+        canvas.save();
+        _motion(canvas, icon, i, t);
+      }
       if (s.fill == _Fill.solid) canvas.drawPath(path, solid);
       if (s.fill == _Fill.active && active) canvas.drawPath(path, soft);
       if (s.stroke && s.fill != _Fill.solid) canvas.drawPath(path, line);
+      if (t != null) canvas.restore();
     }
     // The 10-second skip icons carry their number inside the arrow.
     if (icon == ArcIcon.rewind || icon == ArcIcon.forward) {
@@ -428,7 +442,67 @@ class _ArcIconPainter extends CustomPainter {
       old.icon != icon ||
       old.color != color ||
       old.active != active ||
-      old.stroke != stroke;
+      old.stroke != stroke ||
+      old.motion != motion;
+}
+
+/// Linear interpolation through evenly spaced keyframe values.
+double _keys(double t, List<double> v) {
+  if (t <= 0) return v.first;
+  if (t >= 1) return v.last;
+  final x = t * (v.length - 1);
+  final i = x.floor();
+  return v[i] + (v[i + 1] - v[i]) * (x - i);
+}
+
+void _scaleAt(Canvas c, double px, double py, double sx, double sy) {
+  c.translate(px, py);
+  c.scale(sx, sy);
+  c.translate(-px, -py);
+}
+
+/// The bottom bar's short motions, played once when a tab becomes active
+/// (the Explore button on every tap). [i] is the shape's index in [_icons].
+void _motion(Canvas c, ArcIcon icon, int i, double t) {
+  final back = Curves.easeOutBack.transform(t);
+  switch (icon) {
+    case ArcIcon.home:
+      // The roof drops onto the house, the house squashes, the door opens.
+      if (i == 1) c.translate(0, -5 * (1 - back));
+      if (i == 0 || i == 2) {
+        _scaleAt(c, 12, 20.5, _keys(t, [1, 1.08, 0.97, 1]),
+            _keys(t, [1, 0.9, 1.04, 1]));
+      }
+      if (i == 3) {
+        final d = ((t - 0.35) / 0.65).clamp(0.0, 1.0);
+        _scaleAt(c, 12, 20.5, 1, Curves.easeOutBack.transform(d));
+      }
+    case ArcIcon.courses:
+      // The book opens out from its spine.
+      if (i == 0) _scaleAt(c, 12, 12, 0.1 + 0.9 * back, 1);
+    case ArcIcon.explore:
+      // The compass needle spins once and settles.
+      if (i == 1) {
+        c.translate(12, 12);
+        c.rotate(2 * 3.141592653589793 * back);
+        c.translate(-12, -12);
+      }
+    case ArcIcon.profile:
+      // The head pops up, the shoulders follow.
+      if (i == 0) {
+        c.translate(0, 4 * (1 - back));
+        _scaleAt(c, 12, 8.3, 0.7 + 0.3 * back, 0.7 + 0.3 * back);
+      } else {
+        _scaleAt(c, 12, 20.2, 1, 0.6 + 0.4 * Curves.easeOut.transform(t));
+      }
+    case ArcIcon.settings:
+      // Each knob slides along its track and back.
+      const shift = [0.0, -6.0, 6.0, -5.0];
+      final out = t < 0.5 ? t * 2 : (1 - t) * 2;
+      c.translate(shift[i] * Curves.easeInOut.transform(out), 0);
+    default:
+      break;
+  }
 }
 
 /// Minimal SVG path reader for the absolute commands the icons above use:
