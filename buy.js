@@ -151,11 +151,61 @@
     });
   });
 
-  $('googleBtn').addEventListener('click', function () {
+  // Google sign-in. With GIS_READY on, Google's own button runs on this
+  // domain and hands Supabase an ID token, so Google's account picker says
+  // "to continue to arcplatformiq.com" (like the app's native sign-in)
+  // instead of the supabase.co address the redirect flow shows. Needs
+  // https://arcplatformiq.com in the web OAuth client's Authorized
+  // JavaScript origins (Google Cloud, project arc-platform-39b9e).
+  var GIS_READY = false;
+  var GOOGLE_WEB_CLIENT = '982425355302-nn9u5ksh0jhmv44cd8vvv049bbc69ad0.apps.googleusercontent.com';
+
+  function googleRedirect() {
     // Comes back to this page with the open course, see start().
     var back = location.origin + '/buy.html' + (current ? '?c=' + encodeURIComponent(current.slug) : '');
     sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: back } });
-  });
+  }
+  $('googleBtn').addEventListener('click', googleRedirect);
+
+  function hex(buf) {
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+  function setupGis() {
+    if (!GIS_READY || !window.crypto || !crypto.subtle) return;
+    var raw = hex(crypto.getRandomValues(new Uint8Array(16)));
+    var s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.onload = function () {
+      crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw)).then(function (h) {
+        // Google puts sha256(nonce) in the token; Supabase checks it against raw.
+        google.accounts.id.initialize({
+          client_id: GOOGLE_WEB_CLIENT,
+          nonce: hex(h),
+          ux_mode: 'popup',
+          context: 'signin',
+          callback: function (resp) {
+            setMsg($('authMsg'), 'جارٍ تسجيل الدخول…');
+            sb.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw }).then(function (r) {
+              if (r.error) { setMsg($('authMsg'), 'تعذّر تسجيل الدخول بجوجل. حاول مرة أخرى.', 'err'); return; }
+              authDlg.close();
+              afterSignIn();
+            });
+          }
+        });
+        var holder = $('gisBtn');
+        google.accounts.id.renderButton(holder, {
+          type: 'standard', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+          size: 'large', shape: 'pill', text: 'continue_with', locale: 'ar', width: Math.min(holder.clientWidth || 360, 400)
+        });
+        holder.hidden = false;
+        $('googleBtn').hidden = true;
+      });
+    };
+    // If Google's script cannot load, the redirect button stays.
+    document.head.appendChild(s);
+  }
+  setupGis();
 
   function afterSignIn() {
     return sb.auth.getUser().then(function (r) {
