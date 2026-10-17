@@ -157,7 +157,7 @@
   // instead of the supabase.co address the redirect flow shows. Needs
   // https://arcplatformiq.com in the web OAuth client's Authorized
   // JavaScript origins (Google Cloud, project arc-platform-39b9e).
-  var GIS_READY = false;
+  var GIS_READY = true;
   var GOOGLE_WEB_CLIENT = '982425355302-nn9u5ksh0jhmv44cd8vvv049bbc69ad0.apps.googleusercontent.com';
 
   function googleRedirect() {
