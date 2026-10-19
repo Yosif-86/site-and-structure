@@ -546,6 +546,7 @@ class AppStrings extends ChangeNotifier {
     'btn_full_privacy': 'اقرأ سياسة الخصوصية كاملة',
     'report_title': 'الإبلاغ عن هذه الدورة',
     'course_subscribers_only': 'محتوى هذه الدورة متاح للمشتركين.',
+    'subscribe_on_website': 'اشترك عبر الموقع',
     'purchase_switch_title': 'الشراء داخل التطبيق',
     'purchase_switch_on': 'ظاهر: الأسعار وأزرار الاشتراك تظهر للطلاب.',
     'purchase_switch_off': 'مخفي: لا أسعار ولا أزرار شراء (وضع المراجعة).',

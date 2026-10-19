@@ -439,6 +439,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             course: course,
             status: _enrollmentStatus,
             purchasesOn: PurchaseConfig.instance.enabled,
+            websiteLink: PurchaseConfig.instance.websiteLink,
             onEnroll: _openEnroll,
             onContinue: heroLecture == null || !_isActive
                 ? null
@@ -669,6 +670,7 @@ class _EnrollPanel extends StatelessWidget {
   final Course course;
   final String? status;
   final bool purchasesOn;
+  final bool websiteLink;
   final VoidCallback onEnroll;
   final VoidCallback? onContinue;
   final String? continueLabel;
@@ -676,6 +678,7 @@ class _EnrollPanel extends StatelessWidget {
     required this.course,
     required this.status,
     required this.purchasesOn,
+    required this.websiteLink,
     required this.onEnroll,
     required this.onContinue,
     required this.continueLabel,
@@ -715,8 +718,9 @@ class _EnrollPanel extends StatelessWidget {
         ),
       ]);
     } else if (!course.isFree && !purchasesOn) {
-      // Review switch: no price, no button.
-      content = Row(children: [
+      // Bought on the website only: no price and no buy button. On a US
+      // App Store account, one button opens this course on the website.
+      final locked = Row(children: [
         Icon(Icons.lock_outline_rounded, color: AppColors.muted, size: 22),
         const SizedBox(width: 10),
         Expanded(
@@ -724,6 +728,23 @@ class _EnrollPanel extends StatelessWidget {
               style: AppFonts.body(size: 13.5, color: AppColors.muted)),
         ),
       ]);
+      content = !websiteLink
+          ? locked
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                locked,
+                const SizedBox(height: 12),
+                ElevatedButton(
+                  onPressed: () => launchUrl(
+                      Uri.parse('https://arcplatformiq.com/buy?c='
+                          '${Uri.encodeComponent(course.slug)}'),
+                      mode: LaunchMode.externalApplication),
+                  child: Text(t('subscribe_on_website')),
+                ),
+              ],
+            );
     } else {
       content = Row(children: [
         Expanded(

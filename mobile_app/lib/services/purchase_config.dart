@@ -26,19 +26,18 @@ class PurchaseConfig extends ChangeNotifier {
   bool _iosUsStorefront = false;
   static const _storefront = MethodChannel('site_and_structure/storefront');
 
-  /// Whether this user may see prices and buy.
-  /// Test builds only (--dart-define=FORCE_BUY=true): show the Wayl button
-  /// on Android regardless of the switch, to try a test-mode payment.
-  static const bool _forceBuy = bool.fromEnvironment('FORCE_BUY');
+  /// Courses are bought on the website only (decided 2026-10-19, after
+  /// Apple refused in-app links outside the US): the apps never show a
+  /// price, a buy button or a payment form, on every store and for every
+  /// account. Paid courses stay visible with their lectures and files
+  /// locked; a course bought on the website unlocks here automatically.
+  bool get enabled => false;
 
-  /// Store reviewers see exactly what real users on their storefront see:
-  /// hiding buying from the review account would be a concealed feature
-  /// (App Review guideline 2.5.19), so is_reviewer no longer affects it.
-  bool get enabled {
-    if (_forceBuy) return true;
-    if (!kIsWeb && Platform.isIOS) return _iosUsStorefront;
-    return _enabled;
-  }
+  /// iPhone with a US App Store account only: the locked course shows one
+  /// button that opens that course on the website in Safari. Apple allows
+  /// such links on the US storefront only; Android shows no link (Google
+  /// Play policy), and neither app mentions the website anywhere else.
+  bool get websiteLink => !kIsWeb && Platform.isIOS && _iosUsStorefront;
 
   /// The raw setting (for the admin toggle).
   bool get setting => _enabled;
