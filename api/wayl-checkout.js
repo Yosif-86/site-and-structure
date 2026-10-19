@@ -15,6 +15,7 @@
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { allow, clientIp } = require('./_rate-limit');
+const { handleApplePurchase } = require('./_apple-iap');
 
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
@@ -38,6 +39,18 @@ module.exports = async (req, res) => {
     res.status(429).json({ error: 'Too many requests' });
     return;
   }
+  // Apple In-App Purchase from the iPhone app (see _apple-iap.js); it
+  // shares this function because the Vercel plan's 12 are all used.
+  if ((req.body || {}).provider === 'apple') {
+    const token = (req.headers.authorization || '').replace('Bearer ', '');
+    if (!token) {
+      res.status(401).json({ error: 'Missing access token' });
+      return;
+    }
+    await handleApplePurchase(req, res, token);
+    return;
+  }
+
   const { SUPABASE_SERVICE_ROLE_KEY, WAYL_API_KEY } = process.env;
   if (!SUPABASE_SERVICE_ROLE_KEY || !WAYL_API_KEY) {
     res.status(503).json({ error: 'payments_not_configured' });

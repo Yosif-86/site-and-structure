@@ -26,10 +26,9 @@ class PurchaseConfig extends ChangeNotifier {
   bool _iosUsStorefront = false;
   static const _storefront = MethodChannel('site_and_structure/storefront');
 
-  /// Courses are bought on the website only (decided 2026-10-19, after
-  /// Apple refused in-app links outside the US): the apps never show a
-  /// price, a buy button or a payment form, on every store and for every
-  /// account. Paid courses stay visible with their lectures and files
+  /// No Wayl or manual payment inside the apps (decided 2026-10-19): the
+  /// website sells courses, and on iPhone Apple In-App Purchase does too
+  /// (AppleIap, shown by the course page itself). Paid courses stay visible with their lectures and files
   /// locked; a course bought on the website unlocks here automatically.
   bool get enabled => false;
 

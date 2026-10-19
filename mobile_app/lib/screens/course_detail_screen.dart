@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/apple_iap.dart';
 import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
@@ -51,6 +52,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   /// Why the student's last payment for this course was rejected (shown
   /// until they submit again).
   String? _rejectionReason;
+  // iPhone: Apple's price for this course (In-App Purchase), when it loaded.
+  String? _applePrice;
+  bool _buyingApple = false;
   Set<String> _completedLectureIds = {};
   // lecture_id -> {position_seconds, duration_seconds}, in-progress (not
   // completed) lectures only -- drives each row's progress bar plus which
@@ -160,7 +164,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 .select('is_reviewer')
                 .eq('id', user.id)
                 .maybeSingle();
-            if (me?['is_reviewer'] == true) status = 'active';
+            // Android only: Apple's reviewer must be able to test the
+            // In-App Purchase, so on iPhone paid courses stay locked.
+            if (me?['is_reviewer'] == true && !AppleIap.instance.available) {
+              status = 'active';
+            }
           } catch (_) {
             // Column not added yet (add-reviewer-and-reports.sql).
           }
@@ -213,11 +221,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         }
       }
 
+      String? applePrice;
+      if (AppleIap.instance.available && !course.isFree && status != 'active') {
+        applePrice = await AppleIap.instance.priceLabel(course.price);
+      }
+
       if (!mounted) return;
       setState(() {
         _course = course;
         _lectures = lectures;
         _files = files;
+        _applePrice = applePrice;
         _enrollmentStatus = status;
         _rejectionReason = rejection;
         _completedLectureIds = completedIds;
@@ -238,6 +252,37 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   String _t(String key) => AppStrings.instance.t(key);
 
   bool get _isActive => _enrollmentStatus == 'active';
+
+  /// iPhone: buy this course with Apple In-App Purchase.
+  Future<void> _buyWithApple() async {
+    if (_buyingApple || !TapGuard.allow()) return;
+    if (!SupabaseService.instance.isLoggedIn) {
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
+      if (!SupabaseService.instance.isLoggedIn || !mounted) return;
+      await _load();
+      if (!mounted || _isActive) return;
+    }
+    final course = _course;
+    if (course == null) return;
+    setState(() => _buyingApple = true);
+    final result = await AppleIap.instance
+        .buy(courseSlug: course.slug, coursePrice: course.price);
+    if (!mounted) return;
+    setState(() => _buyingApple = false);
+    if (result == 'cancelled') return;
+    final key = switch (result) {
+      'enrolled' => 'iap_success',
+      'pending' => 'iap_pending',
+      'iap_retry_later' => 'iap_retry_later',
+      'iap_rejected' => 'iap_rejected',
+      'iap_unavailable' => 'iap_unavailable',
+      _ => 'iap_failed',
+    };
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(_t(key))));
+    if (result == 'enrolled') await _load();
+  }
 
   Future<void> _watchLecture(Lecture lecture) async {
     if (!TapGuard.allow()) return;
@@ -440,6 +485,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             status: _enrollmentStatus,
             purchasesOn: PurchaseConfig.instance.enabled,
             websiteLink: PurchaseConfig.instance.websiteLink,
+            applePrice: _applePrice,
+            buyingApple: _buyingApple,
+            onBuyApple: _buyWithApple,
             onEnroll: _openEnroll,
             onContinue: heroLecture == null || !_isActive
                 ? null
@@ -671,6 +719,9 @@ class _EnrollPanel extends StatelessWidget {
   final String? status;
   final bool purchasesOn;
   final bool websiteLink;
+  final String? applePrice;
+  final bool buyingApple;
+  final VoidCallback onBuyApple;
   final VoidCallback onEnroll;
   final VoidCallback? onContinue;
   final String? continueLabel;
@@ -679,6 +730,9 @@ class _EnrollPanel extends StatelessWidget {
     required this.status,
     required this.purchasesOn,
     required this.websiteLink,
+    required this.applePrice,
+    required this.buyingApple,
+    required this.onBuyApple,
     required this.onEnroll,
     required this.onContinue,
     required this.continueLabel,
@@ -728,21 +782,59 @@ class _EnrollPanel extends StatelessWidget {
               style: AppFonts.body(size: 13.5, color: AppColors.muted)),
         ),
       ]);
-      content = !websiteLink
+      // iPhone: Apple In-App Purchase at Apple's price (every country).
+      final apple = applePrice == null
+          ? null
+          : Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(t('price'),
+                        style: AppFonts.body(size: 12, color: AppColors.muted)),
+                    const SizedBox(height: 2),
+                    Text(applePrice!,
+                        textDirection: TextDirection.ltr,
+                        style: AppFonts.code(
+                            size: 22,
+                            weight: FontWeight.w700,
+                            color: AppColors.red)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: buyingApple ? null : onBuyApple,
+                style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(150, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 18)),
+                child: buyingApple
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : Text(t('buy_course'), maxLines: 1),
+              ),
+            ]);
+      content = !websiteLink && apple == null
           ? locked
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
-                locked,
-                const SizedBox(height: 12),
-                ElevatedButton(
-                  onPressed: () => launchUrl(
-                      Uri.parse('https://arcplatformiq.com/buy?c='
-                          '${Uri.encodeComponent(course.slug)}'),
-                      mode: LaunchMode.externalApplication),
-                  child: Text(t('subscribe_on_website')),
-                ),
+                apple ?? locked,
+                if (websiteLink) ...[
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => launchUrl(
+                        Uri.parse('https://arcplatformiq.com/buy?c='
+                            '${Uri.encodeComponent(course.slug)}'),
+                        mode: LaunchMode.externalApplication),
+                    child: Text(t('subscribe_on_website')),
+                  ),
+                ],
               ],
             );
     } else {

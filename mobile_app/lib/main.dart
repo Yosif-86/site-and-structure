@@ -8,6 +8,7 @@ import 'screens/auth_screen.dart';
 import 'screens/catalogue_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/set_new_password_screen.dart';
+import 'services/apple_iap.dart';
 import 'services/purchase_config.dart';
 import 'services/error_reporter.dart';
 import 'services/notification_service.dart';
@@ -52,14 +53,16 @@ Future<void> main() async {
     ScreenSecurity.init();
     // Review switch: hide buying until the setting is read.
     unawaited(PurchaseConfig.instance.load());
+    // iPhone: Apple In-App Purchase; also delivers purchases left unfinished.
+    AppleIap.instance.init();
     SupabaseService.instance.client.auth.onAuthStateChange
         .listen((_) => PurchaseConfig.instance.load());
     // Phone notifications; tapping one opens the bell list.
-    PushService.instance.onOpen = () => navigatorKey.currentState?.push(
-        MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+    PushService.instance.onOpen = () => navigatorKey.currentState
+        ?.push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
     unawaited(PushService.instance.init());
-    UploadManager.instance.onMessage = (m) => messengerKey.currentState
-        ?.showSnackBar(SnackBar(content: Text(m)));
+    UploadManager.instance.onMessage = (m) =>
+        messengerKey.currentState?.showSnackBar(SnackBar(content: Text(m)));
     runApp(const SiteAndStructureApp());
   }, _reportError);
 }
@@ -116,8 +119,8 @@ void _showSessionExpiredDialog() {
         TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
-              navigatorKey.currentState?.push(
-                  MaterialPageRoute(builder: (_) => const AuthScreen()));
+              navigatorKey.currentState
+                  ?.push(MaterialPageRoute(builder: (_) => const AuthScreen()));
             },
             child: Text(AppStrings.instance.t('log_in'))),
       ],
