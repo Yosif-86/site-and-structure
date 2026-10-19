@@ -40,7 +40,7 @@ at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM
 // course gets the smallest level at or above its IQD price converted at
 // IQD_PER_USD plus APPLE_MARKUP (Apple keeps 15%). Product ids never
 // change once created in App Store Connect.
-const IQD_PER_USD = 1300;
+const IQD_PER_USD = 1520;
 const APPLE_MARKUP = 1.15;
 const PRODUCTS = [
   ['com.arcplatformiq.app.course.t01', 4.99],
@@ -50,11 +50,8 @@ const PRODUCTS = [
   ['com.arcplatformiq.app.course.t05', 29.99],
   ['com.arcplatformiq.app.course.t06', 39.99],
   ['com.arcplatformiq.app.course.t07', 49.99],
-  ['com.arcplatformiq.app.course.t08', 69.99],
-  ['com.arcplatformiq.app.course.t09', 99.99],
-  ['com.arcplatformiq.app.course.t10', 149.99],
-  ['com.arcplatformiq.app.course.t11', 199.99],
-  ['com.arcplatformiq.app.course.t12', 299.99],
+  ['com.arcplatformiq.app.course.t08', 59.99],
+  ['com.arcplatformiq.app.course.t09', 79.99],
 ];
 
 function productForIqd(iqd) {

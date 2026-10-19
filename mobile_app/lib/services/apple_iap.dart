@@ -25,7 +25,7 @@ class AppleIap {
   AppleIap._();
   static final AppleIap instance = AppleIap._();
 
-  static const int iqdPerUsd = 1300;
+  static const int iqdPerUsd = 1520;
   static const double appleMarkup = 1.15;
   static const List<(String, double)> products = [
     ('com.arcplatformiq.app.course.t01', 4.99),
@@ -35,11 +35,8 @@ class AppleIap {
     ('com.arcplatformiq.app.course.t05', 29.99),
     ('com.arcplatformiq.app.course.t06', 39.99),
     ('com.arcplatformiq.app.course.t07', 49.99),
-    ('com.arcplatformiq.app.course.t08', 69.99),
-    ('com.arcplatformiq.app.course.t09', 99.99),
-    ('com.arcplatformiq.app.course.t10', 149.99),
-    ('com.arcplatformiq.app.course.t11', 199.99),
-    ('com.arcplatformiq.app.course.t12', 299.99),
+    ('com.arcplatformiq.app.course.t08', 59.99),
+    ('com.arcplatformiq.app.course.t09', 79.99),
   ];
 
   /// The product for a course price, or null above the top level.
