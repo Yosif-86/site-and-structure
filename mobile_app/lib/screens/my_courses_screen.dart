@@ -11,9 +11,9 @@ import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
 import 'course_detail_screen.dart';
 
-enum _Tab { inProgress, completed, pending }
+enum _Tab { inProgress, completed }
 
-/// The student's enrollments split into In progress / Completed / Pending,
+/// The student's enrollments split into In progress / Completed,
 /// each row showing real progress. Embedded as a swipeable tab inside
 /// CatalogueScreen's PageView, so it has no Scaffold of its own.
 class MyCoursesScreen extends StatefulWidget {
@@ -63,8 +63,6 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
               .compareTo(a.lastWatched ?? a.enrolledAt));
       case _Tab.completed:
         return all.where((m) => m.isCompleted).toList();
-      case _Tab.pending:
-        return all.where((m) => m.isPending).toList();
     }
   }
 
@@ -95,7 +93,6 @@ class MyCoursesScreenState extends State<MyCoursesScreen> {
             tabs: [
               (t('status_in_progress'), _itemsFor(_Tab.inProgress).length),
               (t('status_completed'), _itemsFor(_Tab.completed).length),
-              (t('status_pending'), _itemsFor(_Tab.pending).length),
             ],
             selected: _tab.index,
             onSelect: (i) => setState(() => _tab = _Tab.values[i]),
@@ -214,7 +211,6 @@ class _EmptyState extends StatelessWidget {
     final (icon, text) = switch (tab) {
       _Tab.inProgress => (ArcIcon.courses, t('no_enrollments')),
       _Tab.completed => (ArcIcon.award, t('empty_completed')),
-      _Tab.pending => (ArcIcon.clock, t('empty_pending')),
     };
     return GlassCard(
       padding: const EdgeInsets.all(28),
