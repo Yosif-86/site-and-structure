@@ -11,6 +11,7 @@ import '../services/learning_service.dart';
 import '../services/net_status.dart';
 import '../services/supabase_service.dart';
 import '../services/tap_guard.dart';
+import '../services/warning_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/bottom_nav.dart';
@@ -133,6 +134,13 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
 
   Future<void> _loadProfile() async {
     final user = SupabaseService.instance.currentUser;
+    // An unanswered warning from the admin opens on top (app open, sign-in,
+    // or back on Home).
+    if (user != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) WarningService.checkAndShow(context);
+      });
+    }
     if (user == null) {
       if (mounted) {
         setState(() {

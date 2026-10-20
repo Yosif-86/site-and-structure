@@ -204,8 +204,14 @@ class DashIconBadge extends StatelessWidget {
   final ArcIcon icon;
   final Color accent;
   final double size;
+  /// Drawn instead of [icon] when set (for glyphs the Arc set lacks).
+  final IconData? materialIcon;
   const DashIconBadge(
-      {super.key, required this.icon, required this.accent, this.size = 42});
+      {super.key,
+      required this.icon,
+      required this.accent,
+      this.size = 42,
+      this.materialIcon});
 
   @override
   Widget build(BuildContext context) {
@@ -225,8 +231,10 @@ class DashIconBadge extends StatelessWidget {
         border: Border.all(color: accent.withValues(alpha: 0.30)),
       ),
       child: Center(
-          child: ArcIconView(icon,
-              color: accent, size: size * 0.52, active: true)),
+          child: materialIcon != null
+              ? Icon(materialIcon, color: accent, size: size * 0.52)
+              : ArcIconView(icon,
+                  color: accent, size: size * 0.52, active: true)),
     );
   }
 }
