@@ -60,7 +60,7 @@ class TeacherScreen extends StatefulWidget {
   State<TeacherScreen> createState() => _TeacherScreenState();
 }
 
-enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention, students, earnings }
+enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention, students, courseStudents, earnings }
 
 class _TeacherScreenState extends State<TeacherScreen> {
   bool _checking = true;
@@ -665,6 +665,36 @@ class _TeacherScreenState extends State<TeacherScreen> {
     }
   }
 
+  // ---- Students of one course ----
+
+  void _openCourseStudents(Map<String, dynamic> c) {
+    _activeCourse = c;
+    setState(() => _view = _TView.courseStudents);
+    _loadPaymentRequests();
+  }
+
+  Future<void> _removeStudent(Map<String, dynamic> row) async {
+    final t = AppStrings.instance.t;
+    final id = row['enrollment_id'];
+    if (id == null) return;
+    final name = (row['full_name'] as String?) ?? (row['email'] as String?) ?? '—';
+    final ok = await _confirm(
+        t('remove_student_confirm')
+            .replaceAll('{name}', Bidi.iso(name))
+            .replaceAll('{course}', Bidi.iso((row['course_title'] as String?) ?? '—')),
+        confirmLabel: t('btn_remove_student'));
+    if (!ok) return;
+    try {
+      await SupabaseService.instance.client
+          .rpc('teacher_remove_student', params: {'p_enrollment_id': id});
+      _showError(t('student_removed'));
+      await _loadPaymentRequests();
+      await _loadCourses();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
+
   // ---- Discount codes ----
 
   void _openCodes(Map<String, dynamic> c) {
@@ -941,6 +971,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                         if (!await _confirmCancelUpload()) return;
                         setState(() => _view = (_view == _TView.curriculum ||
                                 _view == _TView.codes ||
+                                _view == _TView.courseStudents ||
                                 _view == _TView.courseEdit)
                             ? _TView.courses
                             : _TView.overview);
@@ -964,6 +995,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
             if (_view != _TView.overview && !widget.openPaymentInfo) {
               setState(() => _view = (_view == _TView.curriculum ||
                       _view == _TView.codes ||
+                                _view == _TView.courseStudents ||
                       _view == _TView.courseEdit)
                   ? _TView.courses
                   : _TView.overview);
@@ -998,6 +1030,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.payments => _buildPayments(t),
       _TView.attention => _buildAttention(t),
       _TView.students => _buildStudents(t),
+      _TView.courseStudents => _buildCourseStudents(t),
       _TView.earnings => _buildEarnings(t),
       _TView.profile => _buildProfile(t),
     };
@@ -1098,6 +1131,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   onEdit: () => _openCourseEdit(_myCourses[i]),
                   onCurriculum: () => _openCurriculum(_myCourses[i]),
                   onCodes: () => _openCodes(_myCourses[i]),
+                  onStudents: () => _openCourseStudents(_myCourses[i]),
                   onSubmit: _myCourses[i]['status'] == 'draft'
                       ? () => _submitForReview(_myCourses[i])
                       : null,
@@ -1156,6 +1190,58 @@ class _TeacherScreenState extends State<TeacherScreen> {
                               .join(' · '),
                           '${_when(r['created_at'])} · ${Money.iqd(_amountsOf(r).paid)}',
                         ].where((s) => s.isNotEmpty).toList(),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            ),
+    );
+  }
+
+  /// Students enrolled in the one course the teacher opened: name, account
+  /// number, date, price paid, and a button to remove the student.
+  Widget _buildCourseStudents(String Function(String) t) {
+    final slug = _activeCourse?['slug'];
+    final rows = _teacherRows.where((r) => r['course_slug'] == slug).toList();
+    return RefreshIndicator(
+      onRefresh: _loadPaymentRequests,
+      child: rows.isEmpty
+          ? ListView(children: [
+              DashEmpty(icon: ArcIcon.users, message: t('no_students'))
+            ])
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              children: [
+                DashSection(
+                    '${_activeCourse?['title'] ?? ''} · ${t('stat_students')} (${rows.length})'),
+                for (var i = 0; i < rows.length; i++) ...[
+                  FadeSlideIn(
+                    delayMs: (i % 10) * 30,
+                    child: Builder(builder: (context) {
+                      final r = rows[i];
+                      final active = r['status'] == 'active';
+                      final name = (r['full_name'] as String?) ??
+                          (r['email'] as String?) ??
+                          '—';
+                      final pid = (r['public_id'] as String?) ?? '—';
+                      return DashCard(
+                        leading: DashAvatar(name: name),
+                        title: name,
+                        subtitle: '${t('student_account_no')} #$pid',
+                        trailing: StatusPill(
+                            active ? t('status_active') : t('status_pending'),
+                            tone: active ? StatusTone.good : StatusTone.warn),
+                        meta: [
+                          '${_when(r['created_at'])} · ${Money.iqd(_amountsOf(r).paid)}',
+                        ],
+                        actions: [
+                          DashButton(t('btn_remove_student'),
+                              danger: true,
+                              icon: ArcIcon.trash,
+                              onPressed: () => _removeStudent(r)),
+                        ],
                       );
                     }),
                   ),
@@ -1883,6 +1969,7 @@ class _CourseCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback onCurriculum;
   final VoidCallback onCodes;
+  final VoidCallback onStudents;
   final VoidCallback? onSubmit;
   final VoidCallback? onDelete;
 
@@ -1892,6 +1979,7 @@ class _CourseCard extends StatelessWidget {
     required this.onEdit,
     required this.onCurriculum,
     required this.onCodes,
+    required this.onStudents,
     required this.onSubmit,
     this.onDelete,
   });
@@ -1935,6 +2023,7 @@ class _CourseCard extends StatelessWidget {
           DashButton(t('btn_edit'), icon: ArcIcon.edit, onPressed: onEdit),
         DashButton(t('btn_curriculum'),
             icon: ArcIcon.video, onPressed: onCurriculum),
+        DashButton(t('btn_students'), icon: ArcIcon.users, onPressed: onStudents),
         DashButton(t('btn_codes'), icon: ArcIcon.tag, onPressed: onCodes),
         if (onDelete != null)
           DashButton(t('btn_delete'),
