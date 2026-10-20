@@ -513,7 +513,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
         FadeSlideIn(delayMs: 0, child: _Greeting(name: _fullName, loggedIn: loggedIn)),
         const SizedBox(height: 16),
         if (loggedIn && active.isNotEmpty) ...[
-          FadeSlideIn(delayMs: next(), child: _ProgressSummary(items: active.toList())),
+          FadeSlideIn(delayMs: next(), child: _ProgressSummary(
+                  items: active.toList(), onTap: () => _goToPage(1))),
           const SizedBox(height: 24),
         ],
         if (continueItems.isNotEmpty) ...[
@@ -721,7 +722,9 @@ class _Greeting extends StatelessWidget {
 /// lecture count so a 30-lecture course counts for more than a 3-lecture one.
 class _ProgressSummary extends StatelessWidget {
   final List<MyCourseProgress> items;
-  const _ProgressSummary({required this.items});
+  /// Opens My Courses.
+  final VoidCallback? onTap;
+  const _ProgressSummary({required this.items, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -737,6 +740,7 @@ class _ProgressSummary extends StatelessWidget {
     final inProgress = items.where((m) => m.isInProgress).length;
 
     return GlassCard(
+      onTap: onTap,
       padding: const EdgeInsets.all(20),
       borderRadius: BorderRadius.circular(22),
       child: Row(
