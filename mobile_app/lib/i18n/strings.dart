@@ -356,6 +356,7 @@ class AppStrings extends ChangeNotifier {
     'file_processing': 'قيد المعالجة',
     'file_pending_review': 'بانتظار موافقة الإدارة',
     'tab_files': 'الملفات',
+    'no_course_files': 'لا توجد ملفات لهذه الدورة بعد.',
     'files_general': 'ملفات عامة',
     'lecture_files': 'ملفات المحاضرة',
     'file_locked': 'اشترك في الدورة لفتح هذا الملف.',

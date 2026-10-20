@@ -27,6 +27,7 @@ import '../widgets/report_sheet.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
+import '../widgets/glass_pay_button.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
@@ -63,12 +64,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   String? _continueWatchingId;
   bool _loading = true;
   String? _error;
-  int _tab = 0; // 0 = overview, 1 = curriculum, 2 = files
+  int _tab = 0; // 0 = curriculum, 1 = files
   final Map<String, GlobalKey> _fileGroupKeys = {};
 
   /// Opens the Files tab, scrolled to [lectureId]'s files.
   void _openFiles(String lectureId) {
-    setState(() => _tab = 2);
+    setState(() => _tab = 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _fileGroupKeys[lectureId]?.currentContext;
       if (ctx != null) {
@@ -544,19 +545,27 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           ),
         ),
         const SizedBox(height: 18),
+        // Only two tabs: Curriculum (shown first) and Files.
         _Tabs(
           labels: [
-            _t('tab_overview'),
             _t('curriculum'),
-            if (_files.isNotEmpty) '${_t('tab_files')} (${_files.length})',
+            _files.isEmpty
+                ? _t('tab_files')
+                : '${_t('tab_files')} (${_files.length})',
           ],
           selected: _tab,
           onSelect: (i) => setState(() => _tab = i),
         ),
         const SizedBox(height: 14),
-        if (_tab == 0)
-          ..._buildOverview(course)
-        else if (_tab == 2 && _files.isNotEmpty)
+        if (_tab == 1 && _files.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text(_t('no_course_files'),
+                  style: AppFonts.body(size: 14, color: AppColors.muted)),
+            ),
+          )
+        else if (_tab == 1)
           CourseFilesTab(
             files: _files,
             lectures: [
@@ -574,103 +583,6 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           ..._buildCurriculum(),
       ],
     );
-  }
-
-  List<Widget> _buildOverview(Course course) {
-    final ar = AppStrings.instance.isAr;
-    final desc = course.localizedDescription(ar);
-    // A copy -- localizedMeta returns the model's own map, and the Duration
-    // entry must survive for courseDurationLabel's fallback.
-    final meta = Map<String, dynamic>.of(course.localizedMeta(ar) ?? {})
-      ..removeWhere(
-          (k, _) => const {'Duration', 'duration', 'المدة'}.contains(k));
-    return [
-      if (desc != null && desc.isNotEmpty) ...[
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_t('about_course'),
-                  style: AppFonts.body(size: 16, weight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Text(desc,
-                  style: AppFonts.body(size: 14.5, color: AppColors.muted)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (course.learningPoints.isNotEmpty) ...[
-        GlassCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_t('what_you_learn'),
-                  style: AppFonts.body(size: 16, weight: FontWeight.w700)),
-              const SizedBox(height: 10),
-              for (final p in course.learningPoints)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.teal.withValues(alpha: 0.16),
-                        ),
-                        child: Icon(Icons.check_rounded,
-                            size: 15, color: AppColors.teal),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(p,
-                            style:
-                                AppFonts.body(size: 14, color: AppColors.text)),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (meta.isNotEmpty) ...[
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final e in meta.entries)
-              GlassChip(label: '${e.key}: ${e.value}'),
-          ],
-        ),
-        const SizedBox(height: 12),
-      ],
-      GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-        child: Row(
-          children: [
-            Expanded(
-                child: _Feature(
-                    icon: Icons.all_inclusive_rounded,
-                    label: _t('feature_lifetime_access'))),
-            Expanded(
-                child: _Feature(
-                    icon: Icons.phone_iphone_rounded,
-                    label: _t('feature_learn_anywhere'))),
-            Expanded(
-                child: _Feature(
-                    icon: Icons.shield_outlined,
-                    label: _t('feature_protected'))),
-          ],
-        ),
-      ),
-    ];
   }
 
   List<Widget> _buildCurriculum() {
@@ -804,18 +716,14 @@ class _EnrollPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: buyingApple ? null : onBuyApple,
-                style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(150, 48),
-                    padding: const EdgeInsets.symmetric(horizontal: 18)),
-                child: buyingApple
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : Text(t('buy_course'), maxLines: 1),
+              SizedBox(
+                width: 170,
+                child: GlassPayButton(
+                  label: t('buy_course'),
+                  icon: Icons.shopping_bag_outlined,
+                  loading: buyingApple,
+                  onPressed: buyingApple ? null : onBuyApple,
+                ),
               ),
             ]);
       content = !websiteLink && apple == null
@@ -827,12 +735,16 @@ class _EnrollPanel extends StatelessWidget {
                 apple ?? locked,
                 if (websiteLink) ...[
                   const SizedBox(height: 12),
-                  ElevatedButton(
+                  GlassPayButton(
+                    label: t('subscribe_on_website'),
+                    icon: Icons.open_in_new_rounded,
+                    // Main action when there is no Apple button above it.
+                    accent: apple == null,
+                    showMark: true,
                     onPressed: () => launchUrl(
                         Uri.parse('https://arcplatformiq.com/buy?c='
                             '${Uri.encodeComponent(course.slug)}'),
                         mode: LaunchMode.externalApplication),
-                    child: Text(t('subscribe_on_website')),
                   ),
                 ],
               ],
@@ -936,35 +848,7 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-class _Feature extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _Feature({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.glassBg,
-            border: Border.all(color: AppColors.glassBorder),
-          ),
-          child: Icon(icon, size: 19, color: AppColors.text),
-        ),
-        const SizedBox(height: 6),
-        Text(label,
-            textAlign: TextAlign.center,
-            style: AppFonts.body(size: 11.5, color: AppColors.muted)),
-      ],
-    );
-  }
-}
-
-/// Glass underline tabs (Overview / Curriculum).
+/// Glass underline tabs (Curriculum / Files).
 class _Tabs extends StatelessWidget {
   final List<String> labels;
   final int selected;
