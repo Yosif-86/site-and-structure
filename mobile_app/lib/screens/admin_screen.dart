@@ -26,6 +26,7 @@ import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
+import '../widgets/user_warnings_sheet.dart';
 import 'course_detail_screen.dart';
 import 'course_files.dart';
 import 'teacher_profile_screen.dart';
@@ -257,6 +258,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final securityEvents = await _loadSecurityEvents();
       final pendingFiles = await _loadPendingFiles();
       final reports = await _loadReports();
+      final warnings = await _loadWarnings();
 
       final emailByUser = <String, String>{};
       for (final l in logins) {
@@ -303,6 +305,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _pendingUploads = uploads;
         _pendingFiles = pendingFiles;
         _reports = reports;
+        _warningsByUser = warnings;
         _discountCodes = codes;
         _errorLogs = errors;
         // New three-field details, seeded from the old single method/number
@@ -346,6 +349,42 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Map<String, Map<String, dynamic>> _redemptionsByCourseUser = {};
   List<Map<String, dynamic>> _securityEvents = [];
+  // user id -> (warnings sent, warnings still counting).
+  Map<String, ({int total, int counted})> _warningsByUser = {};
+
+  /// Warnings per user (add-user-warnings.sql, add-warning-review.sql).
+  Future<Map<String, ({int total, int counted})>> _loadWarnings() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .from('user_warnings')
+          .select('user_id, status') as List;
+      final out = <String, ({int total, int counted})>{};
+      for (final r in rows) {
+        final uid = r['user_id'] as String;
+        final prev = out[uid] ?? (total: 0, counted: 0);
+        out[uid] = (
+          total: prev.total + 1,
+          counted: prev.counted + (r['status'] == 'removed' ? 0 : 1),
+        );
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// "Warnings (n)" button for a user who has any; opens their warnings.
+  Widget? _warningsButton(String uid, String? name, String Function(String) t) {
+    final w = _warningsByUser[uid];
+    if (w == null) return null;
+    return DashButton(t('warnings_btn').replaceAll('{n}', '${w.counted}'),
+        danger: w.counted > 0,
+        icon: ArcIcon.warning,
+        onPressed: () async {
+          await showUserWarnings(context, userId: uid, name: name);
+          if (mounted) _loadAll();
+        });
+  }
 
   /// Blocked devices, shared devices, screenshot attempts
   /// (add-oct05-fixes.sql). Empty until that migration has run.
@@ -1298,10 +1337,49 @@ class _AdminScreenState extends State<AdminScreen> {
           if (tag != null) tag,
         ],
         actions: [
+          if (uid != null)
+            if (_warningsButton(uid, name, AppStrings.instance.t) case final b?)
+              b,
           if (_canDelete(uid))
             _deleteAccountButton(uid!, AppStrings.instance.t),
         ],
       );
+
+  /// What to pay one teacher this coming Thursday (today, on a Thursday):
+  /// their share of every payment approved in the week before it, Thursday
+  /// 00:00 to Thursday 00:00 Baghdad time. Same split as the revenue view;
+  /// direct-payment courses are excluded (the teacher was paid directly).
+  TeacherPayout _weeklyPayout(String teacherId) {
+    const baghdad = Duration(hours: 3);
+    final now = DateTime.now().toUtc().add(baghdad);
+    final today = DateTime.utc(now.year, now.month, now.day);
+    final payday =
+        today.add(Duration(days: (DateTime.thursday - today.weekday + 7) % 7));
+    final from = payday.subtract(const Duration(days: 7));
+    var amount = 0, count = 0;
+    for (final c in _allCourses) {
+      if (c['teacher_id'] != teacherId || c['pay_to_teacher'] == true) continue;
+      for (final e in _activeEnrollments) {
+        if (e['course_slug'] != c['slug']) continue;
+        final when = DateTime.tryParse(
+            (e['approved_at'] ?? e['created_at'])?.toString() ?? '');
+        if (when == null) continue;
+        final local = when.toUtc().add(baghdad);
+        if (local.isBefore(from) || !local.isBefore(payday)) continue;
+        final r = _paidFor(e, c);
+        final cut = PaymentRules.split(price: r.price, paid: r.paid).platform;
+        final share = r.paid - (cut > r.paid ? r.paid : cut);
+        if (share <= 0) continue;
+        amount += share;
+        count++;
+      }
+    }
+    return TeacherPayout(
+        amount: amount,
+        count: count,
+        from: from,
+        payday: payday);
+  }
 
   Widget _buildTeachersList(String Function(String) t) {
     if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);
@@ -1326,8 +1404,13 @@ class _AdminScreenState extends State<AdminScreen> {
                 teacherId: id,
                 fallbackName: p['full_name'] as String?,
                 adminView: true,
-                email: _emailByUser[id]))),
-        actions: [if (_canDelete(id)) _deleteAccountButton(id, t)],
+                email: _emailByUser[id],
+                payout: _weeklyPayout(id)))),
+        actions: [
+          if (_warningsButton(id, p['full_name'] as String?, t) case final b?)
+            b,
+          if (_canDelete(id)) _deleteAccountButton(id, t),
+        ],
       );
     }));
   }

@@ -6,6 +6,7 @@ import '../services/learning_service.dart';
 import '../services/notification_service.dart';
 import '../services/supabase_service.dart';
 import '../services/warning_service.dart';
+import '../widgets/user_warnings_sheet.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/dashboard_kit.dart';
@@ -46,7 +47,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   static _Group _groupOf(String type) => switch (type) {
-        'security' || 'warning' || 'warning_reply' => _Group.security,
+        'security' ||
+        'warning' ||
+        'warning_reply' ||
+        'warning_cleared' =>
+          _Group.security,
         'payment_request' ||
         'payment_approved' ||
         'payment_rejected' =>
@@ -96,6 +101,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return switch (n.type) {
       'warning' => (ArcIcon.warning, null, AppColors.error),
       'warning_reply' => (ArcIcon.mail, null, _amber),
+      'warning_cleared' => (ArcIcon.check, Icons.verified_user_rounded, AppColors.teal),
       'announcement' => (ArcIcon.bell, Icons.campaign_rounded, AppColors.red),
       'payment_request' => (ArcIcon.money, null, _amber),
       'payment_approved' => (ArcIcon.check, null, AppColors.teal),
@@ -169,6 +175,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     if (n.type == 'warning') {
       WarningService.checkAndShow(context);
+      return;
+    }
+    // Admin: a student replied to a warning; review it.
+    if (n.type == 'warning_reply' && n.data['user_id'] != null) {
+      showUserWarnings(context,
+          userId: '${n.data['user_id']}',
+          name: (n.data['name'] as String?));
       return;
     }
     final target = _target(n);
@@ -276,7 +289,8 @@ class _GroupChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
+    return Center(
+        child: Semantics(
       button: true,
       selected: selected,
       child: InkWell(
@@ -284,6 +298,7 @@ class _GroupChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
+          height: 36,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           alignment: Alignment.center,
           decoration: BoxDecoration(
@@ -305,23 +320,29 @@ class _GroupChip extends StatelessWidget {
             if (unread > 0) ...[
               const SizedBox(width: 6),
               Container(
+                height: 18,
                 constraints: const BoxConstraints(minWidth: 18),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5),
                 decoration: BoxDecoration(
                     color: AppColors.error,
-                    borderRadius: BorderRadius.circular(999)),
+                    borderRadius: BorderRadius.circular(9)),
                 alignment: Alignment.center,
                 child: Text(unread > 99 ? '99+' : '$unread',
+                    textScaler: TextScaler.noScaling,
+                    textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false),
                     style: AppFonts.body(
-                        size: 10.5,
-                        weight: FontWeight.w800,
-                        color: Colors.white)),
+                            size: 10.5,
+                            weight: FontWeight.w800,
+                            color: Colors.white)
+                        .copyWith(height: 1)),
               ),
             ],
           ]),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -412,11 +433,11 @@ class _SendWarningSheetState extends State<_SendWarningSheet> {
     try {
       final rows = await SupabaseService.instance.client
           .from('user_warnings')
-          .select('id, event_id')
+          .select('id, event_id, status')
           .eq('user_id', _userId) as List;
       if (!mounted) return;
       setState(() {
-        _count = rows.length;
+        _count = rows.where((r) => r['status'] != 'removed').length;
         _alreadySent =
             _eventId != null && rows.any((r) => r['event_id'] == _eventId);
       });

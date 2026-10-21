@@ -237,6 +237,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   // Profile form state.
   final _pZaincashPhone = TextEditingController();
+  // Course students list: search by account number or name.
+  final _studentSearch = TextEditingController();
+  String _studentQ = '';
   final _pQiAccount = TextEditingController();
   String? _pQiQrUrl;
   XFile? _pQiQrFile;
@@ -277,6 +280,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _dValue.dispose();
     _dMaxUses.dispose();
     _pZaincashPhone.dispose();
+    _studentSearch.dispose();
     _pQiAccount.dispose();
     super.dispose();
   }
@@ -669,6 +673,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   void _openCourseStudents(Map<String, dynamic> c) {
     _activeCourse = c;
+    _studentSearch.clear();
+    _studentQ = '';
     setState(() => _view = _TView.courseStudents);
     _loadPaymentRequests();
   }
@@ -1204,10 +1210,26 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// number, date, price paid, and a button to remove the student.
   Widget _buildCourseStudents(String Function(String) t) {
     final slug = _activeCourse?['slug'];
-    final rows = _teacherRows.where((r) => r['course_slug'] == slug).toList();
+    final all = _teacherRows.where((r) => r['course_slug'] == slug).toList();
+    // "#2274", "2274" or part of the name.
+    final q = _studentQ.replaceAll('#', '').trim().toLowerCase();
+    final rows = q.isEmpty
+        ? all
+        : all.where((r) {
+            final pid = '${r['public_id'] ?? ''}';
+            final name = '${r['full_name'] ?? ''}'.toLowerCase();
+            return pid.contains(q) || name.contains(q);
+          }).toList();
+    // An exact account number goes first.
+    if (q.isNotEmpty) {
+      final exact = rows.where((r) => '${r['public_id']}' == q).toList();
+      rows
+        ..removeWhere((r) => '${r['public_id']}' == q)
+        ..insertAll(0, exact);
+    }
     return RefreshIndicator(
       onRefresh: _loadPaymentRequests,
-      child: rows.isEmpty
+      child: all.isEmpty
           ? ListView(children: [
               DashEmpty(icon: ArcIcon.users, message: t('no_students'))
             ])
@@ -1215,7 +1237,34 @@ class _TeacherScreenState extends State<TeacherScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 DashSection(
-                    '${_activeCourse?['title'] ?? ''} · ${t('stat_students')} (${rows.length})'),
+                    '${_activeCourse?['title'] ?? ''} · ${t('stat_students')} (${all.length})'),
+                TextField(
+                  controller: _studentSearch,
+                  onChanged: (v) => setState(() => _studentQ = v),
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: t('student_search_hint'),
+                    prefixIcon: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: ArcIconView(ArcIcon.search,
+                          size: 18, color: AppColors.muted2),
+                    ),
+                    suffixIcon: _studentQ.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: ArcIconView(ArcIcon.close,
+                                size: 16, color: AppColors.muted2),
+                            onPressed: () => setState(() {
+                                  _studentSearch.clear();
+                                  _studentQ = '';
+                                })),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (rows.isEmpty)
+                  DashEmpty(
+                      icon: ArcIcon.search, message: t('explore_no_results')),
                 for (var i = 0; i < rows.length; i++) ...[
                   FadeSlideIn(
                     delayMs: (i % 10) * 30,

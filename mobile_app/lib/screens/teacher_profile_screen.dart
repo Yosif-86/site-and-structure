@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/error_reporter.dart';
+import '../services/money.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -13,6 +15,20 @@ import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_scaffold.dart';
 import 'course_detail_screen.dart';
 
+/// The amount owed to a teacher on [payday] (a Thursday): their share of
+/// payments approved from [from] up to [payday]. Dates are Baghdad days.
+class TeacherPayout {
+  final int amount;
+  final int count;
+  final DateTime from;
+  final DateTime payday;
+  const TeacherPayout(
+      {required this.amount,
+      required this.count,
+      required this.from,
+      required this.payday});
+}
+
 /// A teacher's page. Students see the public side (photo, bio, published
 /// courses, counts). The admin also sees contact and payment details and
 /// every course with its status, including drafts.
@@ -21,6 +37,8 @@ class TeacherProfileScreen extends StatefulWidget {
   final String? fallbackName;
   final bool adminView;
   final String? email;
+  /// Admin only: what to pay this teacher on Thursday.
+  final TeacherPayout? payout;
 
   const TeacherProfileScreen({
     super.key,
@@ -28,6 +46,7 @@ class TeacherProfileScreen extends StatefulWidget {
     this.fallbackName,
     this.adminView = false,
     this.email,
+    this.payout,
   });
 
   @override
@@ -194,11 +213,19 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             title: widget.email ?? '—',
             subtitle: (_private!['phone'] as String?) ?? '—',
             meta: [
-              '${_t('zain_cash')}: ${_private!['teacher_zaincash_phone'] ?? '—'}',
-              '${_t('qi_card')}: ${_private!['teacher_qi_account_number'] ?? '—'}',
               '${_t('direct_payment')}: ${_private!['direct_payment_allowed'] == true ? _t('yes') : _t('no')}',
             ],
           ),
+          if (widget.payout != null) ...[
+            const SizedBox(height: 10),
+            _payoutCard(widget.payout!),
+          ],
+          DashSection(_t('payout_accounts')),
+          _accountRow(_t('zain_cash'),
+              _private!['teacher_zaincash_phone'] as String?),
+          const SizedBox(height: 10),
+          _accountRow(_t('qi_card'),
+              _private!['teacher_qi_account_number'] as String?),
         ],
         DashSection('${_t('stat_courses')} (${_courses.length})'),
         if (_courses.isEmpty)
@@ -229,6 +256,45 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             const SizedBox(height: 10),
           ],
       ],
+    );
+  }
+
+  static String _day(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget _payoutCard(TeacherPayout p) {
+    final to = p.payday.subtract(const Duration(days: 1));
+    return DashCard(
+      leading: DashIconBadge(icon: ArcIcon.wallet, accent: AppColors.teal),
+      title: _t('payout_due_title').replaceAll('{date}', _day(p.payday)),
+      subtitle: _t('payout_period')
+          .replaceAll('{from}', _day(p.from))
+          .replaceAll('{to}', _day(to))
+          .replaceAll('{n}', '${p.count}'),
+      trailing: Text(Money.iqd(p.amount),
+          style: AppFonts.code(size: 16, color: AppColors.teal)),
+    );
+  }
+
+  /// One payment account with a copy button.
+  Widget _accountRow(String label, String? value) {
+    final v = value?.trim() ?? '';
+    return DashCard(
+      leading: DashIconBadge(icon: ArcIcon.wallet, accent: AppColors.byline),
+      title: v.isEmpty ? '—' : v,
+      subtitle: label,
+      trailing: v.isEmpty
+          ? null
+          : IconButton(
+              tooltip: _t('btn_copy'),
+              icon: const Icon(Icons.copy_rounded, size: 20),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: v));
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${_t('copied')}: $v')));
+              },
+            ),
     );
   }
 
