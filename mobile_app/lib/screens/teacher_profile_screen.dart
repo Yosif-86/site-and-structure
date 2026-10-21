@@ -5,7 +5,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/error_reporter.dart';
-import '../services/money.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -15,20 +14,6 @@ import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_scaffold.dart';
 import 'course_detail_screen.dart';
 
-/// The amount owed to a teacher on [payday] (a Thursday): their share of
-/// payments approved from [from] up to [payday]. Dates are Baghdad days.
-class TeacherPayout {
-  final int amount;
-  final int count;
-  final DateTime from;
-  final DateTime payday;
-  const TeacherPayout(
-      {required this.amount,
-      required this.count,
-      required this.from,
-      required this.payday});
-}
-
 /// A teacher's page. Students see the public side (photo, bio, published
 /// courses, counts). The admin also sees contact and payment details and
 /// every course with its status, including drafts.
@@ -37,8 +22,6 @@ class TeacherProfileScreen extends StatefulWidget {
   final String? fallbackName;
   final bool adminView;
   final String? email;
-  /// Admin only: what to pay this teacher on Thursday.
-  final TeacherPayout? payout;
 
   const TeacherProfileScreen({
     super.key,
@@ -46,7 +29,6 @@ class TeacherProfileScreen extends StatefulWidget {
     this.fallbackName,
     this.adminView = false,
     this.email,
-    this.payout,
   });
 
   @override
@@ -216,10 +198,6 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
               '${_t('direct_payment')}: ${_private!['direct_payment_allowed'] == true ? _t('yes') : _t('no')}',
             ],
           ),
-          if (widget.payout != null) ...[
-            const SizedBox(height: 10),
-            _payoutCard(widget.payout!),
-          ],
           DashSection(_t('payout_accounts')),
           _accountRow(_t('zain_cash'),
               _private!['teacher_zaincash_phone'] as String?),
@@ -256,23 +234,6 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             const SizedBox(height: 10),
           ],
       ],
-    );
-  }
-
-  static String _day(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  Widget _payoutCard(TeacherPayout p) {
-    final to = p.payday.subtract(const Duration(days: 1));
-    return DashCard(
-      leading: DashIconBadge(icon: ArcIcon.wallet, accent: AppColors.teal),
-      title: _t('payout_due_title').replaceAll('{date}', _day(p.payday)),
-      subtitle: _t('payout_period')
-          .replaceAll('{from}', _day(p.from))
-          .replaceAll('{to}', _day(to))
-          .replaceAll('{n}', '${p.count}'),
-      trailing: Text(Money.iqd(p.amount),
-          style: AppFonts.code(size: 16, color: AppColors.teal)),
     );
   }
 

@@ -1345,42 +1345,6 @@ class _AdminScreenState extends State<AdminScreen> {
         ],
       );
 
-  /// What to pay one teacher this coming Thursday (today, on a Thursday):
-  /// their share of every payment approved in the week before it, Thursday
-  /// 00:00 to Thursday 00:00 Baghdad time. Same split as the revenue view;
-  /// direct-payment courses are excluded (the teacher was paid directly).
-  TeacherPayout _weeklyPayout(String teacherId) {
-    const baghdad = Duration(hours: 3);
-    final now = DateTime.now().toUtc().add(baghdad);
-    final today = DateTime.utc(now.year, now.month, now.day);
-    final payday =
-        today.add(Duration(days: (DateTime.thursday - today.weekday + 7) % 7));
-    final from = payday.subtract(const Duration(days: 7));
-    var amount = 0, count = 0;
-    for (final c in _allCourses) {
-      if (c['teacher_id'] != teacherId || c['pay_to_teacher'] == true) continue;
-      for (final e in _activeEnrollments) {
-        if (e['course_slug'] != c['slug']) continue;
-        final when = DateTime.tryParse(
-            (e['approved_at'] ?? e['created_at'])?.toString() ?? '');
-        if (when == null) continue;
-        final local = when.toUtc().add(baghdad);
-        if (local.isBefore(from) || !local.isBefore(payday)) continue;
-        final r = _paidFor(e, c);
-        final cut = PaymentRules.split(price: r.price, paid: r.paid).platform;
-        final share = r.paid - (cut > r.paid ? r.paid : cut);
-        if (share <= 0) continue;
-        amount += share;
-        count++;
-      }
-    }
-    return TeacherPayout(
-        amount: amount,
-        count: count,
-        from: from,
-        payday: payday);
-  }
-
   Widget _buildTeachersList(String Function(String) t) {
     if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);
     final shown = _teacherProfiles
@@ -1404,8 +1368,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 teacherId: id,
                 fallbackName: p['full_name'] as String?,
                 adminView: true,
-                email: _emailByUser[id],
-                payout: _weeklyPayout(id)))),
+                email: _emailByUser[id]))),
         actions: [
           if (_warningsButton(id, p['full_name'] as String?, t) case final b?)
             b,

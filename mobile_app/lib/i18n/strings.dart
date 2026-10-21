@@ -721,8 +721,6 @@ class AppStrings extends ChangeNotifier {
     'warning_rejected_ok': 'تم رفض الرد، والتحذير باقٍ على الحساب.',
     'student_search_hint': 'ابحث برقم الحساب أو الاسم',
     'payout_accounts': 'حسابات استلام الأرباح',
-    'payout_due_title': 'المستحق يوم الخميس {date}',
-    'payout_period': 'من {from} إلى {to} · {n} اشتراك',
     'no_notifications': 'لا توجد إشعارات بعد.',
     'edit_request_sent': 'أُرسل طلب التعديل للإدارة. ستبقى الدورة كما هي حتى الموافقة.',
     'edit_pending': 'تعديل بانتظار موافقة الإدارة',
