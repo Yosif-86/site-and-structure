@@ -485,7 +485,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             course: course,
             status: _enrollmentStatus,
             purchasesOn: PurchaseConfig.instance.enabled,
-            websiteLink: PurchaseConfig.instance.websiteLink,
+            appleIap: AppleIap.instance.available &&
+                AppleIap.productForPrice(course.price) != null,
             applePrice: _applePrice,
             buyingApple: _buyingApple,
             onBuyApple: _buyWithApple,
@@ -630,7 +631,7 @@ class _EnrollPanel extends StatelessWidget {
   final Course course;
   final String? status;
   final bool purchasesOn;
-  final bool websiteLink;
+  final bool appleIap;
   final String? applePrice;
   final bool buyingApple;
   final VoidCallback onBuyApple;
@@ -641,7 +642,7 @@ class _EnrollPanel extends StatelessWidget {
     required this.course,
     required this.status,
     required this.purchasesOn,
-    required this.websiteLink,
+    required this.appleIap,
     required this.applePrice,
     required this.buyingApple,
     required this.onBuyApple,
@@ -684,8 +685,8 @@ class _EnrollPanel extends StatelessWidget {
         ),
       ]);
     } else if (!course.isFree && !purchasesOn) {
-      // Bought on the website only: no price and no buy button. On a US
-      // App Store account, one button opens this course on the website.
+      // No outside buying in the apps: Android shows the course locked,
+      // iPhone sells it with Apple In-App Purchase (no website link, 3.1.1).
       final locked = Row(children: [
         Icon(Icons.lock_outline_rounded, color: AppColors.muted, size: 22),
         const SizedBox(width: 10),
@@ -694,26 +695,31 @@ class _EnrollPanel extends StatelessWidget {
               style: AppFonts.body(size: 13.5, color: AppColors.muted)),
         ),
       ]);
-      // iPhone: Apple In-App Purchase at Apple's price (every country).
-      final apple = applePrice == null
-          ? null
+      // iPhone: Apple In-App Purchase at Apple's price (every country). The
+      // button shows even if Apple's price hasn't loaded yet; tapping it
+      // loads the product again.
+      content = !appleIap
+          ? locked
           : Row(children: [
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(t('price'),
-                        style: AppFonts.body(size: 12, color: AppColors.muted)),
-                    const SizedBox(height: 2),
-                    Text(applePrice!,
-                        textDirection: TextDirection.ltr,
-                        style: AppFonts.code(
-                            size: 22,
-                            weight: FontWeight.w700,
-                            color: AppColors.red)),
-                  ],
-                ),
+                child: applePrice == null
+                    ? locked
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(t('price'),
+                              style: AppFonts.body(
+                                  size: 12, color: AppColors.muted)),
+                          const SizedBox(height: 2),
+                          Text(applePrice!,
+                              textDirection: TextDirection.ltr,
+                              style: AppFonts.code(
+                                  size: 22,
+                                  weight: FontWeight.w700,
+                                  color: AppColors.red)),
+                        ],
+                      ),
               ),
               const SizedBox(width: 12),
               SizedBox(
@@ -726,29 +732,6 @@ class _EnrollPanel extends StatelessWidget {
                 ),
               ),
             ]);
-      content = !websiteLink && apple == null
-          ? locked
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                apple ?? locked,
-                if (websiteLink) ...[
-                  const SizedBox(height: 12),
-                  GlassPayButton(
-                    label: t('subscribe_on_website'),
-                    icon: Icons.open_in_new_rounded,
-                    // Main action when there is no Apple button above it.
-                    accent: apple == null,
-                    showMark: true,
-                    onPressed: () => launchUrl(
-                        Uri.parse('https://arcplatformiq.com/buy?c='
-                            '${Uri.encodeComponent(course.slug)}'),
-                        mode: LaunchMode.externalApplication),
-                  ),
-                ],
-              ],
-            );
     } else {
       content = Row(children: [
         Expanded(

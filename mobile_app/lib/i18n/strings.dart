@@ -552,7 +552,6 @@ class AppStrings extends ChangeNotifier {
     'btn_full_privacy': 'اقرأ سياسة الخصوصية كاملة',
     'report_title': 'الإبلاغ عن هذه الدورة',
     'course_subscribers_only': 'محتوى هذه الدورة متاح للمشتركين.',
-    'subscribe_on_website': 'اشترك عبر الموقع',
     'buy_course': 'شراء الدورة',
     'iap_success': 'تم الشراء. الدورة مفتوحة الآن.',
     'iap_pending': 'عملية الشراء قيد المعالجة، وستُفتح الدورة تلقائيًا عند اكتمالها.',

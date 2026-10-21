@@ -1,7 +1,4 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import 'supabase_service.dart';
 
@@ -18,25 +15,13 @@ class PurchaseConfig extends ChangeNotifier {
   // stays hidden rather than showing to a reviewer by accident.
   bool _enabled = false;
 
-  /// iPhone: Apple allows a button to an outside checkout (Wayl) only for
-  /// App Store accounts in the United States (Epic v. Apple, May 2025), so
-  /// buying shows only when the device's App Store country is USA. Most
-  /// iPhone users in Iraq use US Apple IDs. iPhone ignores the review switch
-  /// above, which exists for Google Play.
-  bool _iosUsStorefront = false;
-  static const _storefront = MethodChannel('site_and_structure/storefront');
-
   /// No Wayl or manual payment inside the apps (decided 2026-10-19): the
   /// website sells courses, and on iPhone Apple In-App Purchase does too
   /// (AppleIap, shown by the course page itself). Paid courses stay visible with their lectures and files
   /// locked; a course bought on the website unlocks here automatically.
+  /// Neither app links to the website to buy, on any storefront (App
+  /// Review 3.1.1, 2026-10-21).
   bool get enabled => false;
-
-  /// iPhone with a US App Store account only: the locked course shows one
-  /// button that opens that course on the website in Safari. Apple allows
-  /// such links on the US storefront only; Android shows no link (Google
-  /// Play policy), and neither app mentions the website anywhere else.
-  bool get websiteLink => !kIsWeb && Platform.isIOS && _iosUsStorefront;
 
   /// The raw setting (for the admin toggle).
   bool get setting => _enabled;
@@ -52,14 +37,6 @@ class PurchaseConfig extends ChangeNotifier {
       _enabled = row?['value'] == true;
     } catch (_) {
       // Table not added yet or offline: keep the last value.
-    }
-    if (!kIsWeb && Platform.isIOS) {
-      try {
-        final code = await _storefront.invokeMethod<String>('countryCode');
-        _iosUsStorefront = code == 'USA' || code == 'US';
-      } catch (_) {
-        _iosUsStorefront = false;
-      }
     }
     notifyListeners();
   }
