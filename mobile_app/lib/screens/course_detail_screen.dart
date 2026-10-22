@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,10 +20,12 @@ import '../services/live_refresh.dart';
 import '../services/learning_service.dart';
 import '../services/money.dart';
 import '../services/net_status.dart';
+import '../services/rating_service.dart';
 import '../services/safe_picker.dart';
 import '../services/supabase_service.dart';
 import '../services/tap_guard.dart';
 import '../theme.dart';
+import '../widgets/rating_sheet.dart';
 import '../widgets/report_sheet.dart';
 import '../widgets/course_card.dart';
 import '../widgets/fade_slide_in.dart';
@@ -56,6 +59,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   // iPhone: Apple's price for this course (In-App Purchase), when it loaded.
   String? _applePrice;
   bool _buyingApple = false;
+  // The signed-in student's own rating of this course: {rating, comment}.
+  Map<String, dynamic>? _myRating;
   Set<String> _completedLectureIds = {};
   // lecture_id -> {position_seconds, duration_seconds}, in-progress (not
   // completed) lectures only -- drives each row's progress bar plus which
@@ -222,6 +227,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         }
       }
 
+      Map<String, dynamic>? myRating;
+      if (user != null && status == 'active') {
+        myRating = await RatingService.instance.myRating(course.id);
+      }
+      unawaited(RatingService.instance.load());
+
       String? applePrice;
       if (AppleIap.instance.available && !course.isFree && status != 'active') {
         applePrice = await AppleIap.instance.priceLabel(course.price);
@@ -233,6 +244,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _lectures = lectures;
         _files = files;
         _applePrice = applePrice;
+        _myRating = myRating;
         _enrollmentStatus = status;
         _rejectionReason = rejection;
         _completedLectureIds = completedIds;
@@ -285,6 +297,39 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     if (result == 'enrolled') await _load();
   }
 
+  /// Asks for a rating once at 25% of the lectures finished and once more at
+  /// 75% if the student skipped the first ask. Never after they rated.
+  Future<void> _askForRating() async {
+    final course = _course;
+    final user = SupabaseService.instance.currentUser;
+    if (course == null || user == null || !_isActive) return;
+    if (course.teacherId == user.id || _myRating != null) return;
+    final stage = RatingService.dueStage(
+        _completedLectureIds.length, _lectures.length);
+    if (stage == 0) return;
+    if (await RatingService.instance.shownStage(user.id, course.id) >= stage) {
+      return;
+    }
+    await RatingService.instance.markShown(user.id, course.id, stage);
+    if (!mounted) return;
+    final changed = await showRatingSheet(context,
+        courseId: course.id,
+        courseTitle: course.localizedTitle(AppStrings.instance.isAr),
+        prompt: true);
+    if (changed == true && mounted) _load();
+  }
+
+  /// The rating card: rate now, or change / remove the rating.
+  Future<void> _openRating() async {
+    final course = _course;
+    if (course == null || !TapGuard.allow()) return;
+    final changed = await showRatingSheet(context,
+        courseId: course.id,
+        courseTitle: course.localizedTitle(AppStrings.instance.isAr),
+        existing: _myRating);
+    if (changed == true && mounted) _load();
+  }
+
   Future<void> _watchLecture(Lecture lecture) async {
     if (!TapGuard.allow()) return;
     if (!SupabaseService.instance.isLoggedIn) {
@@ -305,7 +350,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         filesUnlocked: isActive,
       ),
     ));
-    if (mounted) _load();
+    if (!mounted) return;
+    await _load();
+    if (mounted) _askForRating();
   }
 
   Future<void> _openEnroll() async {
@@ -429,6 +476,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         const SizedBox(height: 16),
         Text(course.localizedTitle(ar),
             style: AppFonts.body(size: 23, weight: FontWeight.w800)),
+        _RatingSummaryLine(courseId: course.id),
         if (teacher != null && teacher.isNotEmpty) ...[
           const SizedBox(height: 10),
           InkWell(
@@ -497,6 +545,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             continueLabel: heroLabel,
           ),
         ),
+        if (_isActive &&
+            SupabaseService.instance.currentUser != null &&
+            course.teacherId != SupabaseService.instance.currentUser!.id) ...[
+          const SizedBox(height: 12),
+          _RatingCard(
+              rating: (_myRating?['rating'] as num?)?.toInt(),
+              onTap: _openRating),
+        ],
         const SizedBox(height: 14),
         // The lesson/duration numbers as their own glass tiles -- the most
         // scannable facts about a course, so they get the most visual weight.
@@ -622,6 +678,73 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       match.first,
       ..._lectures.where((l) => l.id != _continueWatchingId)
     ];
+  }
+}
+
+/// The public average under the title (only courses with 5+ ratings have one).
+class _RatingSummaryLine extends StatelessWidget {
+  final String courseId;
+  const _RatingSummaryLine({required this.courseId});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: RatingService.instance,
+      builder: (_, __) {
+        final s = RatingService.instance.summaryFor(courseId);
+        if (s == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(children: [
+            const Icon(Icons.star_rounded, size: 18, color: kStarColor),
+            const SizedBox(width: 4),
+            Text(s.average.toStringAsFixed(1),
+                style: AppFonts.body(size: 14, weight: FontWeight.w800)),
+            const SizedBox(width: 6),
+            Text(
+                AppStrings.instance
+                    .t('rate_count')
+                    .replaceAll('{n}', '${s.count}'),
+                style: AppFonts.body(size: 12.5, color: AppColors.muted)),
+          ]),
+        );
+      },
+    );
+  }
+}
+
+/// "Rate this course" for an enrolled student; shows their own rating once
+/// they gave one, and taps open the rating sheet (change or remove).
+class _RatingCard extends StatelessWidget {
+  final int? rating;
+  final VoidCallback onTap;
+  const _RatingCard({required this.rating, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      borderRadius: BorderRadius.circular(18),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(t(rating == null ? 'rate_card_title' : 'rate_card_yours'),
+                  style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              StarRow(rating: rating ?? 0, size: 22),
+            ],
+          ),
+        ),
+        Text(t(rating == null ? 'rate_card_cta' : 'rate_edit'),
+            style: AppFonts.body(
+                size: 13, weight: FontWeight.w700, color: AppColors.red)),
+      ]),
+    );
   }
 }
 

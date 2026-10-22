@@ -26,6 +26,7 @@ import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
+import '../widgets/course_reviews_sheet.dart';
 import '../widgets/user_warnings_sheet.dart';
 import 'course_detail_screen.dart';
 import 'course_files.dart';
@@ -1315,6 +1316,10 @@ class _AdminScreenState extends State<AdminScreen> {
             : () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => CourseDetailScreen(slug: c['slug'] as String))),
         actions: [
+          DashButton(t('btn_reviews'),
+              icon: ArcIcon.review,
+              onPressed: () => showCourseReviews(context,
+                  courseId: c['id'] as String, title: c['title'] as String?)),
           DashButton(t('btn_delete_course'),
               danger: true,
               icon: ArcIcon.trash,

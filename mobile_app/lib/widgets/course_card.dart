@@ -5,6 +5,7 @@ import '../i18n/strings.dart';
 import '../models/course.dart';
 import '../services/learning_service.dart';
 import '../services/money.dart';
+import '../services/rating_service.dart';
 import '../theme.dart';
 import 'arc_icons.dart';
 import 'glass_card.dart';
@@ -90,6 +91,35 @@ class StatChip extends StatelessWidget {
           Text(label,
               style: AppFonts.body(
                   size: 11.5, weight: FontWeight.w600, color: AppColors.muted)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Public average (4.6 with a star), shown on a course card once the course
+/// has 5 or more ratings.
+class RatingChip extends StatelessWidget {
+  final CourseRatingSummary summary;
+  const RatingChip({super.key, required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bg.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 14, color: Color(0xFFE0A030)),
+          const SizedBox(width: 3),
+          Text(summary.average.toStringAsFixed(1),
+              style: AppFonts.body(
+                  size: 11.5, weight: FontWeight.w700, color: AppColors.muted)),
         ],
       ),
     );
@@ -272,11 +302,22 @@ class CourseRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis),
                 ],
                 const SizedBox(height: 7),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [...chips, _priceText(course)],
+                AnimatedBuilder(
+                  animation: RatingService.instance,
+                  builder: (_, __) {
+                    final rating =
+                        RatingService.instance.summaryFor(course.id);
+                    return Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (rating != null) RatingChip(summary: rating),
+                        ...chips,
+                        _priceText(course),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

@@ -15,6 +15,7 @@ import 'services/notification_service.dart';
 import 'services/supabase_service.dart';
 import 'services/net_status.dart';
 import 'services/push_service.dart';
+import 'services/rating_service.dart';
 import 'services/screen_security.dart';
 import 'services/upload_manager.dart';
 import 'theme.dart';
@@ -53,6 +54,7 @@ Future<void> main() async {
     ScreenSecurity.init();
     // Review switch: hide buying until the setting is read.
     unawaited(PurchaseConfig.instance.load());
+    unawaited(RatingService.instance.load());
     // iPhone: Apple In-App Purchase; also delivers purchases left unfinished.
     AppleIap.instance.init();
     SupabaseService.instance.client.auth.onAuthStateChange

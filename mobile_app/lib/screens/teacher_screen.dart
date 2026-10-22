@@ -21,6 +21,7 @@ import '../theme.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
+import '../widgets/course_reviews_sheet.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
@@ -1138,6 +1139,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   onCurriculum: () => _openCurriculum(_myCourses[i]),
                   onCodes: () => _openCodes(_myCourses[i]),
                   onStudents: () => _openCourseStudents(_myCourses[i]),
+                  onReviews: () => showCourseReviews(context,
+                      courseId: _myCourses[i]['id'] as String,
+                      title: _myCourses[i]['title'] as String?),
                   onSubmit: _myCourses[i]['status'] == 'draft'
                       ? () => _submitForReview(_myCourses[i])
                       : null,
@@ -2019,6 +2023,7 @@ class _CourseCard extends StatelessWidget {
   final VoidCallback onCurriculum;
   final VoidCallback onCodes;
   final VoidCallback onStudents;
+  final VoidCallback onReviews;
   final VoidCallback? onSubmit;
   final VoidCallback? onDelete;
 
@@ -2029,6 +2034,7 @@ class _CourseCard extends StatelessWidget {
     required this.onCurriculum,
     required this.onCodes,
     required this.onStudents,
+    required this.onReviews,
     required this.onSubmit,
     this.onDelete,
   });
@@ -2073,6 +2079,8 @@ class _CourseCard extends StatelessWidget {
         DashButton(t('btn_curriculum'),
             icon: ArcIcon.video, onPressed: onCurriculum),
         DashButton(t('btn_students'), icon: ArcIcon.users, onPressed: onStudents),
+        if (course['status'] == 'published')
+          DashButton(t('btn_reviews'), icon: ArcIcon.review, onPressed: onReviews),
         DashButton(t('btn_codes'), icon: ArcIcon.tag, onPressed: onCodes),
         if (onDelete != null)
           DashButton(t('btn_delete'),

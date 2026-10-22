@@ -6,6 +6,7 @@ import '../services/learning_service.dart';
 import '../services/notification_service.dart';
 import '../services/supabase_service.dart';
 import '../services/warning_service.dart';
+import '../widgets/course_reviews_sheet.dart';
 import '../widgets/user_warnings_sheet.dart';
 import '../theme.dart';
 import '../widgets/arc_icons.dart';
@@ -67,7 +68,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         'lecture_rejected' ||
         'course_file' ||
         'course_file_review' ||
-        'content_report' =>
+        'content_report' ||
+        'course_rating' =>
           _Group.courses,
         'announcement' => _Group.announcements,
         _ => _Group.other,
@@ -118,6 +120,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'course_file_review' => (ArcIcon.download, Icons.description_rounded, _amber),
       'course_file' => (ArcIcon.download, Icons.description_rounded, AppColors.teal),
       'content_report' => (ArcIcon.alert, Icons.flag_rounded, _amber),
+      'course_rating' => (ArcIcon.review, Icons.star_rounded, _amber),
       _ => (ArcIcon.bell, null, AppColors.muted),
     };
   }
@@ -182,6 +185,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       showUserWarnings(context,
           userId: '${n.data['user_id']}',
           name: (n.data['name'] as String?));
+      return;
+    }
+    // A low course rating: open that course's private reviews.
+    if (n.type == 'course_rating' && n.data['course_id'] != null) {
+      showCourseReviews(context,
+          courseId: '${n.data['course_id']}',
+          title: n.data['course_title'] as String?);
       return;
     }
     final target = _target(n);
