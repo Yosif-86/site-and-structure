@@ -177,6 +177,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  void _retryLoad() {
+    setState(() { _error = null; _loading = true; });
+    _loadVideo();
+  }
+
   Future<void> _loadVideo() async {
     final session = SupabaseService.instance.client.auth.currentSession;
     if (session == null) {
@@ -220,7 +225,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _hlsMasterUrl = result.url!;
       _isMp4 = result.type == 'mp4';
       final controller = VideoPlayerController.networkUrl(Uri.parse(result.url!));
-      await controller.initialize().timeout(const Duration(seconds: 20));
+      await controller.initialize().timeout(const Duration(seconds: 45));
       final resumeAt = await _loadResumePosition();
       if (resumeAt != null && resumeAt < controller.value.duration - const Duration(seconds: 5)) {
         await controller.seekTo(resumeAt);
@@ -228,24 +233,37 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       controller.play();
       if (!mounted) { controller.dispose(); return; }
       controller.addListener(_checkAutoplayNext);
-      setState(() { _hlsController = controller; _loading = false; });
+      // Landscape lectures start fullscreen and sideways. A portrait video
+      // (phone-shot) stays in the normal view. Decided in the same frame the
+      // video appears, so the lessons page never flashes before the turn.
+      final goFullscreen = !_autoFullscreenDone &&
+          controller.value.aspectRatio >= 1 &&
+          !_isFullscreen;
+      _autoFullscreenDone = true;
+      setState(() {
+        _hlsController = controller;
+        _loading = false;
+        if (goFullscreen) {
+          _isFullscreen = true;
+          _manualFullscreen = true;
+        }
+      });
+      if (goFullscreen) {
+        unawaited(SystemChrome.setPreferredOrientations(
+            [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
+        unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+      }
       _startProgressSaving();
       _scheduleAutoHide();
-      // Landscape lectures start fullscreen and sideways. A portrait video
-      // (phone-shot) stays in the normal view.
-      if (!_autoFullscreenDone) {
-        _autoFullscreenDone = true;
-        if (controller.value.aspectRatio >= 1 && !_isFullscreen) {
-          unawaited(_toggleFullscreen());
-        }
-      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loading = false;
         _error = NetStatus.isOffline(e)
             ? AppStrings.instance.t('err_offline')
-            : AppStrings.instance.t('err_video_unavailable');
+            : e is TimeoutException
+                ? AppStrings.instance.t('err_slow_connection')
+                : AppStrings.instance.t('err_video_unavailable');
       });
       if (!NetStatus.isOffline(e)) ErrorReporter.report(e, null, page: 'video');
     }
@@ -319,26 +337,40 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     if (quality == _currentQuality || _hlsMasterUrl == null) return;
     final old = _hlsController;
     final position = old?.value.position ?? Duration.zero;
-    final wasPlaying = old?.value.isPlaying ?? true;
+    // Pause while the new resolution loads; the viewer presses play.
+    await old?.pause();
     setState(() => _loading = true);
     VideoPlayerController? controller;
     try {
       controller = VideoPlayerController.networkUrl(Uri.parse(_urlForQuality(quality)));
-      await controller.initialize().timeout(const Duration(seconds: 20));
+      await controller.initialize().timeout(const Duration(seconds: 45));
       await controller.seekTo(position);
-      if (wasPlaying) controller.play();
       if (!mounted) { controller.dispose(); return; }
       old?.removeListener(_checkAutoplayNext);
       controller.addListener(_checkAutoplayNext);
-      setState(() { _hlsController = controller; _currentQuality = quality; _loading = false; });
+      _hideControlsTimer?.cancel();
+      setState(() {
+        _hlsController = controller;
+        _currentQuality = quality;
+        _loading = false;
+        _controlsVisible = true;
+      });
       await old?.dispose();
     } catch (e) {
-      // That quality isn't available: keep playing the current one.
+      // That quality didn't start: keep the current one, paused where it was.
       controller?.dispose();
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() { _loading = false; _controlsVisible = true; });
+      final slow = NetStatus.isOffline(e) || e is TimeoutException;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(AppStrings.instance.t('err_quality_unavailable'))));
+        content: Text(AppStrings.instance
+            .t(slow ? 'err_slow_connection_quality' : 'err_quality_unavailable')),
+        action: slow
+            ? SnackBarAction(
+                label: AppStrings.instance.t('retry'),
+                onPressed: () => _switchQuality(quality))
+            : null,
+      ));
     }
   }
 
@@ -505,7 +537,11 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         },
         child: Scaffold(
           backgroundColor: _isFullscreen ? Colors.black : const Color(0xFF14120F),
-          body: _isFullscreen ? _fullscreenBody() : _buildPortrait(),
+          body: _isFullscreen
+              ? _fullscreenBody()
+              : (_loading && _hlsController == null)
+                  ? _loadingBody()
+                  : _buildPortrait(),
         ),
       ),
     );
@@ -525,6 +561,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       final stillPortrait = c.maxHeight > c.maxWidth;
       return stillPortrait ? RotatedBox(quarterTurns: 1, child: player) : player;
     });
+  }
+
+  /// Plain black wait screen while the lecture first loads, so the lessons
+  /// page doesn't flash before a landscape video turns the screen sideways.
+  Widget _loadingBody() {
+    return SafeArea(
+      child: Stack(children: [
+        const Center(child: CircularProgressIndicator()),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: _GlassCircleButton(
+            icon: ArcIcon.back,
+            size: 42,
+            onTap: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+      ]),
+    );
   }
 
   List<Map<String, dynamic>> get _lectureFiles =>
@@ -648,9 +702,19 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ? const CircularProgressIndicator()
                 : Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(_error!,
-                        style: TextStyle(color: AppColors.muted),
-                        textAlign: TextAlign.center),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(_error!,
+                            style: TextStyle(color: AppColors.muted),
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: _retryLoad,
+                          child: Text(AppStrings.instance.t('retry')),
+                        ),
+                      ],
+                    ),
                   ),
           ),
         ),

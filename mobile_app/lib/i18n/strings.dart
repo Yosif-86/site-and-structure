@@ -393,6 +393,8 @@ class AppStrings extends ChangeNotifier {
     'teacher_attention_payment_info': 'أضف معلومات الدفع حتى يستطيع الطلاب الدفع لك',
     'teacher_attention_draft_sub': 'لم تُرسل للمراجعة بعد',
     'err_quality_unavailable': 'هذه الجودة غير متاحة لهذه المحاضرة.',
+    'err_slow_connection': 'الاتصال بطيء ولم يبدأ الفيديو. جرّب جودة أقل أو أعد المحاولة.',
+    'err_slow_connection_quality': 'الاتصال بطيء، جرّب جودة أقل.',
     'err_video_not_enrolled': 'لم يتم تفعيل اشتراكك في هذه الدورة بعد.',
     'err_duplicate': 'هذا العنصر موجود مسبقًا.',
     'err_code_exists': 'هذا الكود موجود مسبقًا لهذه الدورة.',

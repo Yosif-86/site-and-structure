@@ -348,9 +348,22 @@ class _CourseFileViewerScreenState extends State<CourseFileViewerScreen> {
       body = Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(_error!,
-              textAlign: TextAlign.center,
-              style: AppFonts.body(color: AppColors.muted)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: AppFonts.body(color: AppColors.muted)),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  setState(() => _error = null);
+                  _load();
+                },
+                child: Text(_t('retry')),
+              ),
+            ],
+          ),
         ),
       );
     } else if (_bytes == null) {
