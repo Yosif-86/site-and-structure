@@ -129,7 +129,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           .from('lectures')
           .select('*')
           .eq('course_id', course.id)
-          .order('order_index', ascending: true);
+          .order('order_index', ascending: true)
+          .order('created_at', ascending: true);
       await PurchaseConfig.instance.load();
       final lectures = (lectureRows as List)
           .map((r) => Lecture.fromJson(r as Map<String, dynamic>))

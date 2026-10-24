@@ -589,12 +589,45 @@ class _TeacherScreenState extends State<TeacherScreen> {
           .from('lectures')
           .select('*')
           .eq('course_id', _activeCourse!['id'])
-          .order('order_index');
+          .order('order_index')
+          .order('created_at');
       if (!mounted) return;
       setState(
           () => _activeLectures = (data as List).cast<Map<String, dynamic>>());
     } catch (e) {
       _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
+
+  bool _reordering = false;
+
+  /// Moves a lecture one place up (-1) or down (+1) and saves the new order.
+  /// Every lecture is renumbered 0..n-1, which also fixes equal positions.
+  Future<void> _moveLecture(int i, int delta) async {
+    final j = i + delta;
+    if (_reordering || j < 0 || j >= _activeLectures.length) return;
+    _reordering = true;
+    final list = [..._activeLectures];
+    final moved = list.removeAt(i);
+    list.insert(j, moved);
+    setState(() => _activeLectures = [
+          for (var k = 0; k < list.length; k++) {...list[k], 'order_index': k}
+        ]);
+    try {
+      final sb = SupabaseService.instance.client;
+      for (var k = 0; k < list.length; k++) {
+        // `list` still holds the rows as stored, so this skips only rows
+        // already saved at position k.
+        if (list[k]['order_index'] == k) continue;
+        await sb
+            .from('lectures')
+            .update({'order_index': k}).eq('id', list[k]['id']);
+      }
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+      await _loadLectures();
+    } finally {
+      _reordering = false;
     }
   }
 
@@ -1819,6 +1852,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
       meta: [if (l['is_free'] == true) t('free_tag')],
       metaColor: AppColors.teal,
       actions: [
+        if (i > 0)
+          DashButton(t('btn_move_up'), onPressed: () => _moveLecture(i, -1)),
+        if (i < _activeLectures.length - 1)
+          DashButton(t('btn_move_down'), onPressed: () => _moveLecture(i, 1)),
         DashButton(t('btn_delete'),
             danger: true,
             icon: ArcIcon.trash,

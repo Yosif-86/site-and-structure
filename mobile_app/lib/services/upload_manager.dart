@@ -19,6 +19,9 @@ class LectureUploadJob {
   final int? durationSeconds;
   final File file;
   double progress = 0;
+  /// Position in the course, taken when the upload starts so lectures keep
+  /// the order the teacher added them in, however long each upload takes.
+  int? orderIndex;
   UploadStatus status = UploadStatus.uploading;
   R2Upload? _upload;
 
@@ -58,7 +61,32 @@ class UploadManager extends ChangeNotifier {
   void start(LectureUploadJob job) {
     jobs.add(job);
     notifyListeners();
-    unawaited(_run(job));
+    // Positions are handed out one at a time, in the order uploads start.
+    final reserved = _orderQueue.then((_) => _reserveOrder(job));
+    _orderQueue = reserved.catchError((_) {});
+    unawaited(reserved.then((_) => _run(job), onError: (_) => _run(job)));
+  }
+
+  Future<void> _orderQueue = Future<void>.value();
+
+  /// After the course's last lecture and after any upload of the same course
+  /// that already holds a position but has not been saved yet.
+  Future<void> _reserveOrder(LectureUploadJob job) async {
+    final last = await SupabaseService.instance.client
+        .from('lectures')
+        .select('order_index')
+        .eq('course_id', job.courseId)
+        .order('order_index', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    var next = ((last?['order_index'] as num?)?.toInt() ?? -1) + 1;
+    for (final j in jobs) {
+      if (j != job && j.courseId == job.courseId && j.orderIndex != null &&
+          j.status == UploadStatus.uploading && j.orderIndex! >= next) {
+        next = j.orderIndex! + 1;
+      }
+    }
+    job.orderIndex = next;
   }
 
   void cancel(String lectureId) {
@@ -94,16 +122,19 @@ class UploadManager extends ChangeNotifier {
         }
       });
       if (job.status == UploadStatus.cancelled) throw const UploadCancelled();
-      // Placed after the course's last lecture at the moment it finishes, so
-      // two uploads running together don't share a position.
-      final last = await sb
-          .from('lectures')
-          .select('order_index')
-          .eq('course_id', job.courseId)
-          .order('order_index', ascending: false)
-          .limit(1)
-          .maybeSingle();
-      final orderIndex = ((last?['order_index'] as num?)?.toInt() ?? -1) + 1;
+      // The position reserved when the upload started (see _reserveOrder).
+      // If that lookup failed, fall back to the end of the course now.
+      var orderIndex = job.orderIndex;
+      if (orderIndex == null) {
+        final last = await sb
+            .from('lectures')
+            .select('order_index')
+            .eq('course_id', job.courseId)
+            .order('order_index', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        orderIndex = ((last?['order_index'] as num?)?.toInt() ?? -1) + 1;
+      }
       // Pending until the admin approves it (only an admin can set r2_path,
       // which is what makes it playable).
       await sb.from('lectures').insert({

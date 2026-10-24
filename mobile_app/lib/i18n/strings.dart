@@ -586,6 +586,8 @@ class AppStrings extends ChangeNotifier {
     'report_send': 'إرسال البلاغ',
     'report_pick_reason': 'اختر سبب البلاغ.',
     'report_sent': 'شكرًا، وصل البلاغ إلى الإدارة.',
+    'btn_move_up': 'للأعلى',
+    'btn_move_down': 'للأسفل',
     'rate_title': 'قيّم الدورة',
     'rate_edit_title': 'تعديل تقييمك',
     'rate_star_1': 'سيئة جدًا',
