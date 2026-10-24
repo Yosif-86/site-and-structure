@@ -4,9 +4,10 @@ const { allow, clientIp } = require('./_rate-limit');
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
 const MAX_DEVICES = 1;
-// Single session applies to everyone while it is being tested. Set this to
-// true to let an admin's two devices stay signed in at the same time.
-const ADMINS_SHARE_SESSION = false;
+// Single session applies to everyone except admins (their two devices stay
+// signed in at the same time) and the store-review account (profiles.is_reviewer),
+// which stays exempt until the Google review is over.
+const ADMINS_SHARE_SESSION = true;
 
 // Best effort: a missing table (migration not run yet) never breaks sign-in.
 async function logSecurityEvent(admin, userId, kind, detail) {
