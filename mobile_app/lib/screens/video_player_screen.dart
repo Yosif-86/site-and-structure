@@ -108,17 +108,28 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _live++;
     WidgetsBinding.instance.addPostFrameCallback((_) => TabletFrame.fullBleed.value++);
     WidgetsBinding.instance.addObserver(this);
-    // Let the player follow the device: turning it sideways goes fullscreen
-    // (respects the phone's own rotation lock).
+    // Stay upright while the lecture loads: following the sensor here made
+    // the screen flip sideways and back before the video even started. The
+    // player follows the device once the video is ready (_followDevice).
+    // (Already sideways, e.g. the next lesson after a fullscreen one: stay.)
+    SystemChrome.setPreferredOrientations(_deviceLandscape
+        ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : [DeviceOrientation.portraitUp]);
+    ScreenSecurity.currentScreen = widget.title;
+    // Already held sideways when the lecture opens.
+    WidgetsBinding.instance.addPostFrameCallback((_) => didChangeMetrics());
+    _init();
+  }
+
+  /// Lets the player follow the device: turning it sideways goes fullscreen
+  /// (respects the phone's own rotation lock).
+  void _followDevice() {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    ScreenSecurity.currentScreen = widget.title;
-    // Already held sideways when the lecture opens.
-    WidgetsBinding.instance.addPostFrameCallback((_) => didChangeMetrics());
-    _init();
+    didChangeMetrics();
   }
 
   bool get _deviceLandscape {
@@ -254,6 +265,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         unawaited(SystemChrome.setPreferredOrientations(
             [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]));
         unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
+      } else {
+        _followDevice();
       }
       _startProgressSaving();
       _scheduleAutoHide();
