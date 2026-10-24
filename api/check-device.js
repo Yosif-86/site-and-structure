@@ -4,6 +4,9 @@ const { allow, clientIp } = require('./_rate-limit');
 const SUPABASE_URL = 'https://qdarzhzttjpkgfihupgp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_eNLSJi_xpL2fnrJsHKajeQ_sT9Kds9q';
 const MAX_DEVICES = 1;
+// Single session applies to everyone while it is being tested. Set this to
+// true to let an admin's two devices stay signed in at the same time.
+const ADMINS_SHARE_SESSION = false;
 
 // Best effort: a missing table (migration not run yet) never breaks sign-in.
 async function logSecurityEvent(admin, userId, kind, detail) {
@@ -86,10 +89,11 @@ module.exports = async (req, res) => {
   // default if the column/row isn't there, so this never fails open or 500s.
   let maxDevices = MAX_DEVICES;
   let existingToken = null;
+  let sharesSession = false;
   {
     const { data: prof, error: profErr } = await admin
       .from('profiles')
-      .select('max_devices, active_session_token')
+      .select('max_devices, active_session_token, is_admin, is_reviewer')
       .eq('id', userId)
       .maybeSingle();
     if (!profErr && prof) {
@@ -97,6 +101,9 @@ module.exports = async (req, res) => {
       // Up to 20 (store-review account); matches profiles_max_devices_check.
       if (Number.isInteger(n) && n >= 1 && n <= 20) maxDevices = n;
       existingToken = prof.active_session_token || null;
+      // The store-review account is used from several devices at once.
+      sharesSession = prof.is_reviewer === true ||
+        (ADMINS_SHARE_SESSION && prof.is_admin === true);
     }
   }
 
@@ -172,10 +179,11 @@ module.exports = async (req, res) => {
     }
   }
 
-  // Single-session rule: a new token logs every other device out. Accounts
-  // allowed several devices share the current token instead, otherwise
-  // signing in on device 2 would kick device 1 within 20 seconds.
-  if (maxDevices > 1 && existingToken) {
+  // Single-session rule: a new token logs every other device out. Only the
+  // review account (and admins, when ADMINS_SHARE_SESSION is on) share the
+  // current token, otherwise signing in on device 2 kicks device 1 within
+  // 20 seconds.
+  if (sharesSession && existingToken) {
     res.status(200).json({ allowed: true, sessionToken: existingToken });
     return;
   }
