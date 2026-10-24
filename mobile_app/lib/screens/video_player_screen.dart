@@ -16,6 +16,7 @@ import '../services/supabase_service.dart';
 import '../theme.dart';
 import '../widgets/ambient_background.dart';
 import '../widgets/arc_icons.dart';
+import '../widgets/tablet_frame.dart';
 import '../widgets/watermark_overlay.dart';
 
 /// Port of watchLecture()/moveWatermark() in course.html, plus the
@@ -105,6 +106,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   void initState() {
     super.initState();
     _live++;
+    WidgetsBinding.instance.addPostFrameCallback((_) => TabletFrame.fullBleed.value++);
     WidgetsBinding.instance.addObserver(this);
     // Let the player follow the device: turning it sideways goes fullscreen
     // (respects the phone's own rotation lock).
@@ -507,6 +509,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     WidgetsBinding.instance.removeObserver(this);
     ScreenSecurity.currentScreen = null;
     _live--;
+    WidgetsBinding.instance.addPostFrameCallback((_) => TabletFrame.fullBleed.value--);
     if (_live <= 0) {
       _live = 0;
       _restoreSystemUi();

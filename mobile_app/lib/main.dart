@@ -16,6 +16,7 @@ import 'services/supabase_service.dart';
 import 'services/net_status.dart';
 import 'services/push_service.dart';
 import 'services/rating_service.dart';
+import 'widgets/tablet_frame.dart';
 import 'services/screen_security.dart';
 import 'services/upload_manager.dart';
 import 'theme.dart';
@@ -176,7 +177,8 @@ class SiteAndStructureApp extends StatelessWidget {
                   ? TextDirection.rtl
                   : TextDirection.ltr,
               child: PrivacyOverlay(
-                child: OfflineBanner(child: UploadPill(child: child!)),
+                child: OfflineBanner(
+                    child: UploadPill(child: TabletFrame(child: child!))),
               ),
             ),
           ),
