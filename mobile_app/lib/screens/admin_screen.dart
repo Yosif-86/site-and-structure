@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
 
 import '../services/purchase_config.dart';
@@ -29,6 +30,7 @@ import '../widgets/proof_viewer.dart';
 import '../widgets/course_reviews_sheet.dart';
 import '../widgets/user_warnings_sheet.dart';
 import 'course_detail_screen.dart';
+import 'admin_student_profile.dart';
 import 'course_files.dart';
 import 'teacher_profile_screen.dart';
 import 'video_player_screen.dart';
@@ -74,6 +76,7 @@ enum _View {
   files,
   reports,
   announce,
+  freeAdd,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -90,6 +93,7 @@ class _AdminScreenState extends State<AdminScreen> {
     'uploads' => _View.uploads,
     'files' => _View.files,
     'reports' => _View.reports,
+    'freeAdd' => _View.freeAdd,
     _ => _View.dashboard,
   };
 
@@ -113,6 +117,12 @@ class _AdminScreenState extends State<AdminScreen> {
   Map<String, String> _emailByUser = {};
   Map<String, Map<String, dynamic>> _profileByUser = {};
   Map<String, Map<String, dynamic>> _courseBySlug = {};
+
+  // Free (no payment) enrollment requests, sent to the course's teacher.
+  List<Map<String, dynamic>> _freeRequests = [];
+  final _freeIdCtrl = TextEditingController();
+  String? _freeCourseSlug;
+  String? _freeError;
 
   final _payZainCtrl = TextEditingController();
   final _payQiCtrl = TextEditingController();
@@ -143,7 +153,13 @@ class _AdminScreenState extends State<AdminScreen> {
 
   // Payments, course submissions, edits and uploads appear without a pull.
   late final _live = LiveRefresh(
-      tables: const ['enrollments', 'courses', 'lectures'], onChange: _loadAll);
+      tables: const [
+        'enrollments',
+        'courses',
+        'lectures',
+        'free_enrollment_requests'
+      ],
+      onChange: _loadAll);
 
   @override
   void initState() {
@@ -158,6 +174,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _payZainCtrl.dispose();
     _payQiCtrl.dispose();
     _searchCtrl.dispose();
+    _freeIdCtrl.dispose();
     super.dispose();
   }
 
@@ -260,6 +277,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final pendingFiles = await _loadPendingFiles();
       final reports = await _loadReports();
       final warnings = await _loadWarnings();
+      final freeRequests = await _loadFreeRequests();
 
       final emailByUser = <String, String>{};
       for (final l in logins) {
@@ -307,6 +325,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _pendingFiles = pendingFiles;
         _reports = reports;
         _warningsByUser = warnings;
+        _freeRequests = freeRequests;
         _discountCodes = codes;
         _errorLogs = errors;
         // New three-field details, seeded from the old single method/number
@@ -352,6 +371,82 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _securityEvents = [];
   // user id -> (warnings sent, warnings still counting).
   Map<String, ({int total, int counted})> _warningsByUser = {};
+
+  /// Free-enrollment requests (add-free-enrollment-requests.sql). Missing
+  /// until the migration runs: an empty list then, never a broken dashboard.
+  Future<List<Map<String, dynamic>>> _loadFreeRequests() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .rpc('get_free_enrollment_requests');
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static const _freeErrors = {
+    'no account with this ID': 'free_add_err_no_account',
+    'already enrolled': 'free_add_err_enrolled',
+    'a request for this student and course is already waiting':
+        'free_add_err_pending',
+    'the course teacher cannot request for their own course':
+        'free_add_err_own',
+    'the teacher cannot be added as a student': 'free_add_err_teacher',
+    'request is no longer waiting': 'free_add_err_gone',
+    'this course is already free': 'free_add_err_free_course',
+    'this course has no teacher to approve': 'free_add_no_courses',
+    'course not found': 'free_add_course_required',
+  };
+
+  /// A friendly message for the errors the request functions raise on purpose.
+  String _freeMessage(Object e) {
+    final t = AppStrings.instance.t;
+    final raw = e is PostgrestException ? e.message : e.toString();
+    for (final entry in _freeErrors.entries) {
+      if (raw.contains(entry.key)) return t(entry.value);
+    }
+    return ErrorReporter.userMessage(e, page: 'admin');
+  }
+
+  Future<void> _sendFreeRequest() => _once('free-send', () async {
+        final t = AppStrings.instance.t;
+        final id = _freeIdCtrl.text.replaceAll('#', '').trim();
+        if (!RegExp(r'^\d{4}$').hasMatch(id)) {
+          setState(() => _freeError = t('free_add_id_required'));
+          return;
+        }
+        if (_freeCourseSlug == null) {
+          setState(() => _freeError = t('free_add_course_required'));
+          return;
+        }
+        setState(() => _freeError = null);
+        try {
+          await SupabaseService.instance.client.rpc(
+              'admin_request_free_enrollment',
+              params: {'p_public_id': id, 'p_course_slug': _freeCourseSlug});
+          _freeIdCtrl.clear();
+          _showError(t('free_add_sent'));
+          await _loadAll();
+        } catch (e) {
+          setState(() => _freeError = _freeMessage(e));
+        }
+      });
+
+  Future<void> _cancelFreeRequest(String id) => _once('free-$id', () async {
+        final t = AppStrings.instance.t;
+        if (!await _confirm(t('free_add_cancel'),
+            confirmLabel: t('btn_confirm'))) {
+          return;
+        }
+        try {
+          await SupabaseService.instance.client.rpc(
+              'admin_cancel_free_enrollment',
+              params: {'p_request_id': id});
+          await _loadAll();
+        } catch (e) {
+          _showError(_freeMessage(e));
+        }
+      });
 
   /// Warnings per user (add-user-warnings.sql, add-warning-review.sql).
   Future<Map<String, ({int total, int counted})>> _loadWarnings() async {
@@ -1026,6 +1121,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('edit_requests');
       case _View.announce:
         return t('announce_title');
+      case _View.freeAdd:
+        return t('free_add_title');
       case _View.dashboard:
         return t('nav_admin');
     }
@@ -1086,6 +1183,7 @@ class _AdminScreenState extends State<AdminScreen> {
             children: const [_AnnouncementCard()],
           ),
         _View.attention => _buildAttention(t),
+        _View.freeAdd => _buildFreeAdd(t),
       },
     );
   }
@@ -1246,6 +1344,12 @@ class _AdminScreenState extends State<AdminScreen> {
               AppColors.teal, _View.invites),
           tile(ArcIcon.bell, '+', t('announce_title'), AppColors.red,
               _View.announce),
+          tile(
+              ArcIcon.users,
+              '${_freeRequests.where((r) => r['status'] == 'pending').length}',
+              t('free_add_title'),
+              AppColors.teal,
+              _View.freeAdd),
         ]),
         DashSection(t('dash_sec_money')),
         DashGrid(children: [
@@ -1337,6 +1441,7 @@ class _AdminScreenState extends State<AdminScreen> {
         leading: DashAvatar(name: name),
         title: name ?? '—',
         subtitle: email ?? '—',
+        onTap: uid == null ? null : () => _openStudent(uid, name),
         meta: [
           if (phone != null && phone.isNotEmpty) phone,
           if (tag != null) tag,
@@ -1382,6 +1487,131 @@ class _AdminScreenState extends State<AdminScreen> {
       );
     }));
   }
+
+  Widget _buildFreeAdd(String Function(String) t) {
+    final me = SupabaseService.instance.currentUser?.id;
+    // A paid, published course with a teacher other than the requester.
+    final courses = _publishedCourses
+        .where((c) =>
+            c['is_free'] != true &&
+            c['teacher_id'] != null &&
+            c['teacher_id'] != me)
+        .toList();
+    if (_freeCourseSlug != null &&
+        !courses.any((c) => c['slug'] == _freeCourseSlug)) {
+      _freeCourseSlug = null;
+    }
+    final sending = _busy.contains('free-send');
+    String status(String s) => switch (s) {
+          'approved' => t('free_add_approved'),
+          'rejected' => t('free_add_rejected'),
+          'cancelled' => t('free_add_cancelled'),
+          _ => t('free_add_pending'),
+        };
+    StatusTone tone(String s) => switch (s) {
+          'approved' => StatusTone.good,
+          'rejected' => StatusTone.bad,
+          'cancelled' => StatusTone.neutral,
+          _ => StatusTone.warn,
+        };
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        DashFormPanel(
+          title: t('free_add_title'),
+          icon: ArcIcon.users,
+          children: [
+            Text(t('free_add_sub'),
+                style: AppFonts.body(size: 13, color: AppColors.muted)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _freeIdCtrl,
+              keyboardType: TextInputType.number,
+              textDirection: TextDirection.ltr,
+              maxLength: 5,
+              decoration:
+                  InputDecoration(hintText: t('free_add_id_hint'), counterText: ''),
+            ),
+            const SizedBox(height: 10),
+            if (courses.isEmpty)
+              Text(t('free_add_no_courses'),
+                  style: AppFonts.body(size: 13, color: AppColors.muted))
+            else
+              DropdownButtonFormField<String>(
+                initialValue: _freeCourseSlug,
+                isExpanded: true,
+                hint: Text(t('free_add_course')),
+                items: [
+                  for (final c in courses)
+                    DropdownMenuItem(
+                      value: c['slug'] as String,
+                      child: Text(
+                          '${c['title']} · ${(_profileByUser[c['teacher_id']]?['full_name'] as String?) ?? '—'}',
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _freeCourseSlug = v),
+              ),
+            if (_freeError != null) ...[
+              const SizedBox(height: 10),
+              Text(_freeError!,
+                  style: AppFonts.body(size: 13, color: AppColors.error)),
+            ],
+            const SizedBox(height: 12),
+            DashButton(t('free_add_send'),
+                primary: true,
+                icon: ArcIcon.check,
+                onPressed: sending || courses.isEmpty ? null : _sendFreeRequest),
+          ],
+        ),
+        DashSection('${t('free_add_requests')} (${_freeRequests.length})'),
+        if (_freeRequests.isEmpty)
+          DashEmpty(icon: ArcIcon.users, message: t('free_add_none'))
+        else
+          for (final r in _freeRequests) ...[
+            DashCard(
+              leading: DashAvatar(name: r['student_name'] as String?),
+              title: (r['student_name'] as String?) ?? '—',
+              subtitle: r['course_title'] as String?,
+              trailing: StatusPill(status('${r['status']}'),
+                  tone: tone('${r['status']}')),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => AdminStudentProfileScreen(
+                      userId: r['student_id'] as String,
+                      email: r['student_email'] as String?,
+                      fallbackName: r['student_name'] as String?))),
+              meta: [
+                if (r['student_public_id'] != null) '#${r['student_public_id']}',
+                if ((r['student_phone'] as String?)?.isNotEmpty ?? false)
+                  r['student_phone'] as String,
+                if ((r['student_email'] as String?)?.isNotEmpty ?? false)
+                  r['student_email'] as String,
+                '${t('free_add_teacher')}: ${r['teacher_name'] ?? '—'}',
+                '${t('free_add_by')}: ${r['requested_by_name'] ?? '—'} · ${_date(r['created_at'] as String?, time: true)}',
+                if (r['status'] == 'rejected' &&
+                    ((r['reject_reason'] as String?)?.isNotEmpty ?? false))
+                  '${t('free_add_reason')}: ${r['reject_reason']}',
+              ],
+              actions: [
+                if (r['status'] == 'pending')
+                  DashButton(t('free_add_cancel'),
+                      danger: true,
+                      icon: ArcIcon.close,
+                      onPressed: _busy.contains('free-${r['id']}')
+                          ? null
+                          : () => _cancelFreeRequest(r['id'] as String)),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+      ],
+    );
+  }
+
+  void _openStudent(String uid, String? name) =>
+      Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => AdminStudentProfileScreen(
+              userId: uid, email: _emailByUser[uid], fallbackName: name)));
 
   Widget _buildStudentsList(String Function(String) t) {
     final userIds =
@@ -1459,7 +1689,8 @@ class _AdminScreenState extends State<AdminScreen> {
       DateTime? latest;
       for (final e in enrolled) {
         final r = _paidFor(e, c);
-        if (r.discount > 0) {
+        // A free add by the admin is not a discount: it carries no sale.
+        if (r.discount > 0 && e['payment_method'] != 'free_add') {
           discountedCount++;
           discountSum += r.discount;
           if (r.code != null) codes.add(r.code!);
@@ -1873,6 +2104,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final approvedBy = e['approved_by'] as String?;
       return DashCard(
         leading: DashAvatar(name: prof?['full_name'] as String? ?? email),
+        onTap: () => _openStudent(userId, prof?['full_name'] as String?),
         title: email,
         titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
         subtitle: title,

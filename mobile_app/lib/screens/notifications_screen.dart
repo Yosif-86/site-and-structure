@@ -55,7 +55,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           _Group.security,
         'payment_request' ||
         'payment_approved' ||
-        'payment_rejected' =>
+        'payment_rejected' ||
+        'free_enroll_request' ||
+        'free_enroll_result' =>
           _Group.payments,
         'course_review' ||
         'course_published' ||
@@ -108,6 +110,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       'payment_request' => (ArcIcon.money, null, _amber),
       'payment_approved' => (ArcIcon.check, null, AppColors.teal),
       'payment_rejected' => (ArcIcon.alert, null, AppColors.error),
+      'free_enroll_request' => (ArcIcon.users, null, _amber),
+      'free_enroll_result' => (ArcIcon.users, null, AppColors.teal),
       'course_review' => (ArcIcon.review, null, AppColors.red),
       'course_published' => (ArcIcon.courses, null, AppColors.teal),
       'course_returned' => (ArcIcon.edit, null, _amber),
@@ -135,6 +139,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'payment_approved':
       case 'payment_rejected':
         return slug == null ? null : CourseDetailScreen(slug: slug);
+      case 'free_enroll_request':
+        return const TeacherScreen(openView: 'freeRequests');
+      case 'free_enroll_result':
+        return const AdminScreen(openView: 'freeAdd');
       case 'course_review':
         return const AdminScreen(openView: 'review');
       case 'edit_request':

@@ -61,7 +61,7 @@ class TeacherScreen extends StatefulWidget {
   State<TeacherScreen> createState() => _TeacherScreenState();
 }
 
-enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention, students, courseStudents, earnings }
+enum _TView { overview, courses, courseEdit, curriculum, codes, profile, payments, attention, students, courseStudents, earnings, freeRequests }
 
 class _TeacherScreenState extends State<TeacherScreen> {
   bool _checking = true;
@@ -98,6 +98,132 @@ class _TeacherScreenState extends State<TeacherScreen> {
     } catch (_) {
       // Leaves the list as it was; the overview tile just shows 0.
     }
+  }
+
+  /// Free-enrollment requests an admin sent for this teacher's courses
+  /// (add-free-enrollment-requests.sql). Empty until that migration runs.
+  List<Map<String, dynamic>> _freeRequests = [];
+
+  Future<void> _loadFreeRequests() async {
+    try {
+      final rows = await SupabaseService.instance.client
+          .rpc('get_free_enrollment_requests') as List;
+      if (!mounted) return;
+      setState(() => _freeRequests = rows.cast<Map<String, dynamic>>());
+    } catch (_) {
+      // Leaves the list as it was.
+    }
+  }
+
+  Future<void> _decideFree(Map<String, dynamic> r, bool approve) async {
+    final t = AppStrings.instance.t;
+    final id = r['id'] as String;
+    if (_decidingFree.contains(id)) return;
+    String? reason;
+    if (approve) {
+      final ok = await _confirm(
+          t('free_add_confirm_approve')
+              .replaceAll('{name}', Bidi.iso((r['student_name'] as String?) ?? '—'))
+              .replaceAll(
+                  '{course}', Bidi.iso((r['course_title'] as String?) ?? '—')),
+          confirmLabel: t('btn_confirm'),
+          danger: false);
+      if (!ok) return;
+    } else {
+      reason = await askRejectReason(context,
+          title: t('free_add_reject'), sub: t('free_add_reason'), presets: []);
+      if (reason == null) return;
+    }
+    setState(() => _decidingFree.add(id));
+    try {
+      await SupabaseService.instance.client.rpc('teacher_decide_free_enrollment',
+          params: {
+            'p_request_id': id,
+            'p_approve': approve,
+            'p_reason': reason,
+          });
+      _showError(
+          t(approve ? 'free_add_approved_done' : 'free_add_rejected_done'));
+      await _loadFreeRequests();
+      await _loadPaymentRequests();
+      await _loadCourses();
+    } catch (e) {
+      final gone = e.toString().contains('no longer waiting');
+      _showError(t(gone ? 'free_add_err_gone' : 'err_generic_failed'));
+      await _loadFreeRequests();
+    } finally {
+      if (mounted) setState(() => _decidingFree.remove(id));
+    }
+  }
+
+  final Set<String> _decidingFree = {};
+
+  Widget _buildFreeRequests(String Function(String) t) {
+    String status(String s) => switch (s) {
+          'approved' => t('free_add_approved'),
+          'rejected' => t('free_add_rejected'),
+          'cancelled' => t('free_add_cancelled'),
+          _ => t('free_add_pending'),
+        };
+    StatusTone tone(String s) => switch (s) {
+          'approved' => StatusTone.good,
+          'rejected' => StatusTone.bad,
+          'cancelled' => StatusTone.neutral,
+          _ => StatusTone.warn,
+        };
+    return RefreshIndicator(
+      onRefresh: _loadFreeRequests,
+      child: _freeRequests.isEmpty
+          ? ListView(children: [
+              DashEmpty(icon: ArcIcon.users, message: t('free_add_none'))
+            ])
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+              itemCount: _freeRequests.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final r = _freeRequests[i];
+                final pending = r['status'] == 'pending';
+                final created =
+                    DateTime.tryParse(r['created_at'] as String? ?? '')?.toLocal();
+                return FadeSlideIn(
+                  delayMs: (i % 10) * 30,
+                  child: DashCard(
+                    leading: DashAvatar(name: r['student_name'] as String?),
+                    title: (r['student_name'] as String?) ?? '—',
+                    subtitle: r['course_title'] as String?,
+                    trailing: StatusPill(status('${r['status']}'),
+                        tone: tone('${r['status']}')),
+                    meta: [
+                      if (r['student_public_id'] != null)
+                        '#${r['student_public_id']}',
+                      '${t('free_add_by')}: ${r['requested_by_name'] ?? '—'}'
+                          '${created == null ? '' : ' · ${created.toString().substring(0, 16)}'}',
+                      if (r['status'] == 'rejected' &&
+                          ((r['reject_reason'] as String?)?.isNotEmpty ?? false))
+                        '${t('free_add_reason')}: ${r['reject_reason']}',
+                    ],
+                    actions: [
+                      if (pending) ...[
+                        DashButton(t('free_add_approve'),
+                            primary: true,
+                            icon: ArcIcon.check,
+                            onPressed: _decidingFree.contains(r['id'])
+                                ? null
+                                : () => _decideFree(r, true)),
+                        DashButton(t('free_add_reject'),
+                            danger: true,
+                            icon: ArcIcon.close,
+                            onPressed: _decidingFree.contains(r['id'])
+                                ? null
+                                : () => _decideFree(r, false)),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            ),
+    );
   }
 
   ({int price, int discount, int paid}) _amountsOf(Map<String, dynamic> r) {
@@ -249,11 +375,17 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   // Approvals, new payment requests and published lectures show up live.
   late final _live = LiveRefresh(
-    tables: const ['enrollments', 'courses', 'lectures'],
+    tables: const [
+      'enrollments',
+      'courses',
+      'lectures',
+      'free_enrollment_requests'
+    ],
     onChange: () async {
       if (!_isTeacher) return;
       await _loadCourses();
       await _loadPaymentRequests();
+      await _loadFreeRequests();
       if (_view == _TView.curriculum && _activeCourse != null) {
         await _loadLectures();
       }
@@ -309,11 +441,15 @@ class _TeacherScreenState extends State<TeacherScreen> {
         if (isTeacher && widget.openPaymentInfo) _view = _TView.profile;
         if (isTeacher && widget.openView == 'payments') _view = _TView.payments;
         if (isTeacher && widget.openView == 'courses') _view = _TView.courses;
+        if (isTeacher && widget.openView == 'freeRequests') {
+          _view = _TView.freeRequests;
+        }
       });
       if (isTeacher) {
         await _loadCourses();
         await _loadProfile();
         await _loadPaymentRequests();
+        await _loadFreeRequests();
       }
     } catch (e) {
       setState(() {
@@ -1072,6 +1208,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.students => _buildStudents(t),
       _TView.courseStudents => _buildCourseStudents(t),
       _TView.earnings => _buildEarnings(t),
+      _TView.freeRequests => _buildFreeRequests(t),
       _TView.profile => _buildProfile(t),
     };
   }
@@ -1099,6 +1236,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         await _loadCourses();
         await _loadProfile();
         await _loadPaymentRequests();
+        await _loadFreeRequests();
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -1128,6 +1266,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 t('payment_requests'), const Color(0xFFE0A030),
                 () => go(_TView.payments),
                 alert: _paymentRequests.isNotEmpty),
+            tile(
+                ArcIcon.users,
+                '${_freeRequests.where((r) => r['status'] == 'pending').length}',
+                t('free_add_requests'),
+                AppColors.teal,
+                () => go(_TView.freeRequests),
+                alert: _freeRequests.any((r) => r['status'] == 'pending')),
             tile(ArcIcon.courses, '${_myCourses.length}', t('stat_courses'),
                 AppColors.teal, () => go(_TView.courses)),
             tile(ArcIcon.users, '$_statStudents', t('stat_students'),
