@@ -21,8 +21,15 @@ class AdminStudentProfileScreen extends StatefulWidget {
   final String userId;
   final String? email;
   final String? fallbackName;
+
+  /// Deletes this account and says whether it is gone (null = no button).
+  final Future<bool> Function()? onDelete;
   const AdminStudentProfileScreen(
-      {super.key, required this.userId, this.email, this.fallbackName});
+      {super.key,
+      required this.userId,
+      this.email,
+      this.fallbackName,
+      this.onDelete});
 
   @override
   State<AdminStudentProfileScreen> createState() =>
@@ -279,6 +286,16 @@ class _AdminStudentProfileScreenState extends State<AdminStudentProfileScreen> {
               ),
               const SizedBox(height: 10),
             ],
+          if (widget.onDelete != null) ...[
+            const SizedBox(height: 14),
+            DashButton(t('btn_delete_account'),
+                danger: true,
+                icon: ArcIcon.trash,
+                onPressed: () async {
+                  final deleted = await widget.onDelete!();
+                  if (deleted && mounted) Navigator.of(context).pop();
+                }),
+          ],
         ],
       ),
     );

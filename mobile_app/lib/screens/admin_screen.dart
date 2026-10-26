@@ -621,6 +621,16 @@ class _AdminScreenState extends State<AdminScreen> {
               ? null
               : () => _deleteAccount(uid));
 
+  /// The delete button handed to a profile screen: null when this account
+  /// can't be deleted (your own, or another admin). Says whether it is gone.
+  Future<bool> Function()? _deleteCallback(String uid) {
+    if (!_canDelete(uid)) return null;
+    return () async {
+      await _deleteAccount(uid);
+      return !_profileByUser.containsKey(uid);
+    };
+  }
+
   /// Deletes the account for good (a teacher's courses go with it).
   Future<void> _deleteAccount(String uid) => _once('delete-$uid', () async {
     final t = AppStrings.instance.t;
@@ -1676,7 +1686,8 @@ class _AdminScreenState extends State<AdminScreen> {
                         teacherId: id,
                         fallbackName: name,
                         adminView: true,
-                        email: _emailByUser[id])))
+                        email: _emailByUser[id],
+                        onDelete: _deleteCallback(id))))
                 : _openStudent(id, name),
           );
         })),
@@ -1707,7 +1718,8 @@ class _AdminScreenState extends State<AdminScreen> {
                 teacherId: id,
                 fallbackName: p['full_name'] as String?,
                 adminView: true,
-                email: _emailByUser[id]))),
+                email: _emailByUser[id],
+                onDelete: _deleteCallback(id)))),
         actions: [
           if (_warningsButton(id, p['full_name'] as String?, t) case final b?)
             b,
@@ -1804,7 +1816,8 @@ class _AdminScreenState extends State<AdminScreen> {
                   builder: (_) => AdminStudentProfileScreen(
                       userId: r['student_id'] as String,
                       email: r['student_email'] as String?,
-                      fallbackName: r['student_name'] as String?))),
+                      fallbackName: r['student_name'] as String?,
+                      onDelete: _deleteCallback(r['student_id'] as String)))),
               meta: [
                 if (r['student_public_id'] != null) '#${r['student_public_id']}',
                 if ((r['student_phone'] as String?)?.isNotEmpty ?? false)
@@ -1836,7 +1849,10 @@ class _AdminScreenState extends State<AdminScreen> {
   void _openStudent(String uid, String? name) =>
       Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => AdminStudentProfileScreen(
-              userId: uid, email: _emailByUser[uid], fallbackName: name)));
+              userId: uid,
+              email: _emailByUser[uid],
+              fallbackName: name,
+              onDelete: _deleteCallback(uid))));
 
   Widget _buildStudentsList(String Function(String) t) {
     final userIds =

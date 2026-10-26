@@ -23,12 +23,16 @@ class TeacherProfileScreen extends StatefulWidget {
   final bool adminView;
   final String? email;
 
+  /// Admin only: deletes this account and says whether it is gone.
+  final Future<bool> Function()? onDelete;
+
   const TeacherProfileScreen({
     super.key,
     required this.teacherId,
     this.fallbackName,
     this.adminView = false,
     this.email,
+    this.onDelete,
   });
 
   @override
@@ -233,6 +237,16 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             ),
             const SizedBox(height: 10),
           ],
+        if (widget.adminView && widget.onDelete != null) ...[
+          const SizedBox(height: 14),
+          DashButton(_t('btn_delete_account'),
+              danger: true,
+              icon: ArcIcon.trash,
+              onPressed: () async {
+                final deleted = await widget.onDelete!();
+                if (deleted && mounted) Navigator.of(context).pop();
+              }),
+        ],
       ],
     );
   }
