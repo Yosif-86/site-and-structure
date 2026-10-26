@@ -12,6 +12,7 @@ import '../widgets/course_card.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_scaffold.dart';
+import 'admin_student_profile.dart' show signInLabel;
 import 'course_detail_screen.dart';
 
 /// A teacher's page. Students see the public side (photo, bio, published
@@ -42,6 +43,7 @@ class TeacherProfileScreen extends StatefulWidget {
 class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
   Map<String, dynamic>? _public;
   Map<String, dynamic>? _private; // admin only
+  String? _signIn; // admin only: google / apple / email
   List<Course> _courses = [];
   bool _loading = true;
   String? _error;
@@ -73,7 +75,12 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         // Function not added yet: name comes from the course rows.
       }
       Map<String, dynamic>? priv;
+      String? signIn;
       if (widget.adminView) {
+        try {
+          signIn = await sb.rpc('admin_user_sign_in_method',
+              params: {'p_user': widget.teacherId}) as String?;
+        } catch (_) {}
         priv = await sb
             .from('profiles')
             .select(
@@ -88,6 +95,7 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             .toList();
         _public = pub;
         _private = priv;
+        _signIn = signIn;
         _loading = false;
       });
     } catch (e) {
@@ -200,6 +208,7 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             subtitle: (_private!['phone'] as String?) ?? '—',
             meta: [
               '${_t('direct_payment')}: ${_private!['direct_payment_allowed'] == true ? _t('yes') : _t('no')}',
+              if (signInLabel(_t, _signIn) case final s?) '${_t('sp_signin')}: $s',
             ],
           ),
           DashSection(_t('payout_accounts')),

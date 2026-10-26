@@ -36,6 +36,20 @@ class AdminStudentProfileScreen extends StatefulWidget {
       _AdminStudentProfileScreenState();
 }
 
+/// "google,email" -> "Google، البريد الإلكتروني" (null when unknown).
+String? signInLabel(String Function(String) t, String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  return raw
+      .split(',')
+      .map((p) => switch (p) {
+            'google' => t('sp_signin_google'),
+            'apple' => t('sp_signin_apple'),
+            'email' => t('sp_signin_email'),
+            _ => p,
+          })
+      .join('، ');
+}
+
 class _AdminStudentProfileScreenState extends State<AdminStudentProfileScreen> {
   bool _loading = true;
   String? _error;
@@ -44,6 +58,7 @@ class _AdminStudentProfileScreenState extends State<AdminStudentProfileScreen> {
   Map<String, Map<String, dynamic>> _courseBySlug = {};
   List<Map<String, dynamic>> _devices = [];
   List<Map<String, dynamic>> _logins = [];
+  String? _signIn;
 
   @override
   void initState() {
@@ -92,8 +107,16 @@ class _AdminStudentProfileScreenState extends State<AdminStudentProfileScreen> {
                   .select('slug, title, price, is_free')
                   .inFilter('slug', slugs) as List)
               .cast<Map<String, dynamic>>();
+      String? signIn;
+      try {
+        signIn = await sb.rpc('admin_user_sign_in_method',
+            params: {'p_user': id}) as String?;
+      } catch (_) {
+        // Function not added yet: the row is simply left out.
+      }
       if (!mounted) return;
       setState(() {
+        _signIn = signIn;
         _profile = results[0] as Map<String, dynamic>?;
         _enrollments = enrollments;
         _courseBySlug = {for (final c in courses) c['slug'] as String: c};
@@ -240,6 +263,7 @@ class _AdminStudentProfileScreenState extends State<AdminStudentProfileScreen> {
               _field(t('sp_phone'), phone),
               _field(t('sp_id'), idTag),
               _field(t('sp_joined'), _date(p?['created_at'] as String?)),
+              _field(t('sp_signin'), signInLabel(t, _signIn)),
             ]),
           ),
           DashSection(t('sp_courses')),
