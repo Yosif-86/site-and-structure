@@ -73,6 +73,8 @@ class _AuthScreenState extends State<AuthScreen>
   bool _showInvite = false;
   bool _checkingInvite = false;
   bool? _inviteValid;
+  // The check itself failed (offline, or too many wrong codes recently).
+  bool _inviteCheckFailed = false;
   bool _termsAccepted = false;
 
   @override
@@ -282,6 +284,7 @@ class _AuthScreenState extends State<AuthScreen>
     setState(() {
       _checkingInvite = false;
       _inviteValid = valid;
+      _inviteCheckFailed = valid == null;
     });
   }
 
@@ -908,7 +911,10 @@ class _AuthScreenState extends State<AuthScreen>
                     cursorColor: _glow,
                     style: AppFonts.body(size: 15, color: _ink),
                     decoration: _decoration(''),
-                    onChanged: (_) => setState(() => _inviteValid = null),
+                    onChanged: (_) => setState(() {
+                      _inviteValid = null;
+                      _inviteCheckFailed = false;
+                    }),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -938,6 +944,12 @@ class _AuthScreenState extends State<AuthScreen>
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(_t('invite_invalid_title'),
+                    style: AppFonts.body(size: 13, color: _danger)),
+              ),
+            if (_inviteCheckFailed)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_t('invite_check_failed'),
                     style: AppFonts.body(size: 13, color: _danger)),
               ),
           ],

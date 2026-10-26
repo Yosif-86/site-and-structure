@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
-import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
 import '../services/live_refresh.dart';
 import '../services/money.dart';
@@ -65,7 +64,8 @@ enum _View {
   review,
   invites,
   uploads,
-  flagged,
+  loginAttempts,
+  screenCapture,
   devices,
   discountCodes,
   errorLog,
@@ -78,6 +78,10 @@ enum _View {
   announce,
   freeAdd,
   accounts,
+  catContent,
+  catPeople,
+  catMoney,
+  catSecurity,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -107,7 +111,6 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _teacherProfiles = [];
   List<Map<String, dynamic>> _enrollments = [];
   List<Map<String, dynamic>> _activeEnrollments = [];
-  List<Map<String, dynamic>> _flagged = [];
   List<Map<String, dynamic>> _devices = [];
   List<Map<String, dynamic>> _invites = [];
   List<Map<String, dynamic>> _pendingUploads = [];
@@ -125,6 +128,8 @@ class _AdminScreenState extends State<AdminScreen> {
   String? _freeCourseSlug;
   // All-accounts list filter: 'all', 'student' or 'teacher'.
   String _accFilter = 'all';
+  // Registrations view: the course whose students are shown (null = course list).
+  String? _enrollCourse;
   String? _freeError;
 
   final _payZainCtrl = TextEditingController();
@@ -269,7 +274,6 @@ class _AdminScreenState extends State<AdminScreen> {
       final profiles = (results[1] as List).cast<Map<String, dynamic>>();
       final logins = (results[2] as List).cast<Map<String, dynamic>>();
       final enrollments = (results[3] as List).cast<Map<String, dynamic>>();
-      final flagged = (results[4] as List).cast<Map<String, dynamic>>();
       final devices = (results[5] as List).cast<Map<String, dynamic>>();
       final invites = (results[6] as List).cast<Map<String, dynamic>>();
       final uploads = (results[7] as List).cast<Map<String, dynamic>>();
@@ -313,7 +317,6 @@ class _AdminScreenState extends State<AdminScreen> {
         _enrollments = enrollments;
         _activeEnrollments =
             enrollments.where((e) => e['status'] == 'active').toList();
-        _flagged = flagged;
         _securityEvents = securityEvents;
         final countByUser = <String, int>{};
         for (final d in devices) {
@@ -564,7 +567,13 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   });
 
-  int get _suspiciousCount => _flagged.length + _securityEvents.length;
+  static const _loginAttemptKinds = ['device_blocked', 'shared_device'];
+  static const _screenCaptureKinds = ['screenshot', 'screen_record'];
+  int get _loginAttemptCount =>
+      _securityEvents.where((e) => _loginAttemptKinds.contains(e['kind'])).length;
+  int get _screenCaptureCount =>
+      _securityEvents.where((e) => !_loginAttemptKinds.contains(e['kind'])).length;
+  int get _suspiciousCount => _loginAttemptCount + _screenCaptureCount;
 
   Future<void> _forceLogout(String userId) => _once('logout-$userId', () async {
     final t = AppStrings.instance.t;
@@ -660,14 +669,16 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   });
 
-  Future<void> _clearSuspicious() => _once('clear-suspicious', () async {
+  Future<void> _clearSecurityGroup(List<String> kinds) =>
+      _once('clear-suspicious', () async {
     final t = AppStrings.instance.t;
     if (!await _confirm(t('confirm_clear_suspicious'),
         confirmLabel: t('btn_clear_all'))) {
       return;
     }
     try {
-      await SupabaseService.instance.client.rpc('admin_clear_suspicious');
+      await SupabaseService.instance.client
+          .rpc('admin_clear_security_events', params: {'p_kinds': kinds});
       await _loadAll();
     } catch (e) {
       _showError(ErrorReporter.userMessage(e, page: 'admin'));
@@ -696,9 +707,59 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _goto(_View v) => setState(() {
         _view = v;
+        _enrollCourse = null;
         _searchCtrl.clear();
         _q = '';
       });
+
+  /// Where the back button leads: a list goes back to its category card
+  /// screen, a category goes back to the dashboard.
+  _View _parentOf(_View v) => switch (v) {
+        _View.dashboard ||
+        _View.attention ||
+        _View.catContent ||
+        _View.catPeople ||
+        _View.catMoney ||
+        _View.catSecurity =>
+          _View.dashboard,
+        _View.courses ||
+        _View.review ||
+        _View.editRequests ||
+        _View.uploads ||
+        _View.files ||
+        _View.reports =>
+          _View.catContent,
+        _View.teachers ||
+        _View.students ||
+        _View.accounts ||
+        _View.enrollments ||
+        _View.invites ||
+        _View.announce ||
+        _View.freeAdd =>
+          _View.catPeople,
+        _View.payments ||
+        _View.revenue ||
+        _View.discountCodes ||
+        _View.myPayment =>
+          _View.catMoney,
+        _View.loginAttempts ||
+        _View.screenCapture ||
+        _View.devices ||
+        _View.errorLog =>
+          _View.catSecurity,
+      };
+
+  void _back() {
+    if (_view == _View.enrollments && _enrollCourse != null) {
+      setState(() {
+        _enrollCourse = null;
+        _searchCtrl.clear();
+        _q = '';
+      });
+    } else {
+      _goto(_parentOf(_view));
+    }
+  }
 
   /// The account's short public ID as "#2274" (null if it has none).
   String? _idTag(Map<String, dynamic>? profile) {
@@ -1079,7 +1140,7 @@ class _AdminScreenState extends State<AdminScreen> {
           leading: _view != _View.dashboard
               ? IconButton(
                   icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
-                  onPressed: () => _goto(_View.dashboard))
+                  onPressed: _back)
               : null,
           title:
               Text(_view == _View.dashboard ? t('nav_admin') : _viewTitle(t)),
@@ -1087,7 +1148,7 @@ class _AdminScreenState extends State<AdminScreen> {
         body: PopScope(
           canPop: _view == _View.dashboard,
           onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _goto(_View.dashboard);
+            if (!didPop) _back();
           },
           child: _buildBody(t),
         ),
@@ -1108,7 +1169,21 @@ class _AdminScreenState extends State<AdminScreen> {
       case _View.revenue:
         return t('est_revenue');
       case _View.enrollments:
-        return t('students_courses');
+        return _enrollCourse != null
+            ? _courseTitle(_enrollCourse!)
+            : t('students_courses');
+      case _View.catContent:
+        return t('cat_content');
+      case _View.catPeople:
+        return t('cat_people');
+      case _View.catMoney:
+        return t('cat_money');
+      case _View.catSecurity:
+        return t('cat_security');
+      case _View.loginAttempts:
+        return t('sec_login_attempts');
+      case _View.screenCapture:
+        return t('sec_screen_capture');
       case _View.review:
         return t('course_review');
       case _View.invites:
@@ -1119,8 +1194,6 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('pending_files');
       case _View.reports:
         return t('reports_title');
-      case _View.flagged:
-        return t('flagged_logins');
       case _View.devices:
         return t('trusted_devices');
       case _View.discountCodes:
@@ -1188,7 +1261,13 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.uploads => _buildUploads(t),
         _View.files => _buildPendingFiles(t),
         _View.reports => _buildReports(t),
-        _View.flagged => _buildFlagged(t),
+        _View.loginAttempts => _buildSecurityList(t, _loginAttemptKinds),
+        _View.screenCapture => _buildSecurityList(t, _screenCaptureKinds),
+        _View.catContent ||
+        _View.catPeople ||
+        _View.catMoney ||
+        _View.catSecurity =>
+          _buildCategory(t, _view),
         _View.devices => _buildDevices(t),
         _View.discountCodes => _buildDiscountCodes(t),
         _View.errorLog => _buildErrorLog(t),
@@ -1214,7 +1293,7 @@ class _AdminScreenState extends State<AdminScreen> {
     return time ? s.substring(0, 16) : s.split(' ').first;
   }
 
-  Widget _buildDashboard(String Function(String) t) {
+  Widget _buildDashboard(String Function(String) t, {_View? category}) {
     // The platform's own 20%, computed exactly like the revenue screen it
     // opens (same courses, real amounts paid). Direct-payment courses earn
     // the platform nothing.
@@ -1268,10 +1347,42 @@ class _AdminScreenState extends State<AdminScreen> {
               onTap: () => _goto(view)),
         );
 
+    Widget categoryCard(ArcIcon icon, String key, Color accent, _View view,
+            int badge) =>
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: FadeSlideIn(
+            delayMs: delay += 40,
+            child: DashCard(
+              leading: DashIconBadge(icon: icon, accent: accent),
+              title: t(key),
+              titleStyle: AppFonts.body(size: 17, weight: FontWeight.w800),
+              subtitle: t('${key}_sub'),
+              trailing: badge > 0
+                  ? Container(
+                      constraints:
+                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(14)),
+                      child: Text('$badge',
+                          style: AppFonts.body(
+                              size: 13,
+                              weight: FontWeight.w800,
+                              color: Colors.white)),
+                    )
+                  : null,
+              onTap: () => _goto(view),
+            ),
+          ),
+        );
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
-        FadeSlideIn(
+        if (category == null) FadeSlideIn(
           delayMs: 0,
           child: DashHero(
             title: t('nav_admin'),
@@ -1289,46 +1400,35 @@ class _AdminScreenState extends State<AdminScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        ListenableBuilder(
-          listenable: PurchaseConfig.instance,
-          builder: (context, _) {
-            final on = PurchaseConfig.instance.setting;
-            return GlassCard(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: on,
-                activeThumbColor: Colors.white,
-                title: Text(t('purchase_switch_title'),
-                    style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
-                subtitle: Text(
-                    t(on ? 'purchase_switch_on' : 'purchase_switch_off'),
-                    style: AppFonts.body(size: 12, color: AppColors.muted)),
-                onChanged: _busy.contains('purchase-switch')
-                    ? null
-                    : (v) => _once('purchase-switch', () async {
-                          try {
-                            await PurchaseConfig.instance.set(v);
-                          } catch (e) {
-                            _showError(ErrorReporter.userMessage(e, page: 'admin'));
-                          }
-                        }),
+        if (category == null) ...[
+          if (myPendingPayments > 0) ...[
+            const SizedBox(height: 12),
+            FadeSlideIn(
+              delayMs: 30,
+              child: _PendingBanner(
+                count: myPendingPayments,
+                onTap: () => _goto(_View.payments),
               ),
-            );
-          },
-        ),
-        if (myPendingPayments > 0) ...[
-          const SizedBox(height: 12),
-          FadeSlideIn(
-            delayMs: 30,
-            child: _PendingBanner(
-              count: myPendingPayments,
-              onTap: () => _goto(_View.payments),
             ),
-          ),
+          ],
+          const SizedBox(height: 12),
+          categoryCard(ArcIcon.courses, 'cat_content', AppColors.teal,
+              _View.catContent,
+              _pendingReview.length +
+                  _editRequests.length +
+                  _pendingUploads.length +
+                  _pendingFiles.length +
+                  _reports.length),
+          categoryCard(ArcIcon.users, 'cat_people', AppColors.byline,
+              _View.catPeople,
+              pendingEnrollments +
+                  _freeRequests.where((r) => r['status'] == 'pending').length),
+          categoryCard(ArcIcon.money, 'cat_money', AppColors.red,
+              _View.catMoney, myPendingPayments),
+          categoryCard(ArcIcon.shield, 'cat_security', AppColors.error,
+              _View.catSecurity, _suspiciousCount),
         ],
-        DashSection(t('dash_sec_content')),
+        if (category == _View.catContent)
         DashGrid(children: [
           tile(ArcIcon.courses, '${_publishedCourses.length}',
               t('published_courses'), AppColors.teal, _View.courses),
@@ -1348,7 +1448,7 @@ class _AdminScreenState extends State<AdminScreen> {
               AppColors.error, _View.reports,
               alert: _reports.isNotEmpty),
         ]),
-        DashSection(t('dash_sec_people')),
+        if (category == _View.catPeople)
         DashGrid(children: [
           tile(ArcIcon.award, '${_teacherProfiles.length}', t('teachers'),
               AppColors.red, _View.teachers),
@@ -1370,7 +1470,7 @@ class _AdminScreenState extends State<AdminScreen> {
               AppColors.teal,
               _View.freeAdd),
         ]),
-        DashSection(t('dash_sec_money')),
+        if (category == _View.catMoney)
         DashGrid(children: [
           tile(ArcIcon.review, '$myPendingPayments', t('payment_requests'),
               const Color(0xFFE0A030), _View.payments,
@@ -1383,11 +1483,14 @@ class _AdminScreenState extends State<AdminScreen> {
               AppColors.teal, _View.myPayment,
               alert: !myPaySet),
         ]),
-        DashSection(t('dash_sec_security')),
+        if (category == _View.catSecurity)
         DashGrid(children: [
-          tile(ArcIcon.warning, '$_suspiciousCount', t('flagged_logins'),
-              AppColors.red, _View.flagged,
-              alert: _suspiciousCount > 0),
+          tile(ArcIcon.shield, '$_loginAttemptCount', t('sec_login_attempts'),
+              AppColors.red, _View.loginAttempts,
+              alert: _loginAttemptCount > 0),
+          tile(ArcIcon.image, '$_screenCaptureCount', t('sec_screen_capture'),
+              AppColors.error, _View.screenCapture,
+              alert: _screenCaptureCount > 0),
           tile(ArcIcon.phone, '${_devices.length}', t('trusted_devices'),
               AppColors.teal, _View.devices),
           tile(ArcIcon.alert,
@@ -2197,11 +2300,51 @@ class _AdminScreenState extends State<AdminScreen> {
     }));
   }
 
+  /// Registrations, first level: the courses that have students, with how
+  /// many each has. Opening one shows its students (second level).
+  Widget _buildEnrollmentCourses(String Function(String) t) {
+    final bySlug = <String, List<Map<String, dynamic>>>{};
+    for (final e in _enrollments) {
+      bySlug.putIfAbsent(e['course_slug'] as String, () => []).add(e);
+    }
+    int active(String slug) =>
+        bySlug[slug]!.where((e) => e['status'] == 'active').length;
+    int pending(String slug) => bySlug[slug]!.length - active(slug);
+    final slugs = bySlug.keys.where((slug) {
+      final c = _courseBySlug[slug];
+      final teacher = _profileByUser[c?['teacher_id']];
+      return _hit([_courseTitle(slug), teacher?['full_name']], null);
+    }).toList()
+      ..sort((a, b) => active(b).compareTo(active(a)));
+    return _withSearch(t, slugs.isEmpty, _list(slugs.length, (i) {
+      final slug = slugs[i];
+      final c = _courseBySlug[slug];
+      final teacher = _profileByUser[c?['teacher_id']];
+      final waiting = pending(slug);
+      return DashCard(
+        leading: DashIconBadge(icon: ArcIcon.courses, accent: AppColors.teal),
+        title: Bidi.iso(_courseTitle(slug)),
+        subtitle: (teacher?['full_name'] as String?) ?? '—',
+        trailing: waiting > 0
+            ? StatusPill('$waiting ${t('status_pending')}', tone: StatusTone.warn)
+            : null,
+        meta: ['${active(slug)} ${t('rev_students')}'],
+        onTap: () => setState(() {
+          _enrollCourse = slug;
+          _searchCtrl.clear();
+          _q = '';
+        }),
+      );
+    }));
+  }
+
   Widget _buildEnrollments(String Function(String) t) {
     if (_enrollments.isEmpty) return _empty(t('no_enrollments'), ArcIcon.lessons);
+    if (_enrollCourse == null) return _buildEnrollmentCourses(t);
     _enrollments.sort((a, b) => ((b['created_at'] as String?) ?? '')
         .compareTo((a['created_at'] as String?) ?? ''));
     final rows = _enrollments.where((e) {
+      if (e['course_slug'] != _enrollCourse) return false;
       final uid = e['user_id'] as String;
       final p = _profileByUser[uid];
       return _hit([
@@ -2559,43 +2702,34 @@ class _AdminScreenState extends State<AdminScreen> {
 
   /// Suspicious logins and security events in one timeline, newest first,
   /// each with its reason and quick actions on the account.
-  Widget _buildFlagged(String Function(String) t) {
+  Widget _buildCategory(String Function(String) t, _View cat) =>
+      _buildDashboard(t, category: cat);
+
+  /// One group of security events (login attempts, or screen capture),
+  /// newest first, with search and a clear button for this group only.
+  Widget _buildSecurityList(String Function(String) t, List<String> kinds) {
+    final isLogin = identical(kinds, _loginAttemptKinds);
     final items = <Map<String, dynamic>>[
-      for (final f in _flagged)
-        {
-          'user_id': f['user_id'],
-          'reason': switch (f['flag_reason']) {
-            'outside_iraq' => t('sec_outside_iraq'),
-            'travel' => t('sec_travel'),
-            _ => t('sec_location_change'),
-          },
-          'detail': [
-            '${f['city'] ?? '—'}, ${f['country'] ?? '—'}',
-            if (f['distance_km'] != null) '${f['distance_km']} ${t('km')}',
-          ].join(' · '),
-          'email': f['email'],
-          'at': f['created_at'],
-          'icon': ArcIcon.warning,
-        },
       for (final e in _securityEvents)
-        {
-          'user_id': e['user_id'],
-          'reason': switch (e['kind']) {
-            'device_blocked' => t('sec_device_blocked'),
-            'shared_device' => t('sec_shared_device'),
-            'screen_record' => t('sec_screen_record'),
-            _ => t('sec_screenshot'),
+        if (isLogin
+            ? kinds.contains(e['kind'])
+            : !_loginAttemptKinds.contains(e['kind']))
+          {
+            'user_id': e['user_id'],
+            'reason': switch (e['kind']) {
+              'device_blocked' => t('sec_device_blocked'),
+              'shared_device' => t('sec_shared_device'),
+              'screen_record' => t('sec_screen_record'),
+              _ => t('sec_screenshot'),
+            },
+            'detail': ((e['detail'] as Map?)?['device_label'] ??
+                    (e['detail'] as Map?)?['screen'] ??
+                    '')
+                .toString(),
+            'email': null,
+            'at': e['created_at'],
+            'icon': isLogin ? ArcIcon.phone : ArcIcon.image,
           },
-          'detail': ((e['detail'] as Map?)?['device_label'] ??
-                  (e['detail'] as Map?)?['screen'] ??
-                  '')
-              .toString(),
-          'email': null,
-          'at': e['created_at'],
-          'icon': e['kind'] == 'screenshot' || e['kind'] == 'screen_record'
-              ? ArcIcon.image
-              : ArcIcon.phone,
-        },
     ]..sort((a, b) =>
         (b['at']?.toString() ?? '').compareTo(a['at']?.toString() ?? ''));
     if (items.isEmpty) return _empty(t('no_flagged'), ArcIcon.warning);
@@ -2625,7 +2759,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   icon: ArcIcon.trash,
                   onPressed: _busy.contains('clear-suspicious')
                       ? null
-                      : _clearSuspicious),
+                      : () => _clearSecurityGroup(kinds)),
             ),
             const SizedBox(height: 8),
             for (final it in shown) ...[
