@@ -1,10 +1,10 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
-import 'package:uuid/uuid.dart';
 
 import '../services/purchase_config.dart';
 import '../i18n/strings.dart';
@@ -77,6 +77,7 @@ enum _View {
   reports,
   announce,
   freeAdd,
+  accounts,
 }
 
 class _AdminScreenState extends State<AdminScreen> {
@@ -122,6 +123,8 @@ class _AdminScreenState extends State<AdminScreen> {
   List<Map<String, dynamic>> _freeRequests = [];
   final _freeIdCtrl = TextEditingController();
   String? _freeCourseSlug;
+  // All-accounts list filter: 'all', 'student' or 'teacher'.
+  String _accFilter = 'all';
   String? _freeError;
 
   final _payZainCtrl = TextEditingController();
@@ -223,7 +226,7 @@ class _AdminScreenState extends State<AdminScreen> {
         sb.from('courses').select(
             'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
         sb.from('profiles').select(
-            'id, full_name, phone, public_id, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
+            'id, full_name, phone, public_id, created_at, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
         _loadEmails(),
         sb.from('enrollments').select('*'),
         sb
@@ -910,13 +913,24 @@ class _AdminScreenState extends State<AdminScreen> {
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
-      // The token is the whole secret behind a teacher invite link, so it
-      // has to be unguessable -- a timestamp-derived id was enumerable.
-      final token = const Uuid().v4();
+      // A short code the admin can read out or paste. Random from a secure
+      // source; the database also limits wrong guesses, so 5 characters hold.
+      const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      final rng = Random.secure();
       final expiresAt =
           DateTime.now().add(const Duration(days: 7)).toUtc().toIso8601String();
-      await sb.from('teacher_invites').insert(
-          {'token': token, 'created_by': user.id, 'expires_at': expiresAt});
+      for (var attempt = 0;; attempt++) {
+        final token = String.fromCharCodes(
+            [for (var i = 0; i < 5; i++) alphabet.codeUnitAt(rng.nextInt(alphabet.length))]);
+        try {
+          await sb.from('teacher_invites').insert(
+              {'token': token, 'created_by': user.id, 'expires_at': expiresAt});
+          break;
+        } on PostgrestException catch (e) {
+          // 23505: that code already exists, draw another.
+          if (e.code != '23505' || attempt >= 4) rethrow;
+        }
+      }
       await _loadAll();
     } catch (e) {
       _showError(AppStrings.instance.t('err_create_invite'));
@@ -1123,6 +1137,8 @@ class _AdminScreenState extends State<AdminScreen> {
         return t('announce_title');
       case _View.freeAdd:
         return t('free_add_title');
+      case _View.accounts:
+        return t('acc_title');
       case _View.dashboard:
         return t('nav_admin');
     }
@@ -1164,6 +1180,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _View.courses => _buildCoursesList(t),
         _View.teachers => _buildTeachersList(t),
         _View.students => _buildStudentsList(t),
+        _View.accounts => _buildAccounts(t),
         _View.revenue => _buildRevenue(t),
         _View.enrollments => _buildEnrollments(t),
         _View.review => _buildReview(t),
@@ -1335,6 +1352,8 @@ class _AdminScreenState extends State<AdminScreen> {
         DashGrid(children: [
           tile(ArcIcon.award, '${_teacherProfiles.length}', t('teachers'),
               AppColors.red, _View.teachers),
+          tile(ArcIcon.users, '${_allProfiles.length}', t('acc_title'),
+              AppColors.byline, _View.accounts),
           tile(ArcIcon.users, '$activeStudents', t('active_students'),
               AppColors.teal, _View.students),
           tile(ArcIcon.lessons, '${_enrollments.length}',
@@ -1454,6 +1473,113 @@ class _AdminScreenState extends State<AdminScreen> {
             _deleteAccountButton(uid!, AppStrings.instance.t),
         ],
       );
+
+  /// Every registered account, newest first, with its role and ID, a count
+  /// summary on top, a search box and a role filter.
+  Widget _buildAccounts(String Function(String) t) {
+    bool isTeacher(Map<String, dynamic> p) => p['is_teacher'] == true;
+    bool isAdminOnly(Map<String, dynamic> p) =>
+        p['is_admin'] == true && !isTeacher(p);
+    final teachers = _allProfiles.where(isTeacher).length;
+    final students =
+        _allProfiles.where((p) => !isTeacher(p) && !isAdminOnly(p)).length;
+
+    final shown = _allProfiles.where((p) {
+      if (_accFilter == 'teacher' && !isTeacher(p)) return false;
+      if (_accFilter == 'student' && (isTeacher(p) || isAdminOnly(p))) {
+        return false;
+      }
+      return _hit(
+          [p['full_name'], _emailByUser[p['id']], p['phone']], p);
+    }).toList()
+      ..sort((a, b) {
+        final byId = _idFirst(a, b);
+        if (byId != 0) return byId;
+        return ((b['created_at'] as String?) ?? '')
+            .compareTo((a['created_at'] as String?) ?? '');
+      });
+
+    Widget stat(String value, String label) => Expanded(
+          child: GlassCard(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(children: [
+              Text(value,
+                  style: AppFonts.body(size: 20, weight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(label,
+                  style: AppFonts.body(size: 12, color: AppColors.muted)),
+            ]),
+          ),
+        );
+    Widget chip(String key, String label) => Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: ChoiceChip(
+            label: Text(label),
+            selected: _accFilter == key,
+            onSelected: (_) => setState(() => _accFilter = key),
+          ),
+        );
+
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Row(children: [
+          stat('${_allProfiles.length}', t('acc_total')),
+          const SizedBox(width: 8),
+          stat('$students', t('acc_students')),
+          const SizedBox(width: 8),
+          stat('$teachers', t('acc_teachers')),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: Row(children: [
+          chip('all', t('acc_total')),
+          chip('student', t('role_student')),
+          chip('teacher', t('role_teacher')),
+        ]),
+      ),
+      Expanded(
+        child: _withSearch(t, shown.isEmpty, _list(shown.length, (i) {
+          final p = shown[i];
+          final id = p['id'] as String;
+          final teacher = isTeacher(p);
+          final name = p['full_name'] as String?;
+          final tag = _idTag(p);
+          return DashCard(
+            leading: DashAvatar(name: name),
+            title: name ?? '—',
+            subtitle: _emailByUser[id] ?? '—',
+            trailing: StatusPill(
+                teacher
+                    ? t('role_teacher')
+                    : isAdminOnly(p)
+                        ? t('role_admin')
+                        : t('role_student'),
+                tone: teacher
+                    ? StatusTone.good
+                    : isAdminOnly(p)
+                        ? StatusTone.warn
+                        : StatusTone.neutral),
+            meta: [
+              if (tag != null) tag,
+              if ((p['phone'] as String?)?.isNotEmpty ?? false)
+                p['phone'] as String,
+              '${t('sp_joined')}: ${_date(p['created_at'] as String?, time: true)}',
+            ],
+            onTap: () => teacher
+                ? Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => TeacherProfileScreen(
+                        teacherId: id,
+                        fallbackName: name,
+                        adminView: true,
+                        email: _emailByUser[id])))
+                : _openStudent(id, name),
+          );
+        })),
+      ),
+    ]);
+  }
 
   Widget _buildTeachersList(String Function(String) t) {
     if (_teacherProfiles.isEmpty) return _empty(t('no_teachers'), ArcIcon.award);

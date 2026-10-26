@@ -899,6 +899,11 @@ class _AuthScreenState extends State<AuthScreen>
                   child: TextField(
                     controller: _inviteCtrl,
                     autocorrect: false,
+                    enableSuggestions: false,
+                    // English keyboard; pasted text is cleaned by the formatter.
+                    keyboardType: TextInputType.visiblePassword,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [_InviteCodeFormatter()],
                     textDirection: TextDirection.ltr,
                     cursorColor: _glow,
                     style: AppFonts.body(size: 15, color: _ink),
@@ -1160,4 +1165,29 @@ class _Spinner extends StatelessWidget {
       height: 18,
       width: 18,
       child: CircularProgressIndicator(strokeWidth: 2, color: color));
+}
+
+/// Keeps an invite code to English letters and digits, upper case. Arabic
+/// digits become 0-9, and spaces, new lines and Arabic letters from a paste
+/// are dropped. Codes made before the short format are up to 36 characters
+/// with dashes, so dashes stay.
+class _InviteCodeFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final out = StringBuffer();
+    for (final unit in newValue.text.runes) {
+      var c = unit;
+      if (c >= 0x0660 && c <= 0x0669) c = c - 0x0660 + 0x30;
+      if (c >= 0x06F0 && c <= 0x06F9) c = c - 0x06F0 + 0x30;
+      final ch = String.fromCharCode(c);
+      if (RegExp(r'[A-Za-z0-9-]').hasMatch(ch)) out.write(ch.toUpperCase());
+    }
+    var text = out.toString();
+    if (text.length > 36) text = text.substring(0, 36);
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
 }
