@@ -118,6 +118,27 @@ class SupabaseService extends ChangeNotifier {
   String? legacyDeviceId;
   bool _deviceIdMigrated = false;
 
+  String? _deviceLabel;
+
+  /// A readable name for this phone, shown to admins in the devices list,
+  /// e.g. "Apple iPhone · iOS 18.1" or "samsung SM-S918B · Android 14".
+  Future<String> getDeviceLabel() async {
+    final cached = _deviceLabel;
+    if (cached != null) return cached;
+    var label = 'Arc app';
+    try {
+      if (!kIsWeb && Platform.isIOS) {
+        final info = await DeviceInfoPlugin().iosInfo;
+        label = '${info.model} (${info.utsname.machine}) · iOS ${info.systemVersion}';
+      } else if (!kIsWeb && Platform.isAndroid) {
+        final info = await DeviceInfoPlugin().androidInfo;
+        label =
+            '${info.manufacturer} ${info.model} · Android ${info.version.release}';
+      }
+    } catch (_) {}
+    return _deviceLabel = label;
+  }
+
   Future<String> getDeviceId() async {
     String? cached;
     try {
@@ -183,7 +204,7 @@ class SupabaseService extends ChangeNotifier {
       },
       body: jsonEncode({
         'deviceId': deviceId,
-        'deviceLabel': 'Flutter app',
+        'deviceLabel': await getDeviceLabel(),
         if (legacyDeviceId != null && legacyDeviceId != deviceId)
           'legacyDeviceId': legacyDeviceId,
       }),
