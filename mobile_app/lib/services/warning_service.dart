@@ -26,6 +26,8 @@ class WarningService {
           .select('id, kind, warning_no, title, message, created_at')
           .eq('user_id', user.id)
           .isFilter('acknowledged_at', null)
+          // A removed warning never opens the window, answered or not.
+          .neq('status', 'removed')
           .order('created_at')
           .limit(1)
           .maybeSingle();
