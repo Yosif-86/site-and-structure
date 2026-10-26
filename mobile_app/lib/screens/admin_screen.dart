@@ -1489,13 +1489,9 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildFreeAdd(String Function(String) t) {
-    final me = SupabaseService.instance.currentUser?.id;
-    // A paid, published course with a teacher other than the requester.
+    // A paid, published course with a teacher (the requester may own it).
     final courses = _publishedCourses
-        .where((c) =>
-            c['is_free'] != true &&
-            c['teacher_id'] != null &&
-            c['teacher_id'] != me)
+        .where((c) => c['is_free'] != true && c['teacher_id'] != null)
         .toList();
     if (_freeCourseSlug != null &&
         !courses.any((c) => c['slug'] == _freeCourseSlug)) {

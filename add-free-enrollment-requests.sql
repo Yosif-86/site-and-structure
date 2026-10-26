@@ -65,9 +65,6 @@ begin
   if v_course.teacher_id is null then
     raise exception 'this course has no teacher to approve';
   end if;
-  if v_course.teacher_id = auth.uid() then
-    raise exception 'the course teacher cannot request for their own course';
-  end if;
   if v_student.id = v_course.teacher_id then
     raise exception 'the teacher cannot be added as a student';
   end if;
