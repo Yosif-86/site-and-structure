@@ -51,11 +51,16 @@ class TeacherScreen extends StatefulWidget {
   /// 'courses'.
   final String? openView;
 
+  /// Opens straight on this course's editor (from the course page's Edit
+  /// button); leaving the editor closes the screen.
+  final String? editCourseId;
+
   const TeacherScreen(
       {super.key,
       this.openPaymentInfo = false,
       this.mandatoryPayment = false,
-      this.openView});
+      this.openView,
+      this.editCourseId});
 
   @override
   State<TeacherScreen> createState() => _TeacherScreenState();
@@ -338,6 +343,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
   static const _maxPoints = 12;
   static const _minPointRows = 3;
   final List<TextEditingController> _cPoints = [];
+
+  /// Bumped when a point row is added or removed so the open editor sheet
+  /// rebuilds.
+  final ValueNotifier<int> _pointsTick = ValueNotifier(0);
   XFile? _cThumbFile;
   // Current cover: the pending edit's if one is waiting, else the live one.
   String? _cThumbUrl;
@@ -386,7 +395,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
       await _loadCourses();
       await _loadPaymentRequests();
       await _loadFreeRequests();
-      if (_view == _TView.curriculum && _activeCourse != null) {
+      if ((_view == _TView.courseEdit || _view == _TView.curriculum) &&
+          _activeCourse != null) {
         await _loadLectures();
       }
     },
@@ -405,6 +415,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cTitle.dispose();
     _cDescription.dispose();
     _cPrice.dispose();
+    _pointsTick.dispose();
     for (final c in _cPoints) {
       c.dispose();
     }
@@ -447,6 +458,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
       });
       if (isTeacher) {
         await _loadCourses();
+        final editId = widget.editCourseId;
+        if (editId != null && mounted) {
+          final c = _myCourses.where((c) => c['id'] == editId).firstOrNull;
+          if (c != null) {
+            _openCourseEdit(c);
+          } else if (mounted) {
+            Navigator.of(context).pop();
+            return;
+          }
+        }
         await _loadProfile();
         await _loadPaymentRequests();
         await _loadFreeRequests();
@@ -562,7 +583,22 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cThumbUrl = src['thumbnail_url'] as String?;
     _cThumbFile = null;
     _cFormError = null;
+    _lTitle.clear();
+    _lVideoFile = null;
+    _lIsFree = false;
+    _lFormError = null;
     setState(() => _view = _TView.courseEdit);
+    _loadLectures();
+  }
+
+  /// Leaves the course editor: back to the course list, or out of the screen
+  /// when it was opened straight from a course page.
+  void _leaveEditor() {
+    if (widget.editCourseId != null) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _view = _TView.courses);
+    }
   }
 
   Future<void> _saveCourse() async {
@@ -647,7 +683,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       }
       await _loadCourses();
       if (!mounted) return;
-      setState(() => _view = _TView.courses);
+      _leaveEditor();
     } catch (e) {
       if (mounted) setState(() => _cFormError = ErrorReporter.userMessage(e, page: 'teacher'));
     } finally {
@@ -708,16 +744,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
   }
 
   // ---- Curriculum ----
-
-  void _openCurriculum(Map<String, dynamic> c) {
-    _activeCourse = c;
-    _lTitle.clear();
-    _lVideoFile = null;
-    _lIsFree = false;
-    _lFormError = null;
-    setState(() => _view = _TView.curriculum);
-    _loadLectures();
-  }
 
   Future<void> _loadLectures() async {
     try {
@@ -1145,6 +1171,11 @@ class _TeacherScreenState extends State<TeacherScreen> {
                       icon: ArcIconView(ArcIcon.back, size: 22, color: AppColors.text),
                       onPressed: () async {
                         if (!await _confirmCancelUpload()) return;
+                        if (_view == _TView.courseEdit &&
+                            widget.editCourseId != null) {
+                          if (mounted) Navigator.of(context).pop();
+                          return;
+                        }
                         setState(() => _view = (_view == _TView.curriculum ||
                                 _view == _TView.codes ||
                                 _view == _TView.courseStudents ||
@@ -1168,6 +1199,10 @@ class _TeacherScreenState extends State<TeacherScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || widget.mandatoryPayment) return;
             if (!await _confirmCancelUpload() || !mounted) return;
+            if (_view == _TView.courseEdit && widget.editCourseId != null) {
+              Navigator.of(context).pop();
+              return;
+            }
             if (_view != _TView.overview && !widget.openPaymentInfo) {
               setState(() => _view = (_view == _TView.curriculum ||
                       _view == _TView.codes ||
@@ -1201,7 +1236,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _TView.overview => _buildOverview(t),
       _TView.courses => _buildCourses(t),
       _TView.courseEdit => _buildCourseEdit(t),
-      _TView.curriculum => _buildCurriculum(t),
+      _TView.curriculum => _buildCourseEdit(t),
       _TView.codes => _buildCodes(t),
       _TView.payments => _buildPayments(t),
       _TView.attention => _buildAttention(t),
@@ -1314,7 +1349,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   course: _myCourses[i],
                   t: t,
                   onEdit: () => _openCourseEdit(_myCourses[i]),
-                  onCurriculum: () => _openCurriculum(_myCourses[i]),
                   onCodes: () => _openCodes(_myCourses[i]),
                   onStudents: () => _openCourseStudents(_myCourses[i]),
                   onReviews: () => showCourseReviews(context,
@@ -1638,7 +1672,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               final slug = n.data['course_slug'];
               final c = _myCourses.where((x) => x['slug'] == slug).firstOrNull;
               if (c != null) {
-                _openCurriculum(c);
+                _openCourseEdit(c);
               } else {
                 setState(() {});
               }
@@ -1708,6 +1742,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   void _addPoint() {
     if (_cPoints.length >= _maxPoints) return;
     setState(() => _cPoints.add(TextEditingController()));
+    _pointsTick.value++;
   }
 
   void _removePoint(int i) {
@@ -1718,6 +1753,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         _cPoints[i].clear();
       }
     });
+    _pointsTick.value++;
   }
 
   Widget _learningPointsEditor(String Function(String) t) {
@@ -1774,7 +1810,63 @@ class _TeacherScreenState extends State<TeacherScreen> {
           padding: const EdgeInsets.only(top: 10),
           child: Text(msg, style: AppFonts.body(size: 12, color: AppColors.error)));
 
+  /// One labelled box of the course info grid.
+  Widget _infoBox(String label, Widget child) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: AppColors.bg.withValues(alpha: 0.28),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: AppFonts.body(size: 12, color: AppColors.muted)),
+            const SizedBox(height: 8),
+            child,
+          ],
+        ),
+      );
+
+  Widget _infoRow(Widget a, Widget b) => IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(child: a),
+          const SizedBox(width: 10),
+          Expanded(child: b),
+        ]),
+      );
+
+  Future<void> _editPoints(String Function(String) t) async {
+    final ar = AppStrings.instance.isAr;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Directionality(
+        textDirection: ar ? TextDirection.rtl : TextDirection.ltr,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+              16, 18, 16, 16 + MediaQuery.of(ctx).viewInsets.bottom),
+          child: SingleChildScrollView(
+            child: ValueListenableBuilder<int>(
+              valueListenable: _pointsTick,
+              builder: (_, __, ___) => _learningPointsEditor(t),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
   Widget _buildCourseEdit(String Function(String) t) {
+    final filled = _cPoints
+        .map((c) => c.text.trim())
+        .where((x) => x.isNotEmpty)
+        .toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
@@ -1782,22 +1874,77 @@ class _TeacherScreenState extends State<TeacherScreen> {
           title: _activeCourse != null ? t('edit_course') : t('new_course_title'),
           icon: ArcIcon.edit,
           children: [
-            TextField(
-                controller: _cTitle,
-                decoration: InputDecoration(labelText: t('label_title'))),
+            _infoRow(
+              _infoBox(
+                t('label_title'),
+                TextField(
+                    controller: _cTitle,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(isDense: true)),
+              ),
+              _infoBox(
+                t('what_you_learn'),
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _editPoints(t),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            filled.isEmpty
+                                ? t('learning_point_add')
+                                : '${filled.length} / $_maxPoints',
+                            style: AppFonts.body(
+                                size: 14,
+                                weight: FontWeight.w700,
+                                color: AppColors.red)),
+                        if (filled.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(filled.take(2).join(' · '),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppFonts.body(
+                                  size: 11.5, color: AppColors.muted)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            _infoRow(
+              _infoBox(
+                t('label_thumbnail'),
+                FilePickBox(
+                  file: _cThumbFile,
+                  existingUrl: _cThumbUrl,
+                  emptyLabel: t('label_thumbnail'),
+                  height: 130,
+                  onPick: () async {
+                    final picked = await SafePicker.image(imageQuality: 85);
+                    if (picked != null) setState(() => _cThumbFile = picked);
+                  },
+                  onRemove: () => setState(() => _cThumbFile = null),
+                ),
+              ),
+              _infoBox(
+                t('label_price'),
+                TextField(
+                    controller: _cPrice,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: Money.inputFormatters,
+                    decoration: const InputDecoration(isDense: true)),
+              ),
+            ),
             const SizedBox(height: 12),
             TextField(
                 controller: _cDescription,
                 maxLines: 4,
                 decoration: InputDecoration(labelText: t('label_description'))),
-            const SizedBox(height: 12),
-            _learningPointsEditor(t),
-            const SizedBox(height: 12),
-            TextField(
-                controller: _cPrice,
-                keyboardType: TextInputType.number,
-                inputFormatters: Money.inputFormatters,
-                decoration: InputDecoration(labelText: t('label_price'))),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _cPrice,
               builder: (context, v, _) {
@@ -1805,7 +1952,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 if (price <= 0) return const SizedBox.shrink();
                 final s = PaymentRules.split(price: price, paid: price);
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 12),
                   child: Row(children: [
                     Expanded(
                       child: _SplitChip(
@@ -1824,17 +1971,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
                 );
               },
             ),
-            const SizedBox(height: 12),
-            FilePickBox(
-              file: _cThumbFile,
-              existingUrl: _cThumbUrl,
-              emptyLabel: t('label_thumbnail'),
-              onPick: () async {
-                final picked = await SafePicker.image(imageQuality: 85);
-                if (picked != null) setState(() => _cThumbFile = picked);
-              },
-              onRemove: () => setState(() => _cThumbFile = null),
-            ),
             _formError(_cFormError),
             const SizedBox(height: 18),
             Row(children: [
@@ -1851,20 +1987,30 @@ class _TeacherScreenState extends State<TeacherScreen> {
               const SizedBox(width: 10),
               Expanded(
                   child: OutlinedButton(
-                      onPressed: () => setState(() => _view = _TView.courses),
-                      child: Text(t('cancel')))),
+                      onPressed: _leaveEditor, child: Text(t('cancel')))),
             ]),
           ],
         ),
+        if (_activeCourse != null) ...[
+          const SizedBox(height: 14),
+          _curriculumCard(t),
+          const SizedBox(height: 8),
+          TeacherCourseFiles(
+              key: ValueKey(_activeCourse!['id']),
+              courseId: _activeCourse!['id'] as String,
+              lectures: _activeLectures),
+        ],
       ],
     );
   }
 
-  Widget _buildCurriculum(String Function(String) t) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+  /// The second card of the course page: lectures, uploads in progress and
+  /// the add-lecture form.
+  Widget _curriculumCard(String Function(String) t) {
+    return DashFormPanel(
+      title: '${t('curriculum')} · ${_activeCourse?['title'] ?? ''}',
+      icon: ArcIcon.video,
       children: [
-        DashSection('${t('curriculum')} · ${_activeCourse?['title'] ?? ''}'),
         AnimatedBuilder(
           animation: UploadManager.instance,
           builder: (context, _) {
@@ -1914,62 +2060,52 @@ class _TeacherScreenState extends State<TeacherScreen> {
             _lectureRow(i, _activeLectures[i], t),
             const SizedBox(height: 10),
           ],
-        const SizedBox(height: 14),
-        DashFormPanel(
-          title: t('btn_add'),
-          icon: ArcIcon.video,
-          children: [
-            TextField(
-                controller: _lTitle,
-                decoration:
-                    InputDecoration(labelText: t('label_lecture_title'))),
-            const SizedBox(height: 12),
-            FilePickBox(
-              file: _lVideoFile,
-              video: true,
-              emptyLabel: t('label_video_file'),
-              onPick: () async {
-                final picked = await SafePicker.video();
-                if (picked != null) setState(() => _lVideoFile = picked);
-              },
-              onRemove: () => setState(() => _lVideoFile = null),
-            ),
-            const SizedBox(height: 4),
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => setState(() => _lIsFree = !_lIsFree),
-              child: Row(children: [
-                Checkbox(
-                    value: _lIsFree,
-                    onChanged: (v) => setState(() => _lIsFree = v ?? false)),
-                Expanded(
-                    child: Text(t('label_free_lecture'),
-                        style: AppFonts.body(size: 13, color: AppColors.muted))),
-              ]),
-            ),
-            _formError(_lFormError),
-            const SizedBox(height: 10),
-            ElevatedButton(
-                onPressed: _lPreparing ? null : _addLecture,
-                child: _lPreparing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : Text(t('btn_add'))),
-            const SizedBox(height: 6),
-            Text(t('upload_background_hint'),
-                textAlign: TextAlign.center,
-                style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
-          ],
+        const SizedBox(height: 6),
+        Text(t('btn_add'),
+            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        TextField(
+            controller: _lTitle,
+            decoration: InputDecoration(labelText: t('label_lecture_title'))),
+        const SizedBox(height: 12),
+        FilePickBox(
+          file: _lVideoFile,
+          video: true,
+          emptyLabel: t('label_video_file'),
+          onPick: () async {
+            final picked = await SafePicker.video();
+            if (picked != null) setState(() => _lVideoFile = picked);
+          },
+          onRemove: () => setState(() => _lVideoFile = null),
         ),
-        const SizedBox(height: 8),
-        if (_activeCourse != null)
-          TeacherCourseFiles(
-              key: ValueKey(_activeCourse!['id']),
-              courseId: _activeCourse!['id'] as String,
-              lectures: _activeLectures),
+        const SizedBox(height: 4),
+        InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => setState(() => _lIsFree = !_lIsFree),
+          child: Row(children: [
+            Checkbox(
+                value: _lIsFree,
+                onChanged: (v) => setState(() => _lIsFree = v ?? false)),
+            Expanded(
+                child: Text(t('label_free_lecture'),
+                    style: AppFonts.body(size: 13, color: AppColors.muted))),
+          ]),
+        ),
+        _formError(_lFormError),
+        const SizedBox(height: 10),
+        ElevatedButton(
+            onPressed: _lPreparing ? null : _addLecture,
+            child: _lPreparing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : Text(t('btn_add'))),
+        const SizedBox(height: 6),
+        Text(t('upload_background_hint'),
+            textAlign: TextAlign.center,
+            style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
       ],
     );
   }
@@ -2202,7 +2338,6 @@ class _CourseCard extends StatelessWidget {
   final Map<String, dynamic> course;
   final String Function(String) t;
   final VoidCallback? onEdit;
-  final VoidCallback onCurriculum;
   final VoidCallback onCodes;
   final VoidCallback onStudents;
   final VoidCallback onReviews;
@@ -2213,7 +2348,6 @@ class _CourseCard extends StatelessWidget {
     required this.course,
     required this.t,
     required this.onEdit,
-    required this.onCurriculum,
     required this.onCodes,
     required this.onStudents,
     required this.onReviews,
@@ -2258,8 +2392,6 @@ class _CourseCard extends StatelessWidget {
               primary: true, icon: ArcIcon.check, onPressed: onSubmit),
         if (onEdit != null)
           DashButton(t('btn_edit'), icon: ArcIcon.edit, onPressed: onEdit),
-        DashButton(t('btn_curriculum'),
-            icon: ArcIcon.video, onPressed: onCurriculum),
         DashButton(t('btn_students'), icon: ArcIcon.users, onPressed: onStudents),
         if (course['status'] == 'published')
           DashButton(t('btn_reviews'), icon: ArcIcon.review, onPressed: onReviews),

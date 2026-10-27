@@ -37,6 +37,7 @@ import '../widgets/glass_scaffold.dart';
 import 'auth_screen.dart';
 import 'course_files.dart';
 import 'teacher_profile_screen.dart';
+import 'teacher_screen.dart';
 import 'video_player_screen.dart';
 
 /// Port of renderPage() + openEnroll()/submitFree()/submitPay() in course.html.
@@ -419,6 +420,18 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
       child: GlassScaffold(
           appBar: AppBar(actions: [
+            if (_course != null &&
+                _course!.teacherId != null &&
+                _course!.teacherId == SupabaseService.instance.currentUser?.id)
+              TextButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => TeacherScreen(editCourseId: _course!.id)));
+                  if (mounted) _load();
+                },
+                icon: ArcIconView(ArcIcon.edit, size: 18, color: AppColors.red),
+                label: Text(_t('btn_edit')),
+              ),
             if (_course != null && SupabaseService.instance.currentUser != null)
               IconButton(
                 tooltip: _t('report_tooltip'),
