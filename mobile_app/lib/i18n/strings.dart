@@ -839,6 +839,8 @@ class AppStrings extends ChangeNotifier {
     'cat_security_sub': 'محاولات الدخول وتصوير الشاشة والأجهزة',
     'sec_login_attempts': 'محاولات تسجيل الدخول',
     'sec_screen_capture': 'تصوير الشاشة',
+    'settings_rate': 'قيّم التطبيق',
+    'settings_rate_sub': 'رأيك يساعدنا على التحسّن',
     'settings_teacher_invite': 'رمز دعوة مدرّس',
     'settings_teacher_invite_sub': 'لديك رمز من الإدارة؟ فعّل حساب المدرّس',
     'teacher_invite_activate': 'تفعيل',

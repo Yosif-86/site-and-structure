@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:in_app_review/in_app_review.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../i18n/strings.dart';
@@ -31,6 +32,19 @@ class SettingsScreen extends StatelessWidget {
 
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
+
+  /// The system's own rating window, inside the app. Falls back to the store
+  /// page where the window can't be shown.
+  static Future<void> _rateApp() async {
+    final review = InAppReview.instance;
+    try {
+      if (await review.isAvailable()) {
+        await review.requestReview();
+      } else {
+        await review.openStoreListing(appStoreId: '6822579758');
+      }
+    } catch (_) {}
   }
 
   // A second confirm while the first delete is running is ignored.
@@ -155,6 +169,17 @@ class SettingsScreen extends StatelessWidget {
                 ));
               },
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        FadeSlideIn(
+          delayMs: 165,
+          child: _SettingsTile(
+            icon: ArcIcon.review,
+            accent: AppColors.red,
+            title: t('settings_rate'),
+            subtitle: t('settings_rate_sub'),
+            onTap: _rateApp,
           ),
         ),
         const SizedBox(height: 12),
