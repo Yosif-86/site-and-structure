@@ -502,17 +502,10 @@
     return id;
   }
 
+  // The website only sells courses; videos play in the app. Signing in here
+  // never claims a device slot or replaces the app's session, so a student can
+  // sign in from any browser or device. The one-device rule lives in the app.
   async function checkDeviceAndClaimSession(userId, accessToken){
-    const deviceId = getDeviceId();
-    const res = await fetch('/api/check-device', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
-      body: JSON.stringify({ deviceId, deviceLabel: navigator.userAgent })
-    });
-    if(!res.ok) return false;
-    const result = await res.json();
-    if(!result.allowed) return false;
-    localStorage.setItem('ss_session_token', result.sessionToken);
     return true;
   }
 
