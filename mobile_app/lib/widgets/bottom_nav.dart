@@ -24,14 +24,13 @@ class BottomNavItem {
 /// duotone orange with a small glowing bar beneath), and a raised orange
 /// rounded-square button in the middle opens Explore.
 ///
-/// [items] must have an even count; the center button is placed between
-/// the two halves.
+/// The center button is placed between the two halves; with an odd count
+/// the first half gets the extra tab.
 class FloatingBottomNav extends StatelessWidget {
   final List<BottomNavItem> items;
   final BottomNavItem center;
 
-  const FloatingBottomNav({super.key, required this.items, required this.center})
-      : assert(items.length % 2 == 0);
+  const FloatingBottomNav({super.key, required this.items, required this.center});
 
   static const _barHeight = 70.0;
   static const _gap = 74.0;
@@ -46,7 +45,7 @@ class FloatingBottomNav extends StatelessWidget {
     // safe-area behavior SafeArea would have given.
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final dark = AppTheme.instance.isDark;
-    final half = items.length ~/ 2;
+    final half = (items.length + 1) ~/ 2;
     final activeIndex = items.indexWhere((i) => i.active);
 
     return Padding(

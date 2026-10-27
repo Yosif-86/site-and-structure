@@ -55,12 +55,17 @@ class TeacherScreen extends StatefulWidget {
   /// button); leaving the editor closes the screen.
   final String? editCourseId;
 
+  /// With [editCourseId]: scroll the course page down to the curriculum card
+  /// (the add-lecture shortcut).
+  final bool focusCurriculum;
+
   const TeacherScreen(
       {super.key,
       this.openPaymentInfo = false,
       this.mandatoryPayment = false,
       this.openView,
-      this.editCourseId});
+      this.editCourseId,
+      this.focusCurriculum = false});
 
   @override
   State<TeacherScreen> createState() => _TeacherScreenState();
@@ -347,6 +352,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// Bumped when a point row is added or removed so the open editor sheet
   /// rebuilds.
   final ValueNotifier<int> _pointsTick = ValueNotifier(0);
+  final GlobalKey _curriculumKey = GlobalKey();
   XFile? _cThumbFile;
   // Current cover: the pending edit's if one is waiting, else the live one.
   String? _cThumbUrl;
@@ -589,6 +595,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _lFormError = null;
     setState(() => _view = _TView.courseEdit);
     _loadLectures();
+    if (widget.focusCurriculum && widget.editCourseId == c['id']) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = _curriculumKey.currentContext;
+        if (ctx != null) {
+          Scrollable.ensureVisible(ctx,
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOut);
+        }
+      });
+    }
   }
 
   /// Leaves the course editor: back to the course list, or out of the screen
@@ -1867,8 +1883,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
         .map((c) => c.text.trim())
         .where((x) => x.isNotEmpty)
         .toList();
-    return ListView(
+    // A plain scroll view (not a lazy list) so the curriculum card exists
+    // and can be scrolled to as soon as the page opens.
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         DashFormPanel(
           title: _activeCourse != null ? t('edit_course') : t('new_course_title'),
@@ -2001,6 +2021,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               lectures: _activeLectures),
         ],
       ],
+      ),
     );
   }
 
@@ -2008,6 +2029,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// the add-lecture form.
   Widget _curriculumCard(String Function(String) t) {
     return DashFormPanel(
+      key: _curriculumKey,
       title: '${t('curriculum')} · ${_activeCourse?['title'] ?? ''}',
       icon: ArcIcon.video,
       children: [
