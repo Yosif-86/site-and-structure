@@ -186,7 +186,7 @@ class AppStrings extends ChangeNotifier {
     'toggle_theme': 'تبديل المظهر',
     'dashboard_unavailable': 'لا توجد لوحة تحكم متاحة لحسابك.',
     'nav_profile': 'حسابي',
-    'nav_teach': 'التدريس',
+    'nav_teach': 'تعديل الكورس',
     'teach_add_lecture': 'إضافة درس',
     'students_courses': 'الطلاب والدورات',
     'flagged_logins': 'نشاط مشبوه',
