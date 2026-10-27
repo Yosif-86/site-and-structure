@@ -23,6 +23,7 @@ import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
 import '../widgets/course_reviews_sheet.dart';
 import '../widgets/dashboard_kit.dart';
+import '../widgets/edge_swipe_back.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/glass_scaffold.dart';
 import '../widgets/payment_requests.dart';
@@ -1162,6 +1163,27 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// confirming.
   Future<bool> _confirmCancelUpload() async => true;
 
+  /// Back from a sub-view: one level up, or out of the screen. Used by the
+  /// system back button and the edge swipe.
+  Future<void> _handleBack() async {
+    if (widget.mandatoryPayment) return;
+    if (!await _confirmCancelUpload() || !mounted) return;
+    if (_view == _TView.courseEdit && widget.editCourseId != null) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (_view != _TView.overview && !widget.openPaymentInfo) {
+      setState(() => _view = (_view == _TView.curriculum ||
+              _view == _TView.codes ||
+              _view == _TView.courseStudents ||
+              _view == _TView.courseEdit)
+          ? _TView.courses
+          : _TView.overview);
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = AppStrings.instance.t;
@@ -1205,32 +1227,23 @@ class _TeacherScreenState extends State<TeacherScreen> {
               ? t('settings_payment_info')
               : t('teacher_dashboard')),
         ),
-        body: PopScope(
-          // System back: blocked during the mandatory payment step, and
-          // asks before abandoning a lecture upload.
-          // Inside a sub-view, back steps up one level (like the AppBar
-          // arrow) instead of closing the whole dashboard.
-          canPop: !widget.mandatoryPayment &&
-              (_view == _TView.overview || widget.openPaymentInfo),
-          onPopInvokedWithResult: (didPop, _) async {
-            if (didPop || widget.mandatoryPayment) return;
-            if (!await _confirmCancelUpload() || !mounted) return;
-            if (_view == _TView.courseEdit && widget.editCourseId != null) {
-              Navigator.of(context).pop();
-              return;
-            }
-            if (_view != _TView.overview && !widget.openPaymentInfo) {
-              setState(() => _view = (_view == _TView.curriculum ||
-                      _view == _TView.codes ||
-                                _view == _TView.courseStudents ||
-                      _view == _TView.courseEdit)
-                  ? _TView.courses
-                  : _TView.overview);
-            } else {
-              Navigator.of(context).pop();
-            }
-          },
-          child: _buildBody(t),
+        body: EdgeSwipeBack(
+          // The route's own swipe-back is off in a sub-view (PopScope below),
+          // so the edge swipe does the same as the top arrow.
+          enabled: !widget.mandatoryPayment &&
+              !(_view == _TView.overview || widget.openPaymentInfo),
+          onBack: _handleBack,
+          child: PopScope(
+            // System back: blocked during the mandatory payment step.
+            // Inside a sub-view, back steps up one level (like the AppBar
+            // arrow) instead of closing the whole dashboard.
+            canPop: !widget.mandatoryPayment &&
+                (_view == _TView.overview || widget.openPaymentInfo),
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _handleBack();
+            },
+            child: _buildBody(t),
+          ),
         ),
       ),
     );

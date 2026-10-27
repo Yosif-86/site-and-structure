@@ -23,6 +23,7 @@ import '../widgets/fade_slide_in.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/course_card.dart';
 import '../widgets/dashboard_kit.dart';
+import '../widgets/edge_swipe_back.dart';
 import '../widgets/file_preview.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
@@ -1155,12 +1156,16 @@ class _AdminScreenState extends State<AdminScreen> {
           title:
               Text(_view == _View.dashboard ? t('nav_admin') : _viewTitle(t)),
         ),
-        body: PopScope(
-          canPop: _view == _View.dashboard,
-          onPopInvokedWithResult: (didPop, _) {
-            if (!didPop) _back();
-          },
-          child: _buildBody(t),
+        body: EdgeSwipeBack(
+          enabled: _view != _View.dashboard,
+          onBack: _back,
+          child: PopScope(
+            canPop: _view == _View.dashboard,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop) _back();
+            },
+            child: _buildBody(t),
+          ),
         ),
       ),
     );
