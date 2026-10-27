@@ -7,7 +7,7 @@ import '../theme.dart';
 import '../widgets/arc_icons.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/glass_card.dart';
-import 'auth_screen.dart';
+import 'auth_screen.dart' show AuthScreen, InviteCodeFormatter;
 import 'info_screens.dart';
 import 'teacher_screen.dart';
 
@@ -20,8 +20,14 @@ class SettingsScreen extends StatelessWidget {
   final bool loggedIn;
   final bool isTeacher;
 
+  /// Called after a teacher invite code is accepted, so the app reloads the role.
+  final VoidCallback? onRoleChanged;
+
   const SettingsScreen(
-      {super.key, required this.loggedIn, required this.isTeacher});
+      {super.key,
+      required this.loggedIn,
+      required this.isTeacher,
+      this.onRoleChanged});
 
   void _push(BuildContext context, Widget screen) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
@@ -90,6 +96,26 @@ class SettingsScreen extends StatelessWidget {
               // / teacher_qi_qr_url — no second copy of that form.
               onTap: () =>
                   _push(context, const TeacherScreen(openPaymentInfo: true)),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        // Google / Apple sign-ups never see the invite field on the sign-up
+        // form, so a signed-in student redeems the code here.
+        if (loggedIn && !isTeacher) ...[
+          FadeSlideIn(
+            delayMs: 30,
+            child: _SettingsTile(
+              icon: ArcIcon.shield,
+              accent: AppColors.teal,
+              title: t('settings_teacher_invite'),
+              subtitle: t('settings_teacher_invite_sub'),
+              onTap: () async {
+                final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => const _TeacherInviteDialog());
+                if (ok == true) onRoleChanged?.call();
+              },
             ),
           ),
           const SizedBox(height: 12),
@@ -194,6 +220,96 @@ class SettingsScreen extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Asks for the invite code and redeems it for the signed-in account.
+class _TeacherInviteDialog extends StatefulWidget {
+  const _TeacherInviteDialog();
+
+  @override
+  State<_TeacherInviteDialog> createState() => _TeacherInviteDialogState();
+}
+
+class _TeacherInviteDialogState extends State<_TeacherInviteDialog> {
+  final _ctrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final t = AppStrings.instance.t;
+    final code = _ctrl.text.trim().toLowerCase();
+    if (code.isEmpty || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final res = await SupabaseService.instance.redeemTeacherInviteChecked(code);
+    if (!mounted) return;
+    if (res == true) {
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(t('teacher_invite_done'))));
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _error = t(res == false ? 'invite_invalid_title' : 'invite_check_failed');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return Directionality(
+      textDirection:
+          AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+      child: AlertDialog(
+        title: Text(t('settings_teacher_invite')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _ctrl,
+              enabled: !_busy,
+              autofocus: true,
+              keyboardType: TextInputType.visiblePassword,
+              textCapitalization: TextCapitalization.characters,
+              textDirection: TextDirection.ltr,
+              inputFormatters: [InviteCodeFormatter()],
+              decoration: InputDecoration(hintText: t('label_invite_code')),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!,
+                  style: TextStyle(color: AppColors.error, fontSize: 13)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+              child: Text(t('cancel'))),
+          TextButton(
+            onPressed: _busy ? null : _submit,
+            child: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Text(t('teacher_invite_activate')),
+          ),
+        ],
+      ),
     );
   }
 }

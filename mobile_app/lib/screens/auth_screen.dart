@@ -906,7 +906,7 @@ class _AuthScreenState extends State<AuthScreen>
                     // English keyboard; pasted text is cleaned by the formatter.
                     keyboardType: TextInputType.visiblePassword,
                     textCapitalization: TextCapitalization.characters,
-                    inputFormatters: [_InviteCodeFormatter()],
+                    inputFormatters: [InviteCodeFormatter()],
                     textDirection: TextDirection.ltr,
                     cursorColor: _glow,
                     style: AppFonts.body(size: 15, color: _ink),
@@ -1183,7 +1183,7 @@ class _Spinner extends StatelessWidget {
 /// digits become 0-9, and spaces, new lines and Arabic letters from a paste
 /// are dropped. Codes made before the short format are up to 36 characters
 /// with dashes, so dashes stay.
-class _InviteCodeFormatter extends TextInputFormatter {
+class InviteCodeFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
       TextEditingValue oldValue, TextEditingValue newValue) {

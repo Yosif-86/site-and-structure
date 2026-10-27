@@ -371,7 +371,9 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
                         _swipeTransition(
                             3,
                             SettingsScreen(
-                                loggedIn: loggedIn, isTeacher: _isTeacher)),
+                                loggedIn: loggedIn,
+                                isTeacher: _isTeacher,
+                                onRoleChanged: _loadProfile)),
                       ],
                     ),
             ),

@@ -991,6 +991,19 @@ class SupabaseService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Redeems a code for an account that already exists (Google / Apple
+  /// sign-ups have no invite field). true = now a teacher, false = dead code,
+  /// null = the call itself failed (offline, or too many wrong tries).
+  Future<bool?> redeemTeacherInviteChecked(String token) async {
+    try {
+      final res = await client
+          .rpc('redeem_teacher_invite', params: {'p_token': token});
+      return res == true;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> redeemTeacherInvite(String token) async {
     try {
       await client.rpc('redeem_teacher_invite', params: {'p_token': token});
