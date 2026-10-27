@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../i18n/strings.dart';
+import '../services/payment_rules.dart';
 import '../models/course.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
@@ -44,6 +45,8 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
   Map<String, dynamic>? _public;
   Map<String, dynamic>? _private; // admin only
   String? _signIn; // admin only: google / apple / email
+  final _rateCtrl = TextEditingController(); // admin only: platform share, %
+  bool _rateSaving = false;
   List<Course> _courses = [];
   bool _loading = true;
   String? _error;
@@ -84,7 +87,7 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         priv = await sb
             .from('profiles')
             .select(
-                'full_name, phone, teacher_zaincash_phone, teacher_qi_account_number, direct_payment_allowed, created_at')
+                'full_name, phone, teacher_zaincash_phone, teacher_qi_account_number, direct_payment_allowed, created_at, platform_rate')
             .eq('id', widget.teacherId)
             .maybeSingle();
       }
@@ -95,6 +98,10 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             .toList();
         _public = pub;
         _private = priv;
+        if (priv != null) {
+          _rateCtrl.text = PaymentRules.pct(
+              PaymentRules.rateFrom(priv['platform_rate']));
+        }
         _signIn = signIn;
         _loading = false;
       });
@@ -104,6 +111,36 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
         _loading = false;
         _error = ErrorReporter.userMessage(e, page: 'teacher_profile');
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _rateCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveRate() async {
+    if (_rateSaving) return;
+    final v = double.tryParse(_rateCtrl.text.trim().replaceAll(',', '.'));
+    if (v == null || v < 0 || v > PaymentRules.maxPlatformPercent) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_t('err_platform_rate'))));
+      return;
+    }
+    setState(() => _rateSaving = true);
+    try {
+      await SupabaseService.instance.client.rpc('admin_set_platform_rate',
+          params: {'p_teacher': widget.teacherId, 'p_rate': v});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_t('platform_rate_saved'))));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ErrorReporter.userMessage(e, page: 'teacher_profile'))));
+    } finally {
+      if (mounted) setState(() => _rateSaving = false);
     }
   }
 
@@ -209,6 +246,32 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
             meta: [
               '${_t('direct_payment')}: ${_private!['direct_payment_allowed'] == true ? _t('yes') : _t('no')}',
               if (signInLabel(_t, _signIn) case final s?) '${_t('sp_signin')}: $s',
+            ],
+          ),
+          DashSection(_t('platform_rate_title')),
+          DashCard(
+            leading: DashIconBadge(icon: ArcIcon.money, accent: AppColors.red),
+            title: _t('platform_rate_hint'),
+            titleStyle: AppFonts.body(size: 12.5, color: AppColors.muted),
+            extra: [
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: _rateCtrl,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    textDirection: TextDirection.ltr,
+                    decoration: const InputDecoration(
+                        isDense: true, suffixText: '%'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                DashButton(_t('save'),
+                    primary: true,
+                    icon: ArcIcon.check,
+                    onPressed: _rateSaving ? null : _saveRate),
+              ]),
             ],
           ),
           DashSection(_t('payout_accounts')),

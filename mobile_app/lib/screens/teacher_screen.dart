@@ -354,6 +354,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// rebuilds.
   final ValueNotifier<int> _pointsTick = ValueNotifier(0);
   final GlobalKey _curriculumKey = GlobalKey();
+
+  /// This teacher's platform share as a fraction; set by the admin.
+  double _myRate = PaymentRules.platformRate;
   XFile? _cThumbFile;
   // Current cover: the pending edit's if one is waiting, else the live one.
   String? _cThumbUrl;
@@ -958,11 +961,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       return;
     }
     final price = PaymentRules.parsePrice(_activeCourse?['price']);
+    final maxShare = PaymentRules.maxDiscountFor(_myRate);
     final tooBig = _dType == 'percent'
-        ? value > PaymentRules.maxDiscountRate * 100
-        : price > 0 && value > price * PaymentRules.maxDiscountRate;
+        ? value > maxShare * 100
+        : price > 0 && value > price * maxShare;
     if (tooBig) {
-      setState(() => _dFormError = t('err_discount_too_large'));
+      setState(() => _dFormError = _capText(t('err_discount_too_large')));
       return;
     }
     final maxUsesText = _dMaxUses.text.trim();
@@ -1035,11 +1039,12 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final prof = await sb
           .from('profiles')
           .select(
-              'teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url')
+              'teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, platform_rate')
           .eq('id', user.id)
           .maybeSingle();
       if (prof == null || !mounted) return;
       setState(() {
+        _myRate = PaymentRules.rateFrom(prof['platform_rate']);
         _pZaincashPhone.text = prof['teacher_zaincash_phone'] as String? ?? '';
         _pQiAccount.text = prof['teacher_qi_account_number'] as String? ?? '';
         _pQiQrUrl = prof['teacher_qi_qr_url'] as String?;
@@ -1546,16 +1551,24 @@ class _TeacherScreenState extends State<TeacherScreen> {
     );
   }
 
+  /// Fills {max}, {cut}, {mine} and {pct} in a rate-dependent message.
+  String _capText(String s) => s
+      .replaceAll('{max}', PaymentRules.pct(PaymentRules.maxDiscountFor(_myRate)))
+      .replaceAll('{cut}', PaymentRules.pct(_myRate))
+      .replaceAll('{mine}', PaymentRules.pct(1 - _myRate));
+
   /// Totals, then each course with every payment: date, student, price,
   /// discount, amount paid and this teacher's share.
   Widget _buildEarnings(String Function(String) t) {
     final active = _teacherRows.where((r) => r['status'] == 'active').toList();
-    // Share per enrollment: the platform keeps 20% of the full price (never
+    // Share per enrollment: the platform keeps this teacher's share of the full price (never
     // more than was paid); a direct-payment course is the teacher's in full.
     ({int platform, int mine}) share(Map<String, dynamic> r) {
       final a = _amountsOf(r);
       if (r['pay_to_teacher'] == true) return (platform: 0, mine: a.paid);
-      final cut = PaymentRules.split(price: a.price, paid: a.paid).platform;
+      final cut = PaymentRules.split(
+              price: a.price, paid: a.paid, rate: _myRate)
+          .platform;
       final platform = cut > a.paid ? a.paid : cut;
       return (platform: platform, mine: a.paid - platform);
     }
@@ -1983,20 +1996,23 @@ class _TeacherScreenState extends State<TeacherScreen> {
               builder: (context, v, _) {
                 final price = PaymentRules.parsePrice(v.text);
                 if (price <= 0) return const SizedBox.shrink();
-                final s = PaymentRules.split(price: price, paid: price);
+                final s = PaymentRules.split(
+                    price: price, paid: price, rate: _myRate);
                 return Padding(
                   padding: const EdgeInsets.only(top: 12),
                   child: Row(children: [
                     Expanded(
                       child: _SplitChip(
-                          label: t('split_platform'),
+                          label: _capText(t('split_platform'))
+                              .replaceAll('{pct}', PaymentRules.pct(_myRate)),
                           value: s.platform,
                           color: AppColors.muted),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _SplitChip(
-                          label: t('split_yours'),
+                          label: t('split_yours').replaceAll(
+                              '{pct}', PaymentRules.pct(1 - _myRate)),
                           value: s.teacher,
                           color: AppColors.teal),
                     ),
@@ -2217,7 +2233,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           title: t('create_code'),
           icon: ArcIcon.tag,
           children: [
-            Text(t('discount_cap_hint'),
+            Text(_capText(t('discount_cap_hint')),
                 style: AppFonts.body(size: 12, color: AppColors.muted)),
             const SizedBox(height: 12),
             TextField(

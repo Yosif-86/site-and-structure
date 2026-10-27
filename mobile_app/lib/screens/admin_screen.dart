@@ -232,7 +232,7 @@ class _AdminScreenState extends State<AdminScreen> {
         sb.from('courses').select(
             'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
         sb.from('profiles').select(
-            'id, full_name, phone, public_id, created_at, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed'),
+            'id, full_name, phone, public_id, created_at, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed, platform_rate'),
         _loadEmails(),
         sb.from('enrollments').select('*'),
         sb
@@ -1308,10 +1308,14 @@ class _AdminScreenState extends State<AdminScreen> {
     return time ? s.substring(0, 16) : s.split(' ').first;
   }
 
+  /// A teacher's platform share as a fraction (their own rate, else 15%).
+  double _rateOf(dynamic teacherId) =>
+      PaymentRules.rateFrom(_profileByUser[teacherId]?['platform_rate']);
+
   Widget _buildDashboard(String Function(String) t, {_View? category}) {
-    // The platform's own 20%, computed exactly like the revenue screen it
-    // opens (same courses, real amounts paid). Direct-payment courses earn
-    // the platform nothing.
+    // The platform's own cut per teacher, computed exactly like the revenue
+    // screen it opens (same courses, real amounts paid). Direct-payment
+    // courses earn the platform nothing.
     final revenue = _activeEnrollments.fold<int>(0, (sum, e) {
       final c = _courseBySlug[e['course_slug']];
       if (c == null ||
@@ -1321,7 +1325,9 @@ class _AdminScreenState extends State<AdminScreen> {
         return sum;
       }
       final r = _paidFor(e, c);
-      final cut = PaymentRules.split(price: r.price, paid: r.paid).platform;
+      final cut = PaymentRules.split(
+              price: r.price, paid: r.paid, rate: _rateOf(c['teacher_id']))
+          .platform;
       return sum + (cut > r.paid ? r.paid : cut);
     });
     final now = DateTime.now();
@@ -1692,7 +1698,9 @@ class _AdminScreenState extends State<AdminScreen> {
                         fallbackName: name,
                         adminView: true,
                         email: _emailByUser[id],
-                        onDelete: _deleteCallback(id))))
+                        onDelete: _deleteCallback(id)))).then((_) {
+                    if (mounted) _loadAll();
+                  })
                 : _openStudent(id, name),
           );
         })),
@@ -1724,7 +1732,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 fallbackName: p['full_name'] as String?,
                 adminView: true,
                 email: _emailByUser[id],
-                onDelete: _deleteCallback(id)))),
+                onDelete: _deleteCallback(id)))).then((_) {
+          if (mounted) _loadAll();
+        }),
         actions: [
           if (_warningsButton(id, p['full_name'] as String?, t) case final b?)
             b,
@@ -1942,7 +1952,10 @@ class _AdminScreenState extends State<AdminScreen> {
           if (r.code != null) codes.add(r.code!);
         }
         final s = PaymentRules.split(
-            price: r.price, paid: r.paid, directToTeacher: direct);
+            price: r.price,
+            paid: r.paid,
+            directToTeacher: direct,
+            rate: _rateOf(c['teacher_id']));
         paidSum += r.paid;
         // Never book more for the platform than was actually collected.
         final cut = s.platform > r.paid ? r.paid : s.platform;
