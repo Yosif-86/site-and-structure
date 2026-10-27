@@ -322,6 +322,11 @@ class _AuthScreenState extends State<AuthScreen>
       return;
     }
     if (result.needsEmailOtp) {
+      // iPad: the Google page may still be closing; wait for it so the code
+      // screen is not pushed underneath it.
+      await SupabaseService.instance.closeAuthBrowser();
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
       final verified = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => VerifyLoginOtpScreen(email: result.email!),

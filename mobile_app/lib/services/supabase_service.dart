@@ -524,7 +524,9 @@ class SupabaseService extends ChangeNotifier {
   /// template, which shows only {{ .Token }}). Never creates an account.
   Future<String?> _sendLoginEmailCode(String email) async {
     try {
-      await client.auth.signInWithOtp(email: email, shouldCreateUser: false);
+      await client.auth
+          .signInWithOtp(email: email, shouldCreateUser: false)
+          .timeout(const Duration(seconds: 25));
       return null;
     } on AuthException catch (e) {
       if (e.statusCode == '429') return 'err_otp_wait';
@@ -660,6 +662,16 @@ class SupabaseService extends ChangeNotifier {
     if (_oauthInApp) unawaited(closeInAppWebView().catchError((_) {}));
   }
 
+  /// Closes the in-app Google page again once the auth screen has its result.
+  /// On iPad the page can still be on screen after the first close and hides
+  /// the screen pushed underneath it (the email-code step).
+  Future<void> closeAuthBrowser() async {
+    if (!_oauthInApp) return;
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
+  }
+
   /// Call once at app start (see main.dart) so a Google sign-in started from
   /// anywhere has somewhere to report back to once the deep link lands.
   void listenForOAuthCompletion() {
@@ -710,7 +722,10 @@ class SupabaseService extends ChangeNotifier {
           // a teacher/admin could skip it just by using Google instead.
           final email = user.email ?? '';
           if (email.isNotEmpty && await _requiresLoginEmailOtp(user.id)) {
-            await client.auth.signOut();
+            await client.auth
+                .signOut()
+                .timeout(const Duration(seconds: 10))
+                .catchError((_) {});
             final err = await _sendLoginEmailCode(email);
             if (err != null) {
               completer.complete(LoginResult(error: err));
