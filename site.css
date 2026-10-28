@@ -158,3 +158,13 @@ footer{padding:36px 0 48px;}
 [hidden]{display:none !important;}
 :focus-visible{outline:2px solid var(--red); outline-offset:3px; border-radius:6px;}
 @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important; scroll-behavior:auto !important;} }
+
+/* Sign-in page: Google and Apple buttons in the app's sign-in style. */
+.or{display:flex; align-items:center; gap:12px; color:var(--muted2); font-size:13px; margin:18px 0 8px;}
+.or::before,.or::after{content:""; flex:1; height:1px; background:var(--line);}
+.oauth-btn{position:relative; display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:46px; margin-top:10px;
+  border-radius:999px; border:1px solid var(--line); background:rgba(0,0,0,.28); color:var(--text);
+  font-family:'Alexandria', sans-serif; font-size:15px; font-weight:600; cursor:pointer; overflow:hidden;}
+.oauth-btn svg{width:20px; height:20px; flex:none;}
+.oauth-btn.apple{background:#fff; color:#000; border-color:#fff;}
+.oauth-btn .gis{position:absolute; inset:0; opacity:.01; display:flex; align-items:center; justify-content:center; transform:scaleY(1.25);}

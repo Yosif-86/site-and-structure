@@ -113,6 +113,8 @@
   }
 
   function showCodeStep(email){
+    const oauth = document.getElementById('oauthBlock');
+    if(oauth) oauth.hidden = true;
     codeEmail = email;
     passField.hidden = true;
     codeField.hidden = false;
@@ -194,6 +196,7 @@
     s.src = 'https://accounts.google.com/gsi/client';
     s.async = true;
     s.onload = async () => {
+      window.__gisReady = true;
       // Google puts sha256(nonce) in the token; Supabase checks it against raw.
       const hash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw)));
       google.accounts.id.initialize({
@@ -217,10 +220,20 @@
   // Supabase first (see the note in the handoff). Off until then. ----
   const APPLE_WEB_ENABLED = false;
   const appleBtn = document.getElementById('appleBtn');
-  if(appleBtn && APPLE_WEB_ENABLED){
-    appleBtn.hidden = false;
+  if(appleBtn){
     appleBtn.addEventListener('click', () => {
+      if(!APPLE_WEB_ENABLED){ show('تسجيل الدخول بـ Apple على الموقع غير مفعّل بعد.'); return; }
       sb.auth.signInWithOAuth({ provider: 'apple', options: {
+        redirectTo: location.origin + '/login.html?oauth=1' + (wanted ? '&next=' + encodeURIComponent(wanted) : '')
+      } });
+    });
+  }
+  // If Google's popup script cannot load, the same button uses the redirect.
+  const googleFace = document.getElementById('googleFace');
+  if(googleFace){
+    googleFace.addEventListener('click', () => {
+      if(window.__gisReady) return;
+      sb.auth.signInWithOAuth({ provider: 'google', options: {
         redirectTo: location.origin + '/login.html?oauth=1' + (wanted ? '&next=' + encodeURIComponent(wanted) : '')
       } });
     });
