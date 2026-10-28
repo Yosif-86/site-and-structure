@@ -6,6 +6,7 @@ class Lecture {
   final bool isFree;
   final int orderIndex;
   final int? durationSeconds;
+  final String? chapterId;
 
   Lecture({
     required this.id,
@@ -15,6 +16,7 @@ class Lecture {
     required this.isFree,
     required this.orderIndex,
     this.durationSeconds,
+    this.chapterId,
   });
 
   factory Lecture.fromJson(Map<String, dynamic> json) => Lecture(
@@ -25,7 +27,27 @@ class Lecture {
         isFree: json['is_free'] as bool? ?? false,
         orderIndex: json['order_index'] as int? ?? 0,
         durationSeconds: json['duration_seconds'] as int?,
+        chapterId: json['chapter_id'] as String?,
       );
 
   String localizedTitle(bool ar) => (ar && titleAr != null && titleAr!.isNotEmpty) ? titleAr! : title;
+}
+
+/// A named group of lectures inside a course (course_chapters row).
+class CourseChapter {
+  final String id;
+  final String title;
+  final int orderIndex;
+
+  CourseChapter({
+    required this.id,
+    required this.title,
+    required this.orderIndex,
+  });
+
+  factory CourseChapter.fromJson(Map<String, dynamic> json) => CourseChapter(
+        id: json['id'] as String,
+        title: json['title'] as String? ?? '',
+        orderIndex: (json['order_index'] as num?)?.toInt() ?? 0,
+      );
 }

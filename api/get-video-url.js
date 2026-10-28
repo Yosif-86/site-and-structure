@@ -114,11 +114,14 @@ module.exports = async (req, res) => {
   if (!lecture.is_free && !isPreview && profile.is_reviewer !== true) {
     const { data: course } = await admin
       .from('courses')
-      .select('slug')
+      .select('slug, teacher_id')
       .eq('id', lecture.course_id)
       .maybeSingle();
 
-    const { data: enrollment } = await admin
+    // A teacher watches the lectures of their own course without enrolling.
+    const isOwner = !!course?.teacher_id && course.teacher_id === userId;
+
+    const { data: enrollment } = isOwner ? { data: true } : await admin
       .from('enrollments')
       .select('status')
       .eq('user_id', userId)

@@ -25,6 +25,7 @@ import '../widgets/course_reviews_sheet.dart';
 import '../widgets/dashboard_kit.dart';
 import '../widgets/edge_swipe_back.dart';
 import '../widgets/file_preview.dart';
+import '../widgets/glass_card.dart';
 import '../widgets/glass_scaffold.dart';
 import '../widgets/payment_requests.dart';
 import '../widgets/proof_viewer.dart';
@@ -374,6 +375,9 @@ class _TeacherScreenState extends State<TeacherScreen> {
   final _lTitle = TextEditingController();
   XFile? _lVideoFile;
   bool _lIsFree = false;
+  // Chapters of the open course and the one the next upload goes into.
+  List<Map<String, dynamic>> _activeChapters = [];
+  String? _lChapterId;
   String? _lFormError;
   // Reading the picked video's length before handing it to the uploader.
   bool _lPreparing = false;
@@ -779,9 +783,148 @@ class _TeacherScreenState extends State<TeacherScreen> {
           .eq('course_id', _activeCourse!['id'])
           .order('order_index')
           .order('created_at');
+      var chapters = <Map<String, dynamic>>[];
+      try {
+        final rows = await SupabaseService.instance.client
+            .from('course_chapters')
+            .select('*')
+            .eq('course_id', _activeCourse!['id'])
+            .order('order_index')
+            .order('created_at');
+        chapters = (rows as List).cast<Map<String, dynamic>>();
+      } catch (_) {
+        // Chapters not set up yet: the course just has none.
+      }
       if (!mounted) return;
-      setState(
-          () => _activeLectures = (data as List).cast<Map<String, dynamic>>());
+      setState(() {
+        _activeLectures = (data as List).cast<Map<String, dynamic>>();
+        _activeChapters = chapters;
+        if (!chapters.any((c) => c['id'] == _lChapterId)) _lChapterId = null;
+      });
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
+
+  // ---- Chapters ----
+
+  /// A one-field dialog; null when cancelled or left empty.
+  Future<String?> _askName(String label, {String initial = ''}) async {
+    final t = AppStrings.instance.t;
+    final ctrl = TextEditingController(text: initial);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 120,
+            decoration: InputDecoration(labelText: label)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(t('cancel'))),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+              child: Text(t('save'))),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return (result == null || result.isEmpty) ? null : result;
+  }
+
+  /// Asks for a name and adds the chapter at the end; returns its id.
+  Future<String?> _createChapter() async {
+    final t = AppStrings.instance.t;
+    final name = await _askName(t('chapter_name_label'));
+    if (name == null) return null;
+    try {
+      final next = _activeChapters.isEmpty
+          ? 0
+          : _activeChapters
+                  .map((c) => (c['order_index'] as num?)?.toInt() ?? 0)
+                  .reduce((a, b) => a > b ? a : b) +
+              1;
+      final row = await SupabaseService.instance.client
+          .from('course_chapters')
+          .insert({
+            'course_id': _activeCourse!['id'],
+            'title': name,
+            'order_index': next,
+          })
+          .select()
+          .single();
+      await _loadLectures();
+      return row['id'] as String?;
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+      return null;
+    }
+  }
+
+  Future<void> _renameChapter(Map<String, dynamic> c) async {
+    final t = AppStrings.instance.t;
+    final name = await _askName(t('chapter_name_label'),
+        initial: c['title'] as String? ?? '');
+    if (name == null || name == c['title']) return;
+    try {
+      await SupabaseService.instance.client
+          .from('course_chapters')
+          .update({'title': name}).eq('id', c['id']);
+      await _loadLectures();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
+
+  Future<void> _deleteChapter(Map<String, dynamic> c) async {
+    final t = AppStrings.instance.t;
+    final ok = await _confirm(t('confirm_delete_chapter')
+        .replaceAll('{title}', Bidi.iso(c['title'] as String?)));
+    if (!ok) return;
+    try {
+      await SupabaseService.instance.client
+          .from('course_chapters')
+          .delete()
+          .eq('id', c['id']);
+      await _loadLectures();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
+
+  /// Picks a chapter (or none) for an existing lecture.
+  Future<void> _moveToChapter(Map<String, dynamic> l) async {
+    final t = AppStrings.instance.t;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => GlassSheet(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+              title: Text(t('chapter_none')),
+              trailing: l['chapter_id'] == null
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () => Navigator.of(ctx).pop('')),
+          for (final c in _activeChapters)
+            ListTile(
+                title: Text(c['title'] as String? ?? ''),
+                trailing: l['chapter_id'] == c['id']
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.of(ctx).pop(c['id'] as String)),
+        ]),
+      ),
+    );
+    if (picked == null) return;
+    try {
+      await SupabaseService.instance.client
+          .from('lectures')
+          .update({'chapter_id': picked.isEmpty ? null : picked}).eq(
+              'id', l['id']);
+      await _loadLectures();
     } catch (e) {
       _showError(ErrorReporter.userMessage(e, page: 'teacher'));
     }
@@ -846,6 +989,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       isFree: _lIsFree,
       durationSeconds: info.seconds,
       file: file,
+      chapterId: _lChapterId,
     ));
     setState(() {
       _lPreparing = false;
@@ -2117,6 +2261,31 @@ class _TeacherScreenState extends State<TeacherScreen> {
             _lectureRow(i, _activeLectures[i], t),
             const SizedBox(height: 10),
           ],
+        if (_activeChapters.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(t('chapters_title'),
+              style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          for (final c in _activeChapters) ...[
+            DashCard(
+              leading: DashIconBadge(icon: ArcIcon.lessons, accent: AppColors.red),
+              title: c['title'] as String? ?? '—',
+              titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
+              subtitle: t('chapter_count').replaceAll(
+                  '{n}',
+                  '${_activeLectures.where((l) => l['chapter_id'] == c['id']).length}'),
+              actions: [
+                DashButton(t('btn_rename'),
+                    onPressed: () => _renameChapter(c)),
+                DashButton(t('btn_delete'),
+                    danger: true,
+                    icon: ArcIcon.trash,
+                    onPressed: () => _deleteChapter(c)),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
         const SizedBox(height: 6),
         Text(t('btn_add'),
             style: AppFonts.body(size: 14, weight: FontWeight.w700)),
@@ -2124,6 +2293,31 @@ class _TeacherScreenState extends State<TeacherScreen> {
         TextField(
             controller: _lTitle,
             decoration: InputDecoration(labelText: t('label_lecture_title'))),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _lChapterId ?? '',
+          decoration: InputDecoration(labelText: t('label_chapter')),
+          items: [
+            DropdownMenuItem(value: '', child: Text(t('chapter_none'))),
+            for (final c in _activeChapters)
+              DropdownMenuItem(
+                  value: c['id'] as String,
+                  child: Text(c['title'] as String? ?? '',
+                      overflow: TextOverflow.ellipsis)),
+            DropdownMenuItem(
+                value: '__new',
+                child: Text(t('chapter_new'),
+                    style: TextStyle(color: AppColors.red))),
+          ],
+          onChanged: (v) async {
+            if (v == '__new') {
+              final id = await _createChapter();
+              if (mounted && id != null) setState(() => _lChapterId = id);
+              return;
+            }
+            setState(() => _lChapterId = (v == null || v.isEmpty) ? null : v);
+          },
+        ),
         const SizedBox(height: 12),
         FilePickBox(
           file: _lVideoFile,
@@ -2187,9 +2381,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
       trailing: StatusPill(
           live ? t('status_live') : t('lecture_pending_review'),
           tone: live ? StatusTone.good : StatusTone.warn),
-      meta: [if (l['is_free'] == true) t('free_tag')],
+      meta: [
+        if (l['is_free'] == true) t('free_tag'),
+        ..._activeChapters
+            .where((c) => c['id'] == l['chapter_id'])
+            .map((c) => c['title'] as String? ?? ''),
+      ],
       metaColor: AppColors.teal,
       actions: [
+        if (_activeChapters.isNotEmpty)
+          DashButton(t('btn_move_chapter'), onPressed: () => _moveToChapter(l)),
         if (i > 0)
           DashButton(t('btn_move_up'), onPressed: () => _moveLecture(i, -1)),
         if (i < _activeLectures.length - 1)

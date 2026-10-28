@@ -52,6 +52,9 @@ class CourseDetailScreen extends StatefulWidget {
 class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Course? _course;
   List<Lecture> _lectures = [];
+  List<CourseChapter> _chapters = [];
+  // Bumped after every load so an open chapter page repaints.
+  final _rev = ValueNotifier<int>(0);
   List<Map<String, dynamic>> _files = [];
   String? _enrollmentStatus; // 'active' | 'pending' | null
   /// Why the student's last payment for this course was rejected (shown
@@ -99,6 +102,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   @override
   void dispose() {
     _live.stop();
+    _rev.dispose();
     super.dispose();
   }
 
@@ -136,6 +140,20 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       final lectures = (lectureRows as List)
           .map((r) => Lecture.fromJson(r as Map<String, dynamic>))
           .toList();
+      var chapters = <CourseChapter>[];
+      try {
+        final chapterRows = await sb
+            .from('course_chapters')
+            .select('id, title, order_index')
+            .eq('course_id', course.id)
+            .order('order_index', ascending: true)
+            .order('created_at', ascending: true);
+        chapters = (chapterRows as List)
+            .map((r) => CourseChapter.fromJson(r as Map<String, dynamic>))
+            .toList();
+      } catch (_) {
+        // Chapters not set up yet: one flat list of lectures.
+      }
       var files = <Map<String, dynamic>>[];
       try {
         final fileRows = await sb
@@ -164,6 +182,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             .eq('course_slug', course.slug)
             .maybeSingle();
         status = enr?['status'] as String?;
+        // A teacher has their own course open without enrolling.
+        if (course.teacherId == user.id) status = 'active';
         // Store-review account: every course opens without an enrollment.
         if (status != 'active') {
           try {
@@ -244,6 +264,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       setState(() {
         _course = course;
         _lectures = lectures;
+        _chapters = chapters;
         _files = files;
         _applePrice = applePrice;
         _myRating = myRating;
@@ -255,6 +276,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _loading = false;
         _error = null;
       });
+      _rev.value++;
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -267,6 +289,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   String _t(String key) => AppStrings.instance.t(key);
 
   bool get _isActive => _enrollmentStatus == 'active';
+
+  bool get _isOwner =>
+      _course?.teacherId != null &&
+      _course!.teacherId == SupabaseService.instance.currentUser?.id;
 
   /// iPhone: buy this course with Apple In-App Purchase.
   Future<void> _buyWithApple() async {
@@ -448,6 +474,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final course = _course!;
     final teacher = course.localizedTeacherName(ar);
     final tag = course.localizedTagLabel(ar);
+    final desc = (course.localizedDescription(ar) ?? '').trim();
     final freeLecture = _lectures.where((l) => l.isFree).firstOrNull;
     final freeCount = _lectures.where((l) => l.isFree).length;
     // A lecture already in progress takes over the hero from the free
@@ -546,6 +573,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           child: _EnrollPanel(
             course: course,
             status: _enrollmentStatus,
+            owner: _isOwner,
             purchasesOn: PurchaseConfig.instance.enabled,
             appleIap: AppleIap.instance.available &&
                 AppleIap.productForPrice(course.price) != null,
@@ -615,6 +643,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             ),
           ),
         ),
+        if (desc.isNotEmpty || course.learningPoints.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          FadeSlideIn(
+            delayMs: 120,
+            child: _AboutCard(description: desc, points: course.learningPoints),
+          ),
+        ],
         const SizedBox(height: 18),
         // Only two tabs: Curriculum (shown first) and Files.
         _Tabs(
@@ -667,18 +702,89 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         ),
       ];
     }
-    return [
-      _CurriculumCard(
-        lectures: _orderedLectures(),
-        isActive: _isActive,
-        completedIds: _completedLectureIds,
-        progressByLecture: _progressByLecture,
-        continueWatchingId: _continueWatchingId,
-        onWatch: _watchLecture,
-        files: _files,
-        onOpenFiles: _openFiles,
+    if (_chapters.isEmpty) {
+      return [_curriculumCard(_orderedLectures(), bare: false)];
+    }
+    // Chapters in order; lectures with no chapter go last as one general group.
+    final known = {for (final c in _chapters) c.id};
+    final groups = <({String key, String title, List<Lecture> lectures})>[
+      for (final c in _chapters)
+        (
+          key: c.id,
+          title: c.title,
+          lectures: _lectures.where((l) => l.chapterId == c.id).toList()
+        ),
+      (
+        key: '_general',
+        title: _t('chapter_general'),
+        lectures: _lectures
+            .where((l) => l.chapterId == null || !known.contains(l.chapterId))
+            .toList()
       ),
+    ].where((g) => g.lectures.isNotEmpty).toList();
+    return [
+      for (var i = 0; i < groups.length; i++) ...[
+        if (i > 0) const SizedBox(height: 10),
+        _ChapterTile(
+          number: groups[i].key == '_general' ? null : i + 1,
+          title: groups[i].title,
+          subtitle: _t('chapter_count')
+              .replaceAll('{n}', '${groups[i].lectures.length}'),
+          done: groups[i].lectures
+              .where((l) => _completedLectureIds.contains(l.id))
+              .length,
+          total: groups[i].lectures.length,
+          watching: groups[i].lectures.any((l) => l.id == _continueWatchingId),
+          onTap: () => _openChapter(groups[i].key, groups[i].title),
+        ),
+      ],
     ];
+  }
+
+  /// The lectures of one chapter ('_general' = the ones without a chapter),
+  /// read fresh each time so the page stays right after watching.
+  List<Lecture> _groupLectures(String key) {
+    final known = {for (final c in _chapters) c.id};
+    return _lectures
+        .where((l) => key == '_general'
+            ? (l.chapterId == null || !known.contains(l.chapterId))
+            : l.chapterId == key)
+        .toList();
+  }
+
+  void _openChapter(String key, String title) {
+    if (!TapGuard.allow()) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => Directionality(
+        textDirection:
+            AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+        child: GlassScaffold(
+          appBar: AppBar(title: Text(title)),
+          body: ValueListenableBuilder<int>(
+            valueListenable: _rev,
+            builder: (_, __, ___) => ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+              children: [_curriculumCard(_groupLectures(key), bare: false)],
+            ),
+          ),
+        ),
+      ),
+    ));
+  }
+
+  Widget _curriculumCard(List<Lecture> lectures, {required bool bare}) {
+    return _CurriculumCard(
+      lectures: lectures,
+      numbering: _lectures,
+      bare: bare,
+      isActive: _isActive,
+      completedIds: _completedLectureIds,
+      progressByLecture: _progressByLecture,
+      continueWatchingId: _continueWatchingId,
+      onWatch: _watchLecture,
+      files: _files,
+      onOpenFiles: _openFiles,
+    );
   }
 
   // The in-progress lecture (if any) is pulled to the top, same as the
@@ -739,24 +845,17 @@ class _RatingCard extends StatelessWidget {
     final t = AppStrings.instance.t;
     return GlassCard(
       onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      borderRadius: BorderRadius.circular(18),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      borderRadius: BorderRadius.circular(14),
       child: Row(children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(t(rating == null ? 'rate_card_title' : 'rate_card_yours'),
-                  style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-              const SizedBox(height: 6),
-              StarRow(rating: rating ?? 0, size: 22),
-            ],
-          ),
-        ),
+        Text(t(rating == null ? 'rate_card_title' : 'rate_card_yours'),
+            style: AppFonts.body(size: 13, weight: FontWeight.w600)),
+        const SizedBox(width: 8),
+        StarRow(rating: rating ?? 0, size: 16),
+        const Spacer(),
         Text(t(rating == null ? 'rate_card_cta' : 'rate_edit'),
             style: AppFonts.body(
-                size: 13, weight: FontWeight.w700, color: AppColors.red)),
+                size: 12.5, weight: FontWeight.w700, color: AppColors.red)),
       ]),
     );
   }
@@ -767,6 +866,7 @@ class _RatingCard extends StatelessWidget {
 class _EnrollPanel extends StatelessWidget {
   final Course course;
   final String? status;
+  final bool owner;
   final bool purchasesOn;
   final bool appleIap;
   final String? applePrice;
@@ -778,6 +878,7 @@ class _EnrollPanel extends StatelessWidget {
   const _EnrollPanel({
     required this.course,
     required this.status,
+    this.owner = false,
     required this.purchasesOn,
     required this.appleIap,
     required this.applePrice,
@@ -794,19 +895,22 @@ class _EnrollPanel extends StatelessWidget {
     final Widget content;
     if (status == 'active') {
       content = Row(children: [
-        Icon(Icons.verified_rounded, color: AppColors.teal, size: 24),
-        const SizedBox(width: 10),
+        Icon(Icons.verified_rounded, color: AppColors.teal, size: 20),
+        const SizedBox(width: 8),
         Expanded(
-          child: Text(t('status_enrolled'),
+          child: Text(t(owner ? 'status_owner' : 'status_enrolled'),
               style: AppFonts.body(
-                  size: 14.5, weight: FontWeight.w700, color: AppColors.teal)),
+                  size: 12.5, weight: FontWeight.w600, color: AppColors.teal)),
         ),
         if (onContinue != null)
           SizedBox(
-            width: 150,
+            width: 130,
             child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, 38),
+                  padding: const EdgeInsets.symmetric(horizontal: 10)),
               onPressed: onContinue,
-              icon: const Icon(Icons.play_arrow_rounded),
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
               label: Text(continueLabel ?? t('continue_watching'),
                   maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
@@ -912,9 +1016,12 @@ class _EnrollPanel extends StatelessWidget {
         ),
       ]);
     }
+    final slim = status == 'active';
     return GlassCard(
-      padding: const EdgeInsets.all(14),
-      borderRadius: BorderRadius.circular(18),
+      padding: slim
+          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+          : const EdgeInsets.all(14),
+      borderRadius: BorderRadius.circular(slim ? 14 : 18),
       child: content,
     );
   }
@@ -1102,6 +1209,10 @@ class _CourseHero extends StatelessWidget {
 /// Curriculum list grouped inside one glass card with dividers.
 class _CurriculumCard extends StatelessWidget {
   final List<Lecture> lectures;
+  /// Every lecture of the course, for the episode numbers.
+  final List<Lecture>? numbering;
+  /// Inside a chapter section: no card of its own.
+  final bool bare;
   final bool isActive;
   final Set<String> completedIds;
   final Map<String, Map<String, int>> progressByLecture;
@@ -1111,6 +1222,8 @@ class _CurriculumCard extends StatelessWidget {
   final void Function(String lectureId) onOpenFiles;
   const _CurriculumCard({
     required this.lectures,
+    this.numbering,
+    this.bare = false,
     required this.isActive,
     required this.completedIds,
     required this.progressByLecture,
@@ -1124,14 +1237,12 @@ class _CurriculumCard extends StatelessWidget {
   Widget build(BuildContext context) {
     // Number by real order, not display order -- the continue-watching
     // lecture is pulled to the top but keeps its own episode number.
-    final sorted = [...lectures]
+    final sorted = [...(numbering ?? lectures)]
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     final numberOf = {
       for (var i = 0; i < sorted.length; i++) sorted[i].id: i + 1
     };
-    return GlassCard(
-      padding: EdgeInsets.zero,
-      child: Column(
+    final rows = Column(
         children: [
           for (var i = 0; i < lectures.length; i++) ...[
             if (i > 0) Divider(height: 1, color: AppColors.line),
@@ -1149,8 +1260,8 @@ class _CurriculumCard extends StatelessWidget {
             ),
           ],
         ],
-      ),
     );
+    return bare ? rows : GlassCard(padding: EdgeInsets.zero, child: rows);
   }
 }
 
@@ -2403,6 +2514,137 @@ class _RejectedBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Description and "what you'll learn" of the course.
+class _AboutCard extends StatelessWidget {
+  final String description;
+  final List<String> points;
+  const _AboutCard({required this.description, required this.points});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      borderRadius: BorderRadius.circular(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (description.isNotEmpty) ...[
+            Text(t('about_course'),
+                style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+            const SizedBox(height: 6),
+            Text(description,
+                style: AppFonts.body(size: 13.5, color: AppColors.muted)),
+          ],
+          if (description.isNotEmpty && points.isNotEmpty)
+            const SizedBox(height: 14),
+          if (points.isNotEmpty) ...[
+            Text(t('what_you_learn'),
+                style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            for (final p in points)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(Icons.check_circle_rounded,
+                          size: 16, color: AppColors.teal),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(p,
+                          style: AppFonts.body(size: 13.5)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One chapter in the list; tapping it opens a page with its lectures.
+class _ChapterTile extends StatelessWidget {
+  final int? number;
+  final String title;
+  final String subtitle;
+  final int done;
+  final int total;
+  final bool watching;
+  final VoidCallback onTap;
+  const _ChapterTile({
+    required this.number,
+    required this.title,
+    required this.subtitle,
+    required this.done,
+    required this.total,
+    required this.watching,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppStrings.instance.t;
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.red.withValues(alpha: 0.14),
+          ),
+          child: number == null
+              ? ArcIconView(ArcIcon.lessons, size: 18, color: AppColors.red)
+              : Text('$number',
+                  style: AppFonts.body(
+                      size: 15, weight: FontWeight.w800, color: AppColors.red)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: AppFonts.body(size: 14.5, weight: FontWeight.w700)),
+              const SizedBox(height: 3),
+              Row(children: [
+                Text(subtitle,
+                    style: AppFonts.body(size: 12, color: AppColors.muted)),
+                if (done > 0) ...[
+                  const SizedBox(width: 8),
+                  Text('$done/$total',
+                      style: AppFonts.body(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: AppColors.teal)),
+                ],
+                if (watching) ...[
+                  const SizedBox(width: 8),
+                  Text(t('continue_watching'),
+                      style: AppFonts.body(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: AppColors.red)),
+                ],
+              ]),
+            ],
+          ),
+        ),
+        ArcIconView(ArcIcon.chevron, size: 16, color: AppColors.muted2),
+      ]),
     );
   }
 }

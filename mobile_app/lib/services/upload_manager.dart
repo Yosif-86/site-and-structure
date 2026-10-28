@@ -18,6 +18,8 @@ class LectureUploadJob {
   final bool isFree;
   final int? durationSeconds;
   final File file;
+  /// The chapter the lecture goes into (null = no chapter).
+  final String? chapterId;
   double progress = 0;
   /// Position in the course, taken when the upload starts so lectures keep
   /// the order the teacher added them in, however long each upload takes.
@@ -33,6 +35,7 @@ class LectureUploadJob {
     required this.isFree,
     required this.durationSeconds,
     required this.file,
+    this.chapterId,
   });
 }
 
@@ -143,6 +146,7 @@ class UploadManager extends ChangeNotifier {
         'title': job.title,
         'is_free': job.isFree,
         'order_index': orderIndex,
+        if (job.chapterId != null) 'chapter_id': job.chapterId,
         'pending_upload_path': 'r2:${upload.key}',
         if (job.durationSeconds != null)
           'duration_seconds': job.durationSeconds,

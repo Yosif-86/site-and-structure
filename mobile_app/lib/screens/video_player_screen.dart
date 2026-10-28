@@ -67,9 +67,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   String _watermarkLabel = '';
   bool _captureNotice = false;
   bool _isFullscreen = false;
-  // Full screen only: pinch out to fill the screen (trims top and bottom on
-  // phones wider than the video), pinch in to see the whole frame again.
-  bool _fillScreen = false;
+  // Full screen only: two-finger pinch zooms the picture (1x to 4x) and one
+  // finger drags it while zoomed.
+  double _zoom = 1;
+  Offset _pan = Offset.zero;
   // Fullscreen chosen with the button (locked to landscape) rather than by
   // turning the device. Leaving it with the button locks portrait so the
   // screen doesn't flip straight back.
@@ -434,6 +435,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       _manualFullscreen = enter;
     });
     if (!enter) _awaitingPortrait = _deviceLandscape;
+    _zoom = 1;
+    _pan = Offset.zero;
     if (enter) {
       // A tall (phone-shaped) video would shrink to a narrow strip if the
       // screen were turned sideways, so it stays upright and fills the width.
@@ -790,19 +793,24 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
 
     final ratio = _hlsController?.value.aspectRatio ?? 16 / 9;
-    final fill = _isFullscreen && _fillScreen;
+    final fs = _isFullscreen;
+    final zoom = fs ? _zoom : 1.0;
+    final pan = fs ? _pan : Offset.zero;
     final stack = Stack(
         fit: StackFit.expand,
         children: [
           if (_hlsController != null)
-            fill
+            fs
                 ? ClipRect(
-                    child: FittedBox(
-                      fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: ratio * 1000,
-                        height: 1000,
-                        child: VideoPlayer(_hlsController!),
+                    child: Transform.translate(
+                      offset: pan,
+                      child: Transform.scale(
+                        scale: zoom,
+                        child: Center(
+                          child: AspectRatio(
+                              aspectRatio: ratio,
+                              child: VideoPlayer(_hlsController!)),
+                        ),
                       ),
                     ),
                   )
@@ -811,10 +819,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
             _GestureLayer(
               controller: _hlsController!,
               onSingleTap: _toggleControlsVisible,
-              onPinch: _isFullscreen
-                  ? (zoomIn) {
-                      if (zoomIn != _fillScreen) setState(() => _fillScreen = zoomIn);
-                    }
+              zoom: zoom,
+              pan: pan,
+              onTransform: fs
+                  ? (z, p) => setState(() {
+                        _zoom = z;
+                        _pan = p;
+                      })
                   : null,
             ),
           if (_watermarkLabel.isNotEmpty) WatermarkOverlay(label: _watermarkLabel),
@@ -958,9 +969,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
           ],
         ],
     );
-    // Filling: the whole screen is the video area and the picture is
-    // cropped to it. Otherwise the area keeps the video's own shape.
-    final videoArea = fill
+    // Fullscreen: the whole screen is the video area so a zoomed picture can
+    // grow into the side bars. Otherwise the area keeps the video's own shape.
+    final videoArea = fs
         ? SizedBox.expand(child: stack)
         : AspectRatio(aspectRatio: ratio, child: stack);
 
@@ -968,7 +979,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     // within the available space instead of being forced to fill it and
     // stretch — SizedBox.expand imposes tight constraints that AspectRatio
     // can't reconcile with the video's real ratio.
-    return Center(child: videoArea);
+    // Where the picture does not fill the box (a 4:3 lecture on a wide
+    // screen, a tall video in portrait) a blurred copy of it fills the bars
+    // instead of plain black.
+    return LayoutBuilder(builder: (context, c) {
+      final boxRatio = c.maxWidth.isFinite && c.maxHeight.isFinite && c.maxHeight > 0
+          ? c.maxWidth / c.maxHeight
+          : ratio;
+      final bars = _hlsController != null && (boxRatio - ratio).abs() / ratio > 0.02;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (bars) _BlurBackdrop(controller: _hlsController!),
+          Center(child: videoArea),
+        ],
+      );
+    });
   }
 }
 
@@ -980,10 +1006,17 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
 class _GestureLayer extends StatefulWidget {
   final VideoPlayerController controller;
   final VoidCallback onSingleTap;
-  /// Two-finger pinch: true = pinched out (fill), false = pinched in.
-  final ValueChanged<bool>? onPinch;
-  const _GestureLayer(
-      {required this.controller, required this.onSingleTap, this.onPinch});
+  final double zoom;
+  final Offset pan;
+  /// Pinch (two fingers) and drag (one finger, while zoomed); null = no zoom.
+  final void Function(double zoom, Offset pan)? onTransform;
+  const _GestureLayer({
+    required this.controller,
+    required this.onSingleTap,
+    this.zoom = 1,
+    this.pan = Offset.zero,
+    this.onTransform,
+  });
 
   @override
   State<_GestureLayer> createState() => _GestureLayerState();
@@ -991,7 +1024,9 @@ class _GestureLayer extends StatefulWidget {
 
 class _GestureLayerState extends State<_GestureLayer> {
   Offset? _lastTapPosition;
-  double _pinchScale = 1;
+  double _baseZoom = 1;
+  Offset _basePan = Offset.zero;
+  Offset _startFocal = Offset.zero;
   bool _showSeekHint = false;
   bool _seekForward = true;
 
@@ -1022,18 +1057,34 @@ class _GestureLayerState extends State<_GestureLayer> {
               if (_lastTapPosition == null) return;
               _seek(_lastTapPosition!.dx > constraints.maxWidth / 2);
             },
-            onScaleStart: widget.onPinch == null ? null : (_) => _pinchScale = 1,
-            onScaleUpdate: widget.onPinch == null
+            onScaleStart: widget.onTransform == null
                 ? null
                 : (d) {
-                    if (d.pointerCount >= 2) _pinchScale = d.scale;
+                    _baseZoom = widget.zoom;
+                    _basePan = widget.pan;
+                    _startFocal = d.focalPoint;
                   },
-            onScaleEnd: widget.onPinch == null
+            onScaleUpdate: widget.onTransform == null
                 ? null
-                : (_) {
-                    if (_pinchScale > 1.08) widget.onPinch!(true);
-                    if (_pinchScale < 0.92) widget.onPinch!(false);
-                    _pinchScale = 1;
+                : (d) {
+                    var zoom = widget.zoom;
+                    if (d.pointerCount >= 2) {
+                      zoom = (_baseZoom * d.scale).clamp(1.0, 4.0);
+                    } else if (zoom <= 1) {
+                      return;
+                    }
+                    if (zoom < 1.03) {
+                      widget.onTransform!(1, Offset.zero);
+                      return;
+                    }
+                    // The picture can be dragged as far as its zoomed edge.
+                    final maxX = constraints.maxWidth * (zoom - 1) / 2;
+                    final maxY = constraints.maxHeight * (zoom - 1) / 2;
+                    final moved = _basePan + (d.focalPoint - _startFocal);
+                    widget.onTransform!(
+                        zoom,
+                        Offset(moved.dx.clamp(-maxX, maxX),
+                            moved.dy.clamp(-maxY, maxY)));
                   },
             child: _showSeekHint
                 ? Align(
@@ -1546,6 +1597,35 @@ class _FilesButton extends StatelessWidget {
                     weight: FontWeight.w600,
                     color: const Color(0xFFFEE4BF))),
           ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A blurred, darkened copy of the video that fills the bars around it.
+class _BlurBackdrop extends StatelessWidget {
+  final VideoPlayerController controller;
+  const _BlurBackdrop({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = controller.value.isInitialized && !controller.value.size.isEmpty
+        ? controller.value.aspectRatio
+        : 16 / 9;
+    return ClipRect(
+      child: ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28, tileMode: TileMode.clamp),
+        child: ColorFiltered(
+          colorFilter: const ColorFilter.mode(Color(0x73000000), BlendMode.srcOver),
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: ratio * 1000,
+              height: 1000,
+              child: VideoPlayer(controller),
+            ),
+          ),
         ),
       ),
     );
