@@ -54,10 +54,10 @@ workflows:
         bundle_identifier: com.arcplatformiq.app
       vars:
         APP_STORE_APP_ID: "6822579758"  # App Store Connect > App Information > Apple ID
-        # "true" = test build: screenshot shield, recording cover and capture
+        # STORE BUILDS MUST BE "false" (protection on). "true" = test build: screenshot shield, recording cover and capture
         # reports are OFF so issues can be shown with screenshots/recordings.
         # Set to "false" for the build that goes to the App Store.
-        NO_SCREEN_PROTECTION: "true"
+        NO_SCREEN_PROTECTION: "false"
     triggering:
       events: []  # manual builds only
     scripts:
