@@ -31,8 +31,8 @@
   function destination(prof){
     if(wanted === 'admin' && prof.is_admin) return PAGES.admin;
     if(wanted === 'teacher' && prof.is_teacher) return PAGES.teacher;
-    if(prof.is_admin) return PAGES.admin;
     if(prof.is_teacher) return PAGES.teacher;
+    if(prof.is_admin) return PAGES.admin;
     return null;
   }
 
@@ -96,47 +96,54 @@
   // Second step: after the password, a 6-digit code is emailed and must be
   // typed in (same rule as the app for teacher/admin accounts).
   const codeEl = document.getElementById('code');
-  const codeField = document.getElementById('codeField');
-  const passField = document.getElementById('passwordField');
+  const codeDlg = document.getElementById('codeDlg');
+  const codeForm = document.getElementById('codeForm');
+  const codeBtn = document.getElementById('codeBtn');
   const resendBtn = document.getElementById('resendBtn');
+  function codeShow(text, ok){
+    const el = document.getElementById('codeMsg');
+    el.textContent = text || '';
+    el.className = 'msg' + (text ? (ok ? ' ok' : ' err') : '');
+  }
+  // Messages go to the code window while it is open, else to the page.
+  function say(text, ok){ if(codeDlg.open) codeShow(text, ok); else show(text, ok); }
   let codeEmail = null;
   let cooldownUntil = 0;
 
   async function sendCode(email){
     const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     if(error){
-      show(error.status === 429 ? 'انتظر دقيقة قبل طلب رمز جديد.' : 'تعذر إرسال الرمز، حاول مرة أخرى.');
+      say(error.status === 429 ? 'انتظر دقيقة قبل طلب رمز جديد.' : 'تعذر إرسال الرمز، حاول مرة أخرى.');
       return false;
     }
     cooldownUntil = Date.now() + 60000;
     return true;
   }
 
+  // The code step opens in its own window over the page.
   function showCodeStep(email){
-    const oauth = document.getElementById('oauthBlock');
-    if(oauth) oauth.hidden = true;
     codeEmail = email;
-    passField.hidden = true;
-    codeField.hidden = false;
-    resendBtn.hidden = false;
-    emailEl.readOnly = true;
-    btn.textContent = 'تأكيد الرمز';
+    show('');
+    document.getElementById('codeLead').textContent =
+      'أرسلنا رمزًا من 6 أرقام إلى ' + email + '. لم يصلك؟ تحقق من مجلد Spam.';
     codeEl.value = '';
+    codeShow('');
+    if(!codeDlg.open) codeDlg.showModal();
     codeEl.focus();
-    show('أرسلنا رمزًا من 6 أرقام إلى بريدك. لم يصلك؟ تحقق من مجلد Spam.', true);
   }
 
   async function verifyCode(){
     const token = codeEl.value.replace(/\s/g, '');
-    if(!/^\d{6}$/.test(token)){ show('أدخل الرمز المكوّن من 6 أرقام.'); return; }
+    if(!/^\d{6}$/.test(token)){ codeShow('أدخل الرمز المكوّن من 6 أرقام.'); return; }
     const { data, error } = await sb.auth.verifyOtp({ email: codeEmail, token, type: 'email' });
     if(error || !data.session){
-      show(/expired/i.test(error?.message || '') ? 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.' : 'رمز التحقق غير صحيح.');
+      codeShow(/expired/i.test(error?.message || '') ? 'انتهت صلاحية الرمز، اطلب رمزًا جديدًا.' : 'رمز التحقق غير صحيح.');
       return;
     }
     const dest = destination(await staffProfile(data.user.id));
     if(!dest){
       await sb.auth.signOut();
+      codeDlg.close(); codeEmail = null;
       show('هذا الحساب لا يملك صلاحية الدخول. استخدم التطبيق.');
       return;
     }
@@ -147,8 +154,18 @@
   resendBtn.addEventListener('click', async () => {
     if(!codeEmail) return;
     const wait = Math.ceil((cooldownUntil - Date.now()) / 1000);
-    if(wait > 0){ show('يمكنك طلب رمز جديد بعد ' + wait + ' ثانية.'); return; }
-    if(await sendCode(codeEmail)) show('أرسلنا رمزًا جديدًا.', true);
+    if(wait > 0){ codeShow('يمكنك طلب رمز جديد بعد ' + wait + ' ثانية.'); return; }
+    if(await sendCode(codeEmail)) codeShow('أرسلنا رمزًا جديدًا.', true);
+  });
+
+  codeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    codeBtn.disabled = true;
+    codeShow('');
+    try{ await verifyCode(); } finally { codeBtn.disabled = false; }
+  });
+  document.getElementById('codeCancel').addEventListener('click', () => {
+    codeDlg.close(); codeEmail = null; codeEl.value = '';
   });
 
   form.addEventListener('submit', async (e) => {
@@ -156,7 +173,6 @@
     btn.disabled = true;
     show('');
     try{
-      if(codeEmail){ await verifyCode(); return; }
       const email = emailEl.value.trim();
       const password = passEl.value;
       if(!email || !password){ show('أدخل بريدك الإلكتروني وكلمة المرور.'); return; }
