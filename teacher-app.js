@@ -458,7 +458,7 @@ VIEWS.codes = () => {
   <div style="height:14px"></div>
   <div class="glass panel">
     <div class="panel-h">${badge('tag', 'red', true)}<div class="t">${esc(t('create_code'))}</div></div>
-    <div class="hint" style="margin-bottom:12px">${esc(capText(t('discount_cap_hint')))}</div>
+    <div class="hint" style="margin-bottom:12px; white-space:pre-line; line-height:1.7">${esc(capText(t('discount_cap_hint')))}</div>
     <div class="gap">
       <div><label class="f">${esc(t('label_code'))}</label><input type="text" dir="ltr" data-bind="cf.code" value="${esc(cf.code)}" style="text-transform:uppercase"></div>
       <div class="row2">
