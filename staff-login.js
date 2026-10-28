@@ -73,7 +73,22 @@
       const amr = JSON.parse(atob(b)).amr;
       viaCode = Array.isArray(amr) && amr.some((a) => a && (a.method === 'otp' || a.method === 'magiclink'));
     }catch(e){}
-    if(!viaCode){ await sb.auth.signOut(); return; }
+    if(!viaCode){
+      // Back from a provider redirect (Apple): same rule as the password,
+      // sign out and ask for the emailed code. Only when we started it.
+      if(new URLSearchParams(location.search).get('oauth') === '1'){
+        const email = session.user.email;
+        const dest0 = destination(await staffProfile(session.user.id));
+        await sb.auth.signOut();
+        history.replaceState(null, '', location.pathname + (wanted ? '?next=' + encodeURIComponent(wanted) : ''));
+        if(!dest0){ show('هذا الحساب لا يملك صلاحية الدخول. استخدم التطبيق.'); return; }
+        emailEl.value = email || '';
+        if(await sendCode(email)) showCodeStep(email);
+        return;
+      }
+      await sb.auth.signOut();
+      return;
+    }
     const dest = destination(await staffProfile(session.user.id));
     if(dest) location.replace(dest);
   })();
@@ -157,6 +172,59 @@
       btn.disabled = false;
     }
   });
+
+  // ---- Google: the same popup the buying page uses. A teacher or admin still
+  // gets the emailed code afterwards, exactly like after the password. ----
+  const GOOGLE_WEB_CLIENT = '982425355302-nn9u5ksh0jhmv44cd8vvv049bbc69ad0.apps.googleusercontent.com';
+  const hex = (buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  async function afterProviderSignIn(user){
+    const dest = destination(await staffProfile(user.id));
+    const email = user.email;
+    // The provider session never opens the dashboard on its own.
+    await sb.auth.signOut();
+    if(!dest){ show('هذا الحساب لا يملك صلاحية الدخول. استخدم التطبيق.'); return; }
+    emailEl.value = email || '';
+    if(await sendCode(email)) showCodeStep(email);
+  }
+  (function setupGoogle(){
+    const holder = document.getElementById('gisBtn');
+    if(!holder || !window.crypto || !crypto.subtle) return;
+    const raw = hex(crypto.getRandomValues(new Uint8Array(16)));
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.onload = async () => {
+      // Google puts sha256(nonce) in the token; Supabase checks it against raw.
+      const hash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw)));
+      google.accounts.id.initialize({
+        client_id: GOOGLE_WEB_CLIENT, nonce: hash, ux_mode: 'popup', context: 'signin',
+        callback: async (resp) => {
+          show('جارٍ تسجيل الدخول…');
+          const { data, error } = await sb.auth.signInWithIdToken({ provider: 'google', token: resp.credential, nonce: raw });
+          if(error || !data.user){ show('تعذّر تسجيل الدخول بجوجل. حاول مرة أخرى.'); return; }
+          await afterProviderSignIn(data.user);
+        }
+      });
+      google.accounts.id.renderButton(holder, {
+        type: 'standard', theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'filled_black' : 'outline',
+        size: 'large', shape: 'pill', text: 'continue_with', locale: 'ar', width: Math.min(holder.clientWidth || 360, 400)
+      });
+    };
+    document.head.appendChild(s);
+  })();
+
+  // ---- Apple: needs the Services ID and key set up in Apple Developer and
+  // Supabase first (see the note in the handoff). Off until then. ----
+  const APPLE_WEB_ENABLED = false;
+  const appleBtn = document.getElementById('appleBtn');
+  if(appleBtn && APPLE_WEB_ENABLED){
+    appleBtn.hidden = false;
+    appleBtn.addEventListener('click', () => {
+      sb.auth.signInWithOAuth({ provider: 'apple', options: {
+        redirectTo: location.origin + '/login.html?oauth=1' + (wanted ? '&next=' + encodeURIComponent(wanted) : '')
+      } });
+    });
+  }
 
   document.getElementById('forgotBtn').addEventListener('click', async () => {
     const email = emailEl.value.trim();
