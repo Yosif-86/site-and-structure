@@ -112,7 +112,7 @@
     const dest = destination(await staffProfile(data.user.id));
     if(!dest){
       await sb.auth.signOut();
-      show('هذه الصفحة للمدرّسين والإدارة فقط. استخدم التطبيق.');
+      show('هذا الحساب لا يملك صلاحية الدخول. استخدم التطبيق.');
       return;
     }
     await logLoginEvent(data.user.id, data.user.email);
@@ -141,7 +141,7 @@
       // Password alone never opens the dashboards: sign out, then email a code.
       await sb.auth.signOut();
       if(!dest){
-        show('هذه الصفحة للمدرّسين والإدارة فقط. استخدم التطبيق.');
+        show('هذا الحساب لا يملك صلاحية الدخول. استخدم التطبيق.');
         return;
       }
       if(await sendCode(email)) showCodeStep(email);
