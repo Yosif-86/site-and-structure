@@ -304,6 +304,7 @@
       <label data-i18n="label_video_file">Video file</label>
       <input type="file" id="lVideoFile" accept="video/mp4,video/quicktime,video/webm,video/x-matroska">
       <div class="field-hint" data-i18n="video_pending_hint">Uploaded videos are reviewed and published by the admin — they won't play immediately.</div>
+      <div class="field-hint" data-i18n="upload_keep_open">Keep this page open until the upload finishes.</div>
       <div class="toggle-row">
         <input type="checkbox" id="lIsFree">
         <label for="lIsFree" style="margin:0; text-transform:none; font-family:'Work Sans'; font-size:13px; color:var(--text);" data-i18n="label_free_preview">Free preview lecture</label>
@@ -418,6 +419,8 @@
       video_pending_hint: 'يتم مراجعة ونشر الفيديوهات المرفوعة من قبل الإدارة — لن تعمل فورًا.',
       label_free_preview: 'محاضرة مجانية للمعاينة', btn_add: 'إضافة المحاضرة',
       err_lecture_title_required: 'أدخل عنوان المحاضرة.', err_video_required: 'اختر ملف فيديو.',
+      uploading_video: 'جارٍ رفع الفيديو', upload_keep_open: 'أبقِ هذه الصفحة مفتوحة حتى يكتمل الرفع.',
+      upload_done_msg: 'تم رفع المحاضرة وهي بانتظار المراجعة.',
       status_live: 'مباشر', status_pending_upload: 'قيد المراجعة',
       discount_codes: 'أكواد الخصم', th_code: 'الكود', th_discount: 'الخصم', th_uses: 'الاستخدامات', th_expires: 'ينتهي في',
       no_codes: 'لا توجد أكواد خصم بعد.', new_code: 'كود جديد', label_code: 'الكود', label_discount_type: 'نوع الخصم',
@@ -843,7 +846,78 @@
     renderLectures();
   }
 
+  // Lecture videos go straight to Cloudflare R2 in 8 MB parts, the same way
+  // the app does: /api/r2-upload checks the teacher owns the course and signs
+  // one object; the Worker then writes each part into R2.
+  const R2_PART = 8 * 1024 * 1024;
+  let lectureUploading = false;
+
+  async function r2Authorize(courseId, lectureId){
+    const { data: { session } } = await sb.auth.getSession();
+    if(!session) throw new Error('not signed in');
+    const res = await fetch('/api/r2-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ action: 'upload', courseId, lectureId })
+    });
+    if(!res.ok) throw new Error('authorize failed (' + res.status + ')');
+    return res.json();
+  }
+
+  function r2Url(a, q){
+    const u = new URL(a.url);
+    const p = Object.assign({ token: a.token, expires: String(a.expires), uid: a.uid }, q);
+    Object.keys(p).forEach(k => u.searchParams.set(k, p[k]));
+    return u.toString();
+  }
+
+  async function r2Upload(file, courseId, lectureId, onProgress){
+    let a = await r2Authorize(courseId, lectureId);
+    const create = await fetch(r2Url(a, { op: 'create' }), { method: 'POST' });
+    if(!create.ok) throw new Error('create failed (' + create.status + ')');
+    const uploadId = (await create.json()).uploadId;
+    const parts = [];
+    try{
+      let partNumber = 1;
+      for(let offset = 0; offset < file.size; offset += R2_PART){
+        const blob = file.slice(offset, Math.min(offset + R2_PART, file.size));
+        let etag = null;
+        for(let attempt = 1; !etag; attempt++){
+          try{
+            const res = await fetch(r2Url(a, { op: 'part', uploadId, partNumber: String(partNumber) }), {
+              method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
+            });
+            if(res.status === 401 || res.status === 403){
+              a = await r2Authorize(courseId, lectureId);
+              throw new Error('permission refreshed');
+            }
+            if(!res.ok) throw new Error('part failed (' + res.status + ')');
+            etag = (await res.json()).etag;
+          }catch(e){
+            if(attempt >= 6) throw e;
+            await new Promise(r => setTimeout(r, attempt * 3000));
+          }
+        }
+        parts.push({ partNumber, etag });
+        partNumber++;
+        onProgress(Math.min(1, (offset + blob.size) / file.size));
+      }
+      const done = await fetch(r2Url(a, { op: 'complete', uploadId }), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parts)
+      });
+      if(!done.ok) throw new Error('complete failed (' + done.status + ')');
+    }catch(e){
+      fetch(r2Url(a, { op: 'abort', uploadId }), { method: 'POST' }).catch(() => {});
+      throw e;
+    }
+  }
+
+  window.addEventListener('beforeunload', e => {
+    if(lectureUploading){ e.preventDefault(); e.returnValue = ''; }
+  });
+
   async function addLecture(){
+    if(lectureUploading) return;
     const errEl = document.getElementById('lFormError');
     errEl.textContent = '';
     const title = document.getElementById('lTitle').value.trim();
@@ -851,22 +925,34 @@
     const file = document.getElementById('lVideoFile').files[0];
     if(!file){ errEl.textContent = t('err_video_required'); return; }
     const isFree = document.getElementById('lIsFree').checked;
+    const btn = document.querySelector('[data-action="add-lecture"]');
+    const courseId = activeCourse.id;
+    const lectureId = crypto.randomUUID();
 
+    lectureUploading = true;
+    if(btn) btn.disabled = true;
     try{
-      const path = `${currentUser.id}/${activeCourse.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await sb.storage.from('lecture-uploads').upload(path, file);
-      if(upErr) throw upErr;
-      const orderIndex = activeLectures.length ? Math.max(...activeLectures.map(l => l.order_index || 0)) + 1 : 0;
+      await r2Upload(file, courseId, lectureId, p => {
+        errEl.textContent = t('uploading_video') + ' ' + Math.round(p * 100) + '%';
+      });
+      const { data: last } = await sb.from('lectures').select('order_index')
+        .eq('course_id', courseId).order('order_index', { ascending: false }).limit(1).maybeSingle();
+      const orderIndex = last && last.order_index != null ? last.order_index + 1 : 0;
       const { error } = await sb.from('lectures').insert({
-        course_id: activeCourse.id, title, is_free: isFree, order_index: orderIndex, pending_upload_path: path
+        id: lectureId, course_id: courseId, title, is_free: isFree, order_index: orderIndex,
+        pending_upload_path: 'r2:videos/' + lectureId + '/source.mp4'
       });
       if(error) throw error;
       document.getElementById('lTitle').value = '';
       document.getElementById('lVideoFile').value = '';
       document.getElementById('lIsFree').checked = false;
+      errEl.textContent = t('upload_done_msg');
       loadLectures();
     } catch(e){
       errEl.textContent = t('err_save_failed') + e.message;
+    } finally {
+      lectureUploading = false;
+      if(btn) btn.disabled = false;
     }
   }
 
