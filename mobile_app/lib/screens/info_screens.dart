@@ -136,7 +136,6 @@ class PrivacyScreen extends StatelessWidget {
             children: [
               Text(t('privacy_intro'), style: AppFonts.body(size: 13.5, color: AppColors.muted)),
               _section(t, 'privacy_h_collect', 'privacy_b_collect'),
-              _section(t, 'privacy_h_courses', 'privacy_b_courses'),
               _section(t, 'privacy_h_devices', 'privacy_b_devices'),
               _section(t, 'privacy_h_protection', 'privacy_b_protection'),
               _section(t, 'privacy_h_sharing', 'privacy_b_sharing'),

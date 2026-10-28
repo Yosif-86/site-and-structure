@@ -1,6 +1,10 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:in_app_review/in_app_review.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../i18n/strings.dart';
 import '../services/supabase_service.dart';
@@ -34,15 +38,17 @@ class SettingsScreen extends StatelessWidget {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
   }
 
-  /// The system's own rating window, inside the app. Falls back to the store
-  /// page where the window can't be shown.
+  /// Opens the store's review page. (The system's pop-up rating window shows
+  /// nothing in TestFlight builds and is rationed by iOS, so a tap could do
+  /// nothing at all; the store page always works.)
   static Future<void> _rateApp() async {
-    final review = InAppReview.instance;
     try {
-      if (await review.isAvailable()) {
-        await review.requestReview();
+      if (!kIsWeb && Platform.isIOS) {
+        await launchUrl(
+            Uri.parse('https://apps.apple.com/app/id6822579758?action=write-review'),
+            mode: LaunchMode.externalApplication);
       } else {
-        await review.openStoreListing(appStoreId: '6822579758');
+        await InAppReview.instance.openStoreListing();
       }
     } catch (_) {}
   }
