@@ -1,7 +1,7 @@
 name: site_and_structure
 description: Arc Platform — engineering course platform (student app)
 publish_to: 'none'
-version: 1.0.3+10
+version: 1.0.4+11
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
