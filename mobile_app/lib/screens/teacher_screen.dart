@@ -120,7 +120,13 @@ class _TeacherScreenState extends State<TeacherScreen> {
       final rows = await SupabaseService.instance.client
           .rpc('get_free_enrollment_requests') as List;
       if (!mounted) return;
-      setState(() => _freeRequests = rows.cast<Map<String, dynamic>>());
+      // The RPC also returns every request to an admin; here only the ones
+      // this teacher can decide (approving someone else's would fail).
+      final me = SupabaseService.instance.currentUser?.id;
+      setState(() => _freeRequests = rows
+          .cast<Map<String, dynamic>>()
+          .where((r) => r['teacher_id'] == me)
+          .toList());
     } catch (_) {
       // Leaves the list as it was.
     }
