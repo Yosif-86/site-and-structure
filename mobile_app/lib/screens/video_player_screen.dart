@@ -156,6 +156,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     }
   }
 
+  double? _shownRatio;
+
+  /// Rebuilds when the video's real shape becomes known or changes (quality
+  /// switch, late size report), so the picture is never kept at a stale shape.
+  void _syncRatio() {
+    final c = _hlsController;
+    if (c == null || !mounted) return;
+    final r = c.value.isInitialized && !c.value.size.isEmpty ? c.value.aspectRatio : null;
+    if (r == null) return;
+    if (_shownRatio == null || (r - _shownRatio!).abs() > 0.01) {
+      _shownRatio = r;
+      setState(() {});
+    }
+  }
+
+  Future<void> _waitForSize(VideoPlayerController c) async {
+    for (var i = 0; i < 30 && c.value.size.isEmpty; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   Future<void> _init() async {
     // Android: block screenshots/recording outright for as long as this screen is open.
     await ScreenSecurity.enableSecure();
@@ -244,8 +265,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
         await controller.seekTo(resumeAt);
       }
       controller.play();
+      // A streamed (HLS) video can report an empty size right after
+      // initialize, which reads as a 1:1 picture. Wait for the real size so
+      // fullscreen is not sized from that placeholder.
+      await _waitForSize(controller);
       if (!mounted) { controller.dispose(); return; }
       controller.addListener(_checkAutoplayNext);
+      controller.addListener(_syncRatio);
       // Landscape lectures start fullscreen and sideways. A portrait video
       // (phone-shot) stays in the normal view. Decided in the same frame the
       // video appears, so the lessons page never flashes before the turn.
@@ -362,7 +388,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
       await controller.seekTo(position);
       if (!mounted) { controller.dispose(); return; }
       old?.removeListener(_checkAutoplayNext);
+      old?.removeListener(_syncRatio);
       controller.addListener(_checkAutoplayNext);
+      controller.addListener(_syncRatio);
       _hideControlsTimer?.cancel();
       setState(() {
         _hlsController = controller;
@@ -407,7 +435,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     });
     if (!enter) _awaitingPortrait = _deviceLandscape;
     if (enter) {
-      await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      // A tall (phone-shaped) video would shrink to a narrow strip if the
+      // screen were turned sideways, so it stays upright and fills the width.
+      final tall = (_hlsController?.value.aspectRatio ?? 16 / 9) < 1;
+      await SystemChrome.setPreferredOrientations(tall
+          ? [DeviceOrientation.portraitUp]
+          : [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } else {
       await _restoreSystemUi();
@@ -516,6 +549,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _hideControlsTimer?.cancel();
     unawaited(_saveProgress());
     _hlsController?.removeListener(_checkAutoplayNext);
+    _hlsController?.removeListener(_syncRatio);
     _hlsController?.dispose();
     ScreenSecurity.disableSecure();
     ScreenSecurity.onCapture(null);
@@ -575,7 +609,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     return LayoutBuilder(builder: (context, c) {
       final player = Center(child: _buildPlayer());
       final stillPortrait = c.maxHeight > c.maxWidth;
-      return stillPortrait ? RotatedBox(quarterTurns: 1, child: player) : player;
+      // A tall video stays upright; only a wide one is turned to fill a screen
+      // that has not rotated.
+      final tall = (_hlsController?.value.aspectRatio ?? 16 / 9) < 1;
+      return stillPortrait && !tall ? RotatedBox(quarterTurns: 1, child: player) : player;
     });
   }
 

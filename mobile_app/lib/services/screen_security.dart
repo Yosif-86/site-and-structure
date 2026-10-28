@@ -41,16 +41,24 @@ class ScreenSecurity {
 
   /// Builds made only for App Store screenshots pass
   /// --dart-define=STORE_SHOTS=true to leave the iPhone shield off.
-  static const _storeShots = bool.fromEnvironment('STORE_SHOTS');
+  /// Test builds (NO_SCREEN_PROTECTION=true) also leave every protection off:
+  /// no screenshot shield, no recording cover, no capture reports, so issues
+  /// can be shown with screenshots and recordings. Store builds never set it.
+  static const _storeShots = bool.fromEnvironment('STORE_SHOTS') ||
+      bool.fromEnvironment('NO_SCREEN_PROTECTION');
 
   /// Call once at start-up so capture attempts are reported app-wide.
   /// iPhone: also turns on the full-app screenshot/recording shield and
   /// logs to error_logs if a new iOS ever stops it from working.
   static void init() {
     _ensureHandler();
-    if (!kIsWeb && Platform.isIOS && !_storeShots) {
-      // After the first frame, so the window exists.
-      Future.delayed(const Duration(seconds: 1), _enableShield);
+    if (!kIsWeb && Platform.isIOS) {
+      if (_storeShots) {
+        _channel.invokeMethod('disableCaptureCover').catchError((_) {});
+      } else {
+        // After the first frame, so the window exists.
+        Future.delayed(const Duration(seconds: 1), _enableShield);
+      }
     }
   }
 
@@ -72,6 +80,7 @@ class ScreenSecurity {
     _handlerSet = true;
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onCapture') {
+        if (_storeShots) return null;
         final type = (call.arguments as Map)['type'] as String? ?? 'unknown';
         _report(type);
         _onCapture?.call(type);

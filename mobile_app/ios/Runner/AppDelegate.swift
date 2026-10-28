@@ -34,6 +34,13 @@ import UIKit
       case "enableShield":
         // Returns whether the secure layer is really in place (self-check).
         DispatchQueue.main.async { result(ScreenShield.enable()) }
+      case "disableCaptureCover":
+        // Test builds only: no black cover while recording.
+        ScreenShield.coverDisabled = true
+        DispatchQueue.main.async {
+          ScreenShield.setCaptureCover(false)
+          result(true)
+        }
       case "shieldActive":
         DispatchQueue.main.async { result(ScreenShield.isActive) }
       default:
@@ -87,6 +94,7 @@ enum ScreenShield {
   private static weak var secureLayer: CALayer?
   private static weak var window: UIWindow?
   private static var cover: UIView?
+  static var coverDisabled = false
 
   static var isActive: Bool {
     guard let w = window, let s = secureLayer else { return false }
@@ -143,6 +151,7 @@ enum ScreenShield {
 
   /// Black cover while the screen is recorded or mirrored.
   static func setCaptureCover(_ on: Bool) {
+    if coverDisabled && on { return }
     guard let w = window ?? keyWindow() else { return }
     if on {
       if cover == nil {

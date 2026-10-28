@@ -54,6 +54,10 @@ workflows:
         bundle_identifier: com.arcplatformiq.app
       vars:
         APP_STORE_APP_ID: "6822579758"  # App Store Connect > App Information > Apple ID
+        # "true" = test build: screenshot shield, recording cover and capture
+        # reports are OFF so issues can be shown with screenshots/recordings.
+        # Set to "false" for the build that goes to the App Store.
+        NO_SCREEN_PROTECTION: "true"
     triggering:
       events: []  # manual builds only
     scripts:
@@ -68,6 +72,7 @@ workflows:
           LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" || echo 0)
           flutter build ipa --release \
             --build-number=$((LATEST + 1)) \
+            --dart-define=NO_SCREEN_PROTECTION=$NO_SCREEN_PROTECTION \
             --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
