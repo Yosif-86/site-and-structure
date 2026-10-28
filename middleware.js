@@ -2,10 +2,12 @@
 // Settings -> Environment Variables; a change needs a redeploy to apply).
 // /api/* is never gated: the mobile app calls it directly.
 //
-// 1) STAFF GATE (admin.html, teacher.html, /login): only the owner's IPs, or
-//    anyone who knows the separate gate password. Teachers use the app, so
-//    nobody else needs these pages. This is in front of the normal Supabase
-//    sign-in + role check, not a replacement for it.
+// 1) STAFF GATE (admin.html only): only the owner's IPs, or anyone who knows
+//    the separate gate password. This is in front of the normal Supabase
+//    sign-in + role check, not a replacement for it. The teacher dashboard
+//    (teacher.html) and the sign-in page are open by the owner's decision:
+//    teachers sign in with their password plus the emailed code, and RLS
+//    limits them to their own courses.
 //      STAFF_ALLOWED_IPS  comma list, exact IPs or IPv4 CIDR ranges,
 //                         e.g. "93.191.113.10, 83.171.206.0/24"
 //      STAFF_GATE_USER / STAFF_GATE_PASS
@@ -21,9 +23,7 @@ export const config = {
 };
 
 const STAFF_PATHS = new Set([
-  '/login', '/login.html', '/staff-login.js',
   '/admin', '/admin.html',
-  '/teacher', '/teacher.html',
 ]);
 
 function clientIp(request) {
