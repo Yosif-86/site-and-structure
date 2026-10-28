@@ -717,7 +717,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(18),
-                          child: _buildPlayer(),
+                          // A tall (phone-shaped) video must not push the lesson
+                          // list off the screen: the picture keeps its shape
+                          // inside at most 55% of the screen height.
+                          child: LayoutBuilder(builder: (context, c) {
+                            final ready = _hlsController?.value.isInitialized == true &&
+                                !_hlsController!.value.size.isEmpty;
+                            final ratio =
+                                ready ? _hlsController!.value.aspectRatio : 16 / 9;
+                            final byWidth = c.maxWidth / ratio;
+                            final cap = MediaQuery.sizeOf(context).height * 0.55;
+                            return SizedBox(
+                              height: byWidth < cap ? byWidth : cap,
+                              child: ColoredBox(
+                                  color: Colors.black, child: _buildPlayer()),
+                            );
+                          }),
                         ),
                       ),
                     ),
