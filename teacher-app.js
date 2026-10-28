@@ -86,6 +86,7 @@ const S = {
   form: { title: '', description: '', price: '' }, points: [], thumbFile: null, thumbPreview: null, thumbUrl: null,
   lf: { title: '', free: false, file: null }, uploading: false, upMsg: '', upPct: null,
   cf: { code: '', type: 'percent', value: '', max: '10', expires: '' }, err: {}, ok: {},
+  files: [], ff: { title: '', lecture: '', allowDl: false, free: false, file: null, busy: false },
   pf: { zain: '', qi: '', qrFile: null }, saving: false, ready: false
 };
 
@@ -302,8 +303,111 @@ VIEWS.course = () => {
       <button class="btn" data-act="back">${esc(t('cancel'))}</button>
     </div>
   </div>`;
-  return info + (S.course ? curriculumCard() : '');
+  return info + (S.course ? curriculumCard() + filesCard() : '');
 };
+
+// ---------- course files (PDF, Word, Excel, PowerPoint, CAD, photos) ----------
+const FILE_OFFICE = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
+const FILE_IMAGES = ['jpg', 'jpeg', 'png'];
+const FILE_CAD = ['dwg', 'dxf', 'dwf', 'dgn', 'rvt', 'skp', 'ifc'];
+const FILE_MAX = 50 * 1024 * 1024;
+const fileExt = (f) => ((f && f.name.split('.').pop()) || '').toLowerCase();
+const fileMustDownload = () => !!S.ff.file && (FILE_OFFICE.includes(fileExt(S.ff.file)) || FILE_CAD.includes(fileExt(S.ff.file)));
+
+function filesCard(){
+  const f = S.ff;
+  const lectureTitle = (id) => id ? ((S.lectures.find((l) => l.id === id) || {}).title || '') : t('file_whole_course');
+  const statusLabel2 = (s) => ({ published: t('file_ready'), pending_review: t('file_pending_review'), rejected: t('file_rejected'), failed: t('file_failed') }[s] || t('file_processing'));
+  const statusTone2 = (s) => (s === 'published' ? 'good' : (s === 'failed' || s === 'rejected') ? 'bad' : 'warn');
+  const list = S.files.map((x) => `
+    <div class="glass"><div class="dc">${badge(x.kind === 'image' ? 'image' : 'courses', 'teal')}
+      <div class="body"><div class="t">${esc(x.title || '—')}</div>
+        <div class="s">${esc([lectureTitle(x.lecture_id), x.original_name || '', x.allow_download ? t('file_downloadable') : t('file_view_only')].filter(Boolean).join(' · '))}</div></div>
+      ${pill(statusLabel2(x.status), statusTone2(x.status))}</div>
+      <div class="actions">${btn(t('btn_delete'), 'del-file', { danger: true, icon: 'trash', id: x.id })}</div></div>`).join('');
+  const form = S.lectures.length ? `
+    <div class="gap">
+      <input type="text" data-bind="ff.title" value="${esc(f.title)}" placeholder="${esc(t('label_file_title'))}">
+      <div><label class="f">${esc(t('label_file_lecture'))}</label>
+        <select data-bind="ff.lecture"><option value="">${esc(t('file_whole_course'))}</option>
+        ${S.lectures.map((l) => `<option value="${esc(l.id)}" ${f.lecture === l.id ? 'selected' : ''}>${esc(l.title || '—')}</option>`).join('')}</select></div>
+      <button class="btn" data-act="pick-file" type="button">${icon('plus')}${esc(f.file ? f.file.name : t('btn_choose_file'))}</button>
+      <input type="file" id="fileInput" accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.pdf,.dwg,.dxf,.dwf,.dgn,.rvt,.skp,.ifc" hidden>
+      <div class="hint">${esc(t('file_types_hint'))}</div>
+      <label class="check"><input type="checkbox" data-bind="ff.allowDl" ${(f.allowDl || fileMustDownload()) ? 'checked' : ''} ${fileMustDownload() ? 'disabled' : ''}>${esc(fileMustDownload() ? t('label_download_forced') : t('label_allow_download'))}</label>
+      <label class="check"><input type="checkbox" data-bind="ff.free" ${f.free ? 'checked' : ''}>${esc(t('label_free_file'))}</label>
+    </div>
+    ${errBox('file')}${S.ok.file ? `<div class="ok">${esc(S.ok.file)}</div>` : ''}
+    <div style="margin-top:10px">${btn(t('btn_add'), 'add-file', { primary: true, block: true, disabled: f.busy })}</div>`
+    : `<div class="hint">${esc(t('files_after_first_lecture'))}</div>`;
+  return `
+  <div class="section"><span>${esc(t('course_files'))} (${S.files.length})</span></div>
+  ${list ? `<div class="stack">${list}</div><div style="height:14px"></div>` : ''}
+  <div class="glass panel">
+    <div class="panel-h">${badge('courses', 'teal', true)}<div class="t">${esc(t('add_course_file'))}</div></div>
+    ${form}
+  </div>`;
+}
+
+async function loadFiles(){
+  if(!S.course) return;
+  const { data } = await sb.from('course_files').select('*').eq('course_id', S.course.id).order('order_index').order('created_at');
+  S.files = data || [];
+  if(S.view === 'course') render();
+}
+
+async function addFile(){
+  const f = S.ff;
+  if(f.busy || !S.course) return;
+  S.err.file = ''; S.ok.file = '';
+  const title = f.title.trim();
+  if(!title || !f.file){ S.err.file = t('err_file_fields'); return render(); }
+  if(f.file.size > FILE_MAX){ S.err.file = t('err_file_too_big'); return render(); }
+  const ext = fileExt(f.file);
+  const kind = ext === 'pdf' ? 'pdf' : FILE_IMAGES.includes(ext) ? 'image' : FILE_CAD.includes(ext) ? 'cad' : 'office';
+  const id = crypto.randomUUID(), courseId = S.course.id;
+  const rawPath = 'raw/' + courseId + '/' + id + '.' + ext;
+  f.busy = true; render();
+  let uploaded = false;
+  try{
+    const up = await sb.storage.from('course-files').upload(rawPath, f.file);
+    if(up.error) throw up.error;
+    uploaded = true;
+    const row = {
+      id, course_id: courseId, title, kind, original_name: f.file.name, raw_path: rawPath,
+      is_free: f.free, allow_download: f.allowDl || fileMustDownload(), order_index: S.files.length, uploaded_by: S.user.id
+    };
+    if(f.lecture) row.lecture_id = f.lecture;
+    const ins = await sb.from('course_files').insert(row);
+    if(ins.error) throw ins.error;
+    const { data: { session } } = await sb.auth.getSession();
+    const res = await fetch('/api/course-file', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+      body: JSON.stringify({ action: 'start', fileId: id })
+    });
+    if(!res.ok) throw new Error('start failed (' + res.status + ')');
+    S.ff = { title: '', lecture: '', allowDl: false, free: false, file: null, busy: false };
+    S.ok.file = t('file_processing_started');
+  }catch(e){
+    if(uploaded){
+      sb.from('course_files').delete().eq('id', id).then(() => {}, () => {});
+      sb.storage.from('course-files').remove([rawPath]).then(() => {}, () => {});
+    }
+    f.busy = false;
+    S.err.file = (e && e.message) || String(e);
+  }
+  await loadFiles(); render();
+}
+
+async function deleteFile(id){
+  const x = S.files.find((y) => y.id === id);
+  if(!x || !confirm(t('confirm_delete_file').replace('{title}', x.title || ''))) return;
+  const { error } = await sb.from('course_files').delete().eq('id', id);
+  if(error){ toast(error.message); return; }
+  const paths = [x.view_path, x.raw_path].filter(Boolean);
+  if(paths.length) sb.storage.from('course-files').remove(paths).then(() => {}, () => {});
+  await loadFiles();
+}
 
 function curriculumCard(){
   const lec = S.lectures;
@@ -467,6 +571,7 @@ function resetCourseForm(c){
   while(S.points.length < MIN_POINT_ROWS) S.points.push('');
   S.thumbUrl = src.thumbnail_url || null; S.thumbFile = null; S.thumbPreview = null;
   S.lf = { title: '', free: false, file: null }; S.upMsg = ''; S.upPct = null;
+  S.ff = { title: '', lecture: '', allowDl: false, free: false, file: null, busy: false }; S.files = [];
   S.err = {};
 }
 function openCourse(id){
@@ -474,7 +579,7 @@ function openCourse(id){
   resetCourseForm(S.course);
   S.lectures = [];
   go('course');
-  if(S.course) loadLectures();
+  if(S.course){ loadLectures(); loadFiles(); }
 }
 async function loadLectures(){
   if(!S.course) return;
@@ -789,6 +894,11 @@ document.addEventListener('change', (e) => {
     S.thumbFile = file;
     const r = new FileReader(); r.onload = () => { S.thumbPreview = r.result; render(); }; r.readAsDataURL(file);
   } else if(id === 'videoInput' && file){ S.lf.file = file; render(); }
+  else if(id === 'fileInput' && file){
+    S.ff.file = file;
+    if(!S.ff.title.trim()) S.ff.title = file.name.replace(/\.[^.]+$/, '');
+    render();
+  }
   else if(id === 'qrInput' && file){
     S.pf.qrFile = file;
     const r = new FileReader(); r.onload = () => { S.pf.qrPreview = r.result; render(); }; r.readAsDataURL(file);
@@ -819,6 +929,9 @@ document.addEventListener('click', async (e) => {
     case 'pick-video': $('#videoInput').click(); break;
     case 'pick-qr': $('#qrInput').click(); break;
     case 'add-lecture': addLecture(); break;
+    case 'pick-file': $('#fileInput').click(); break;
+    case 'add-file': addFile(); break;
+    case 'del-file': deleteFile(id); break;
     case 'lec-up': moveLecture(id, -1); break;
     case 'lec-down': moveLecture(id, 1); break;
     case 'lec-del': deleteLecture(id); break;
