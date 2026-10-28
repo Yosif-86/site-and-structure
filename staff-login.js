@@ -125,7 +125,7 @@
     codeEmail = email;
     show('');
     document.getElementById('codeLead').textContent =
-      'أرسلنا رمزًا من 6 أرقام إلى ' + email + '. لم يصلك؟ تحقق من مجلد Spam.';
+      'أرسلنا رمزًا من 6 أرقام إلى ' + email + '.';
     codeEl.value = '';
     codeShow('');
     if(!codeDlg.open) codeDlg.showModal();

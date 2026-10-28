@@ -324,7 +324,7 @@ function curriculumCard(){
     ${S.upPct != null ? `<div class="prog"><i style="width:${Math.round(S.upPct * 100)}%"></i></div>` : ''}
     ${S.upMsg ? `<div class="${S.err.lecture ? 'err' : 'ok'}">${esc(S.upMsg)}</div>` : errBox('lecture')}
     <div style="margin-top:10px">${btn(t('btn_add'), 'add-lecture', { primary: true, block: true, disabled: S.uploading })}</div>
-    <div class="hint" style="text-align:center;margin-top:8px">${esc(t('upload_background_hint'))}<br>${esc(t('keep_open'))}</div>
+    <div class="hint" style="text-align:center;margin-top:8px">${esc(t('keep_open'))}</div>
   </div>`;
 }
 
