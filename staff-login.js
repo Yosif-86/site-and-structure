@@ -66,6 +66,14 @@
   (async () => {
     const { data: { session } } = await sb.auth.getSession();
     if(!session) return;
+    // A password-only session (from the buying page) does not skip the code.
+    let viaCode = false;
+    try{
+      const b = session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const amr = JSON.parse(atob(b)).amr;
+      viaCode = Array.isArray(amr) && amr.some((a) => a && (a.method === 'otp' || a.method === 'magiclink'));
+    }catch(e){}
+    if(!viaCode){ await sb.auth.signOut(); return; }
     const dest = destination(await staffProfile(session.user.id));
     if(dest) location.replace(dest);
   })();

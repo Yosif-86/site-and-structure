@@ -829,9 +829,20 @@ document.addEventListener('click', async (e) => {
 });
 
 // ---------- start ----------
+// The dashboard needs a session that went through the emailed 6-digit code
+// (same rule as the app for teachers). A password-only session, e.g. from
+// the buying page, is signed out and sent to the sign-in page.
+function hasEmailCode(session){
+  try{
+    const b = session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const p = JSON.parse(atob(b));
+    return Array.isArray(p.amr) && p.amr.some((a) => a && (a.method === 'otp' || a.method === 'magiclink'));
+  }catch(e){ return false; }
+}
 (async function init(){
   const { data: { session } } = await sb.auth.getSession();
   if(!session){ location.replace('login.html?next=teacher'); return; }
+  if(!hasEmailCode(session)){ await sb.auth.signOut(); location.replace('login.html?next=teacher'); return; }
   S.user = session.user;
   const { data: prof } = await sb.from('profiles').select('is_teacher').eq('id', S.user.id).maybeSingle();
   if(!prof || !prof.is_teacher){ location.replace('login.html?next=teacher'); return; }
@@ -839,5 +850,11 @@ document.addEventListener('click', async (e) => {
   S.ready = true;
   history.replaceState({ v: 'overview' }, '');
   render();
+  // Coming from the buying page's Edit button: #edit=<course id>.
+  const m = /^#edit=([0-9a-f-]{36})$/i.exec(location.hash);
+  if(m && S.courses.some((c) => c.id === m[1])){
+    history.replaceState({ v: 'overview' }, '', location.pathname);
+    openCourse(m[1]);
+  }
 })();
 })();

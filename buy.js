@@ -291,6 +291,12 @@
     $('cBuy').style.display = mine || free ? 'none' : '';
     $('codeRow').style.display = mine || free ? 'none' : '';
     setMsg($('cMsg'), mine ? ERRORS.already_enrolled : free ? ERRORS.course_free : '', mine || free ? 'ok' : '');
+    // The teacher who owns this course gets a shortcut to its edit page
+    // (title, learning points, price and the curriculum).
+    var edit = $('cEdit');
+    var own = !!(user && c.teacher_id && c.teacher_id === user.id);
+    edit.hidden = !own;
+    if (own) edit.href = 'teacher.html#edit=' + encodeURIComponent(c.id);
     if (!courseDlg.open) courseDlg.showModal();
   }
 
@@ -388,7 +394,7 @@
       return Promise.all([
         loadOwned(),
         sb.from('courses')
-          .select('id, slug, title, price, is_free, thumbnail_url, teacher_name, description')
+          .select('id, slug, title, price, is_free, thumbnail_url, teacher_name, teacher_id, description')
           .eq('status', 'published')
           .order('created_at', { ascending: false })
       ]);
