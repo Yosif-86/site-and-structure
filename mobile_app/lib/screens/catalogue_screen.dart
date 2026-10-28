@@ -29,7 +29,6 @@ import 'my_courses_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
-import 'teacher_hub_screen.dart';
 import 'teacher_screen.dart';
 
 /// App shell: a fixed glass top bar (logo + avatar), the swipeable tabs
@@ -162,18 +161,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
           .maybeSingle();
       if (!mounted) return;
       final isTeacher = prof?['is_teacher'] == true;
-      // The teacher tab sits at page 2 and pushes Profile and Settings one
-      // page right (or back) when the role changes; keep the visible page.
-      final wasTeacher = _isTeacher;
-      if (wasTeacher != isTeacher && _currentPage >= 2) {
-        final moved = (_currentPage + (isTeacher ? 1 : -1)).clamp(0, 4);
-        _currentPage = moved;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _pageController.hasClients) {
-            _pageController.jumpToPage(moved);
-          }
-        });
-      }
       setState(() {
         _isTeacher = isTeacher;
         final hasPhone =
@@ -379,8 +366,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
                             MyCoursesScreen(
                                 key: _myCoursesKey,
                                 onBrowse: () => _goToPage(0))),
-                        if (_isTeacher)
-                          _swipeTransition(2, const TeacherHubPage()),
                         _swipeTransition(_profilePage,
                             ProfileScreen(onProfileChanged: _loadProfile)),
                         _swipeTransition(
@@ -437,8 +422,8 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
     );
   }
 
-  /// Page of the Profile tab: after the teacher tab when there is one.
-  int get _profilePage => _isTeacher ? 3 : 2;
+  /// Page of the Profile tab.
+  int get _profilePage => 2;
 
   List<BottomNavItem> _navItems(String Function(String) t, bool loggedIn) {
     return [
@@ -454,13 +439,6 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
         active: _currentPage == 1,
         onTap: () => loggedIn ? _goToPage(1) : _openAuth(),
       ),
-      if (_isTeacher)
-        BottomNavItem(
-          icon: ArcIcon.edit,
-          tooltip: t('nav_teach'),
-          active: _currentPage == 2,
-          onTap: () => _goToPage(2),
-        ),
       BottomNavItem(
         icon: ArcIcon.profile,
         tooltip: t('nav_profile'),
