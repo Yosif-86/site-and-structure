@@ -2690,7 +2690,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           _dragHandle(dragIndex),
           SizedBox(
             width: 26,
-            child: Text((i + 1).toString().padLeft(2, '0'),
+            child: Text((dragIndex + 1).toString().padLeft(2, '0'),
                 style: AppFonts.code(size: 12.5, color: AppColors.muted)),
           ),
           const SizedBox(width: 6),

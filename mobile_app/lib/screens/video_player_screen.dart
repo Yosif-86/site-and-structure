@@ -1285,7 +1285,6 @@ class _FsLessonList extends StatelessWidget {
     var gi = groups.indexWhere((g) => g.key == activeKey);
     if (gi < 0) gi = 0;
     final group = groups[gi];
-    final numbers = {for (var i = 0; i < numbering.length; i++) numbering[i].id: i + 1};
     Widget arrow(IconData icon, int to) => GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: to < 0 || to >= groups.length ? null : () => onKey(groups[to].key),
@@ -1345,7 +1344,7 @@ class _FsLessonList extends StatelessWidget {
                           child: Row(children: [
                             SizedBox(
                               width: 24,
-                              child: Text((numbers[l.id] ?? i + 1).toString().padLeft(2, '0'),
+                              child: Text((i + 1).toString().padLeft(2, '0'),
                                   style: TextStyle(
                                       color: isCurrent ? AppColors.red : Colors.white54,
                                       fontSize: 11.5,
@@ -1674,7 +1673,14 @@ class _LessonPanel extends StatelessWidget {
               ),
               child: current
                   ? const ArcIconView(ArcIcon.play, color: Colors.white, size: 16)
-                  : Text((i + 1).toString().padLeft(2, '0'),
+                  : Text(
+                      (playlist
+                                  .take(i)
+                                  .where((x) => x.chapterId == l.chapterId)
+                                  .length +
+                              1)
+                          .toString()
+                          .padLeft(2, '0'),
                       style: AppFonts.code(size: 12.5, color: _soft)),
             ),
             const SizedBox(width: 12),

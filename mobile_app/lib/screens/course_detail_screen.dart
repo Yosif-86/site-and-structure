@@ -1292,9 +1292,10 @@ class _CurriculumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Number by real order, not display order -- the continue-watching
-    // lecture is pulled to the top but keeps its own episode number.
-    final sorted = [...(numbering ?? lectures)]
+    // Number by real order inside this list (each chapter starts at 1), not
+    // display order -- the continue-watching lecture is pulled to the top
+    // but keeps its own episode number.
+    final sorted = [...lectures]
       ..sort((a, b) => a.orderIndex.compareTo(b.orderIndex));
     final numberOf = {
       for (var i = 0; i < sorted.length; i++) sorted[i].id: i + 1
