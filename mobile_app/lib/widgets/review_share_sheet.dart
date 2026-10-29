@@ -368,9 +368,11 @@ class _ReviewCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text('$rating',
+                                textDirection: TextDirection.ltr,
                                 style: AppFonts.heading(
                                     size: 104, color: t.ink)),
                             Text('/5',
+                                textDirection: TextDirection.ltr,
                                 style: AppFonts.heading(
                                     size: 54, color: t.accent)),
                           ],
