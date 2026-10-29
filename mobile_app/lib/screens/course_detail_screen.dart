@@ -503,7 +503,6 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     final ar = AppStrings.instance.isAr;
     final course = _course!;
     final teacher = course.localizedTeacherName(ar) ?? _teacherName;
-    final tag = course.localizedTagLabel(ar);
     final desc = (course.localizedDescription(ar) ?? '').trim();
     final freeLecture = _lectures.where((l) => l.isFree).firstOrNull;
     final freeCount = _lectures.where((l) => l.isFree).length;
@@ -537,7 +536,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         FadeSlideIn(
           delayMs: 0,
           child: _CourseHero(
-            tag: tag,
+            statusLabel: _isOwner
+                ? _t('tag_owner')
+                : _isActive
+                    ? _t('tag_enrolled')
+                    : _enrollmentStatus == 'pending'
+                        ? _t('tag_pending')
+                        : _t('tag_not_enrolled'),
+            statusActive: _isActive,
             thumbnailUrl: course.thumbnailUrl,
             playLabel: heroLabel,
             onPlay:
@@ -609,6 +615,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           _RejectedBanner(reason: _rejectionReason!),
           const SizedBox(height: 12),
         ],
+        if (!_isActive)
         FadeSlideIn(
           delayMs: 60,
           child: _EnrollPanel(
@@ -1171,11 +1178,18 @@ class _Tabs extends StatelessWidget {
 /// Rounded hero image with the course tag and a play affordance (continue /
 /// start / preview) when there's something the viewer can watch.
 class _CourseHero extends StatelessWidget {
-  final String? tag;
+  final String statusLabel;
+  final bool statusActive;
   final String? thumbnailUrl;
   final String? playLabel;
   final VoidCallback? onPlay;
-  const _CourseHero({this.tag, this.thumbnailUrl, this.playLabel, this.onPlay});
+  const _CourseHero({
+    required this.statusLabel,
+    required this.statusActive,
+    this.thumbnailUrl,
+    this.playLabel,
+    this.onPlay,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1198,13 +1212,15 @@ class _CourseHero extends StatelessWidget {
                 ),
               ),
             ),
-            if (tag != null && tag!.isNotEmpty)
-              PositionedDirectional(
-                top: 14,
-                start: 14,
-                child:
-                    GlassChip(label: tag!, icon: ArcIcon.award, onImage: true),
-              ),
+            PositionedDirectional(
+              top: 14,
+              start: 14,
+              child: GlassChip(
+                  label: statusLabel,
+                  icon: statusActive ? ArcIcon.check : null,
+                  color: statusActive ? AppColors.teal : null,
+                  onImage: true),
+            ),
             if (onPlay != null)
               Center(
                 child: Semantics(
