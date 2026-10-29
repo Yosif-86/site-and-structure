@@ -37,8 +37,8 @@ class TimelineStep extends StatelessWidget {
       children: [
         if (!last)
           PositionedDirectional(
-            start: 15,
-            top: 36,
+            start: 10,
+            top: 26,
             bottom: 0,
             width: 2,
             child: TimelineLine(filled: done),
@@ -47,11 +47,11 @@ class TimelineStep extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 32,
+              width: 22,
               child: TimelineDot(
                   state: open ? 1 : (done ? 2 : 0), number: number),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Opacity(
                 opacity: locked ? 0.55 : 1,
@@ -197,29 +197,29 @@ class TimelineDotState extends State<TimelineDot>
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 32 + 22 * k,
-                  height: 32 + 22 * k,
+                  width: 22 + 16 * k,
+                  height: 22 + 16 * k,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppColors.red.withValues(alpha: 0.28 * (1 - k)),
                   ),
                 ),
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 22,
+                  height: 22,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.red, width: 2.5),
                     boxShadow: [
                       BoxShadow(
                           color: AppColors.red.withValues(alpha: 0.45),
-                          blurRadius: 14)
+                          blurRadius: 10)
                     ],
                   ),
                 ),
                 Container(
-                  width: 14,
-                  height: 14,
+                  width: 10,
+                  height: 10,
                   decoration: BoxDecoration(
                       shape: BoxShape.circle, color: AppColors.red),
                 ),
@@ -234,16 +234,16 @@ class TimelineDotState extends State<TimelineDot>
           builder: (context, s, child) =>
               Transform.scale(scale: s, child: child),
           child: Container(
-            width: 32,
-            height: 32,
+            width: 22,
+            height: 22,
             decoration:
                 BoxDecoration(shape: BoxShape.circle, color: AppColors.teal),
-            child: Icon(Icons.check_rounded, size: 19, color: AppColors.bg),
+            child: Icon(Icons.check_rounded, size: 14, color: AppColors.bg),
           ),
         ),
       _ => Container(
-          width: 32,
-          height: 32,
+          width: 22,
+          height: 22,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -251,15 +251,15 @@ class TimelineDotState extends State<TimelineDot>
           ),
           child: Text('${widget.number}',
               style: AppFonts.body(
-                  size: 12.5, weight: FontWeight.w700, color: AppColors.muted)),
+                  size: 11, weight: FontWeight.w700, color: AppColors.muted)),
         ),
     };
     return SizedBox(
-      width: 32,
-      height: 32,
+      width: 22,
+      height: 22,
       child: OverflowBox(
-        maxWidth: 60,
-        maxHeight: 60,
+        maxWidth: 44,
+        maxHeight: 44,
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 260),
           switchInCurve: Curves.easeOut,
