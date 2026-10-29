@@ -361,6 +361,8 @@ class _TeacherScreenState extends State<TeacherScreen> {
   /// rebuilds.
   final ValueNotifier<int> _pointsTick = ValueNotifier(0);
   final GlobalKey _curriculumKey = GlobalKey();
+  // Which step of the course editor timeline is open (-1 = all closed).
+  int _openStep = 0;
 
   /// This teacher's platform share as a fraction; set by the admin.
   double _myRate = PaymentRules.platformRate;
@@ -602,6 +604,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _cThumbUrl = null;
     _cThumbFile = null;
     _cFormError = null;
+    _openStep = 0;
     setState(() => _view = _TView.courseEdit);
   }
 
@@ -625,6 +628,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
     _lVideoFile = null;
     _lIsFree = false;
     _lFormError = null;
+    _openStep = widget.focusCurriculum && widget.editCourseId == c['id'] ? 1 : 0;
     setState(() => _view = _TView.courseEdit);
     _loadLectures();
     if (widget.focusCurriculum && widget.editCourseId == c['id']) {
@@ -674,6 +678,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         .map((l) => l.length > 200 ? l.substring(0, 200) : l)
         .toList();
     setState(() => _cSaving = true);
+    Map<String, dynamic>? created;
     try {
       final sb = SupabaseService.instance.client;
       final user = SupabaseService.instance.currentUser!;
@@ -717,7 +722,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       } else {
         final slug =
             '${_slugify(title)}-${const Uuid().v4().substring(0, 6)}';
-        await sb.from('courses').insert({
+        created = await sb.from('courses').insert({
           'slug': slug,
           'title': title,
           'description': description,
@@ -727,10 +732,19 @@ class _TeacherScreenState extends State<TeacherScreen> {
           if (learningPoints.isNotEmpty) 'learning_points': learningPoints,
           'teacher_id': user.id,
           'status': 'draft',
-        });
+        }).select().single();
       }
       await _loadCourses();
       if (!mounted) return;
+      if (created != null) {
+        // New course: keep going, the lectures step is next.
+        setState(() {
+          _activeCourse = created;
+          _openStep = 1;
+        });
+        _loadLectures();
+        return;
+      }
       _leaveEditor();
     } catch (e) {
       if (mounted) setState(() => _cFormError = ErrorReporter.userMessage(e, page: 'teacher'));
@@ -2084,9 +2098,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DashFormPanel(
-          title: _activeCourse != null ? t('edit_course') : t('new_course_title'),
-          icon: ArcIcon.edit,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+          child: Text(
+              _activeCourse != null ? t('edit_course') : t('new_course_title'),
+              style: AppFonts.body(size: 18, weight: FontWeight.w800)),
+        ),
+        _tlStep(t, 0, t('step_info'), t('step_info_sub'),
+          done: _activeCourse != null,
+          child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _infoRow(
               _infoBox(
@@ -2207,28 +2228,212 @@ class _TeacherScreenState extends State<TeacherScreen> {
                       onPressed: _leaveEditor, child: Text(t('cancel')))),
             ]),
           ],
+        )),
+        _tlStep(
+          t,
+          1,
+          t('step_lectures'),
+          t('chapter_count').replaceAll('{n}', '${_activeLectures.length}'),
+          key: _curriculumKey,
+          done: _activeLectures.isNotEmpty,
+          child: _activeCourse == null ? null : _curriculumBody(t),
         ),
-        if (_activeCourse != null) ...[
-          const SizedBox(height: 14),
-          _curriculumCard(t),
-          const SizedBox(height: 8),
-          TeacherCourseFiles(
-              key: ValueKey(_activeCourse!['id']),
-              courseId: _activeCourse!['id'] as String,
-              lectures: _activeLectures),
-        ],
+        _tlStep(
+          t,
+          2,
+          t('step_files'),
+          t('step_files_sub'),
+          last: true,
+          child: _activeCourse == null
+              ? null
+              : TeacherCourseFiles(
+                  key: ValueKey(_activeCourse!['id']),
+                  courseId: _activeCourse!['id'] as String,
+                  lectures: _activeLectures),
+        ),
       ],
       ),
     );
   }
 
-  /// The second card of the course page: lectures, uploads in progress and
-  /// the add-lecture form.
-  Widget _curriculumCard(String Function(String) t) {
-    return DashFormPanel(
-      key: _curriculumKey,
-      title: '${t('curriculum')} · ${_activeCourse?['title'] ?? ''}',
-      icon: ArcIcon.video,
+  /// One step of the course editor timeline: a numbered dot, a line down to
+  /// the next step, and a card that opens and closes around the step's
+  /// content. A step with no [child] is locked (the course is not saved yet).
+  Widget _tlStep(String Function(String) t, int index, String title, String sub,
+      {Widget? child, bool done = false, bool last = false, Key? key}) {
+    final locked = child == null;
+    final open = !locked && _openStep == index;
+    final lit = done || open;
+    const fast = Duration(milliseconds: 260);
+    return Stack(
+      key: key,
+      children: [
+        if (!last)
+          PositionedDirectional(
+            start: 15,
+            top: 34,
+            bottom: 0,
+            width: 2,
+            child: AnimatedContainer(
+                duration: fast,
+                color: done ? AppColors.red : AppColors.line),
+          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 32,
+              child: AnimatedContainer(
+                duration: fast,
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: lit ? AppColors.red : AppColors.panel2,
+                  border: Border.all(
+                      color: lit ? AppColors.red : AppColors.line, width: 1.5),
+                ),
+                alignment: Alignment.center,
+                child: done && !open
+                    ? const Icon(Icons.check_rounded,
+                        size: 18, color: Colors.white)
+                    : Text('${index + 1}',
+                        style: AppFonts.code(
+                            size: 13,
+                            color: open ? Colors.white : AppColors.muted)),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: last ? 0 : 14),
+                child: GlassCard(
+                  padding: const EdgeInsets.all(14),
+                  borderRadius: BorderRadius.circular(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      InkWell(
+                        borderRadius: BorderRadius.circular(10),
+                        onTap: locked
+                            ? null
+                            : () =>
+                                setState(() => _openStep = open ? -1 : index),
+                        child: Row(children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title,
+                                    style: AppFonts.body(
+                                        size: 15, weight: FontWeight.w800)),
+                                const SizedBox(height: 2),
+                                Text(locked ? t('step_locked') : sub,
+                                    style: AppFonts.body(
+                                        size: 12, color: AppColors.muted)),
+                              ],
+                            ),
+                          ),
+                          if (!locked)
+                            AnimatedRotation(
+                              turns: open ? 0.5 : 0,
+                              duration: fast,
+                              child: Icon(Icons.expand_more_rounded,
+                                  color: AppColors.muted),
+                            ),
+                        ]),
+                      ),
+                      AnimatedSize(
+                        duration: fast,
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: open
+                            ? Padding(
+                                padding: const EdgeInsets.only(top: 14),
+                                child: child)
+                            : const SizedBox(width: double.infinity),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Step 2 body: uploads in progress, the chapters switch, the lectures
+  /// (grouped by chapter when chapters are on) and the add buttons.
+  Widget _curriculumBody(String Function(String) t) {
+    final chapterIds = {for (final c in _activeChapters) c['id']};
+    List<Widget> rowsFor(bool Function(Map<String, dynamic>) test) => [
+          for (var i = 0; i < _activeLectures.length; i++)
+            if (test(_activeLectures[i])) ...[
+              _lectureRow(i, _activeLectures[i], t),
+              const SizedBox(height: 10),
+            ],
+        ];
+    Widget addButton(String? chapterId) => Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            onPressed: () => _addLectureSheet(chapterId),
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: Text(t('btn_add_lecture')),
+          ),
+        );
+    Widget block({required String title, required String meta,
+        required List<Widget> rows, String? chapterId,
+        Map<String, dynamic>? chapter}) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        decoration: BoxDecoration(
+          color: AppColors.bg.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: AppFonts.body(
+                            size: 14.5, weight: FontWeight.w800)),
+                    Text(meta,
+                        style:
+                            AppFonts.body(size: 12, color: AppColors.muted)),
+                  ],
+                ),
+              ),
+              if (chapter != null)
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_horiz_rounded, color: AppColors.muted),
+                  onSelected: (v) =>
+                      v == 'rename' ? _renameChapter(chapter) : _deleteChapter(chapter),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                        value: 'rename', child: Text(t('btn_rename'))),
+                    PopupMenuItem(
+                        value: 'delete', child: Text(t('btn_delete'))),
+                  ],
+                ),
+            ]),
+            const SizedBox(height: 10),
+            ...rows,
+            addButton(chapterId),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AnimatedBuilder(
           animation: UploadManager.instance,
@@ -2282,112 +2487,144 @@ class _TeacherScreenState extends State<TeacherScreen> {
           onChanged: _setChaptersOn,
         ),
         const SizedBox(height: 6),
-        if (_activeLectures.isEmpty)
-          DashEmpty(icon: ArcIcon.video, message: t('no_lectures_teacher'))
-        else
-          for (var i = 0; i < _activeLectures.length; i++) ...[
-            _lectureRow(i, _activeLectures[i], t),
-            const SizedBox(height: 10),
-          ],
-        if (_chaptersOn && _activeChapters.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(t('chapters_title'),
-              style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          for (final c in _activeChapters) ...[
-            DashCard(
-              leading: DashIconBadge(icon: ArcIcon.lessons, accent: AppColors.red),
+        if (!_chaptersOn) ...[
+          if (_activeLectures.isEmpty)
+            DashEmpty(icon: ArcIcon.video, message: t('no_lectures_teacher')),
+          ...rowsFor((_) => true),
+          addButton(null),
+        ] else ...[
+          for (final c in _activeChapters)
+            block(
               title: c['title'] as String? ?? '—',
-              titleStyle: AppFonts.body(size: 14, weight: FontWeight.w700),
-              subtitle: t('chapter_count').replaceAll(
-                  '{n}',
+              meta: t('chapter_count').replaceAll('{n}',
                   '${_activeLectures.where((l) => l['chapter_id'] == c['id']).length}'),
-              actions: [
-                DashButton(t('btn_rename'),
-                    onPressed: () => _renameChapter(c)),
-                DashButton(t('btn_delete'),
-                    danger: true,
-                    icon: ArcIcon.trash,
-                    onPressed: () => _deleteChapter(c)),
-              ],
+              rows: rowsFor((l) => l['chapter_id'] == c['id']),
+              chapterId: c['id'] as String,
+              chapter: c,
             ),
-            const SizedBox(height: 10),
-          ],
+          if (_activeLectures.any((l) => !chapterIds.contains(l['chapter_id'])) ||
+              _activeChapters.isEmpty)
+            block(
+              title: t('chapter_none'),
+              meta: t('chapter_count').replaceAll('{n}',
+                  '${_activeLectures.where((l) => !chapterIds.contains(l['chapter_id'])).length}'),
+              rows: rowsFor((l) => !chapterIds.contains(l['chapter_id'])),
+            ),
+          OutlinedButton.icon(
+            onPressed: () async {
+              await _createChapter();
+              if (mounted) setState(() {});
+            },
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: Text(t('chapter_new').replaceFirst('+ ', '')),
+          ),
         ],
-        const SizedBox(height: 6),
-        Text(t('btn_add'),
-            style: AppFonts.body(size: 14, weight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _lTitle,
-            decoration: InputDecoration(labelText: t('label_lecture_title'))),
-        const SizedBox(height: 12),
-        if (_chaptersOn) ...[
-        DropdownButtonFormField<String>(
-          value: _lChapterId ?? '',
-          decoration: InputDecoration(labelText: t('label_chapter')),
-          items: [
-            DropdownMenuItem(value: '', child: Text(t('chapter_none'))),
-            for (final c in _activeChapters)
-              DropdownMenuItem(
-                  value: c['id'] as String,
-                  child: Text(c['title'] as String? ?? '',
-                      overflow: TextOverflow.ellipsis)),
-            DropdownMenuItem(
-                value: '__new',
-                child: Text(t('chapter_new'),
-                    style: TextStyle(color: AppColors.red))),
-          ],
-          onChanged: (v) async {
-            if (v == '__new') {
-              final id = await _createChapter();
-              if (mounted && id != null) setState(() => _lChapterId = id);
-              return;
-            }
-            setState(() => _lChapterId = (v == null || v.isEmpty) ? null : v);
-          },
-        ),
-        const SizedBox(height: 12),
-        ],
-        FilePickBox(
-          file: _lVideoFile,
-          video: true,
-          emptyLabel: t('label_video_file'),
-          onPick: () async {
-            final picked = await SafePicker.video();
-            if (picked != null) setState(() => _lVideoFile = picked);
-          },
-          onRemove: () => setState(() => _lVideoFile = null),
-        ),
-        const SizedBox(height: 4),
-        InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => setState(() => _lIsFree = !_lIsFree),
-          child: Row(children: [
-            Checkbox(
-                value: _lIsFree,
-                onChanged: (v) => setState(() => _lIsFree = v ?? false)),
-            Expanded(
-                child: Text(t('label_free_lecture'),
-                    style: AppFonts.body(size: 13, color: AppColors.muted))),
-          ]),
-        ),
-        _formError(_lFormError),
-        const SizedBox(height: 10),
-        ElevatedButton(
-            onPressed: _lPreparing ? null : _addLecture,
-            child: _lPreparing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : Text(t('btn_add'))),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(t('upload_background_hint'),
             textAlign: TextAlign.center,
             style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
       ],
+    );
+  }
+
+  /// The add-lecture form, as a sheet opened from a chapter (or from the
+  /// plain list when chapters are off).
+  Future<void> _addLectureSheet(String? chapterId) async {
+    final t = AppStrings.instance.t;
+    setState(() {
+      _lChapterId = chapterId;
+      _lFormError = null;
+    });
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Directionality(
+        textDirection:
+            AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+        child: StatefulBuilder(builder: (ctx, setSheet) {
+          void both(VoidCallback f) {
+            setState(f);
+            setSheet(() {});
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(t('add_lecture_title'),
+                      style: AppFonts.body(size: 18, weight: FontWeight.w800)),
+                  if (_chaptersOn && chapterId != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                          _activeChapters
+                                  .where((c) => c['id'] == chapterId)
+                                  .map((c) => c['title'] as String? ?? '')
+                                  .firstOrNull ??
+                              '',
+                          style: AppFonts.body(
+                              size: 13, color: AppColors.muted)),
+                    ),
+                  const SizedBox(height: 14),
+                  TextField(
+                      controller: _lTitle,
+                      decoration: InputDecoration(
+                          labelText: t('label_lecture_title'))),
+                  const SizedBox(height: 12),
+                  FilePickBox(
+                    file: _lVideoFile,
+                    video: true,
+                    emptyLabel: t('label_video_file'),
+                    onPick: () async {
+                      final picked = await SafePicker.video();
+                      if (picked != null) both(() => _lVideoFile = picked);
+                    },
+                    onRemove: () => both(() => _lVideoFile = null),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(t('label_free_lecture'),
+                        style: AppFonts.body(size: 14)),
+                    value: _lIsFree,
+                    onChanged: (v) => both(() => _lIsFree = v),
+                  ),
+                  _formError(_lFormError),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: _lPreparing
+                        ? null
+                        : () async {
+                            final run = _addLecture();
+                            setSheet(() {});
+                            await run;
+                            if (!ctx.mounted) return;
+                            if (_lFormError == null && _lTitle.text.isEmpty) {
+                              Navigator.of(ctx).pop();
+                            } else {
+                              setSheet(() {});
+                            }
+                          },
+                    child: _lPreparing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : Text(t('btn_add')),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
     );
   }
 
