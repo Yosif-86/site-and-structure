@@ -368,11 +368,18 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     }
     if (!mounted) return;
     final isActive = _isActive;
+    // Inside a chapter the player only lists and steps through that chapter.
+    final known = {for (final c in _chapters) c.id};
+    final playlist = _chapters.isEmpty
+        ? _lectures
+        : _groupLectures(lecture.chapterId != null && known.contains(lecture.chapterId)
+            ? lecture.chapterId!
+            : '_general');
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => VideoPlayerScreen(
         lectureId: lecture.id,
         title: lecture.localizedTitle(AppStrings.instance.isAr),
-        playlist: _lectures,
+        playlist: playlist,
         isUnlocked: (l) => l.isFree || isActive,
         files: _files,
         filesUnlocked: isActive,
