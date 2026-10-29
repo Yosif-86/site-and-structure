@@ -1,6 +1,6 @@
 -- Course ratings (2026-10-22).
 --  * A student with an active enrollment rates a course 1 to 5 stars. 1 to 3
---    stars can carry a written comment (4 and 5 never keep one).
+--    stars can carry a written comment (every rating may carry one).
 --  * The student can change or remove their rating at any time.
 --  * Comments are private: only the admins and the teacher who owns the
 --    course can read them (course_reviews). A low rating (1 to 3) sends a
@@ -62,10 +62,6 @@ begin
   end if;
   if v_comment is not null and length(v_comment) > 1000 then
     raise exception 'Comment is too long.' using errcode = '22023';
-  end if;
-  -- Only 1 to 3 stars keep a comment.
-  if p_rating >= 4 then
-    v_comment := null;
   end if;
 
   select id, slug, title, teacher_id into v_course

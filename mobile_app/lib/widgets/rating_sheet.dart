@@ -39,8 +39,8 @@ class StarRow extends StatelessWidget {
   }
 }
 
-/// "Rate this course": 1 to 5 stars, plus a private comment box for 1 to 3
-/// stars (it reaches the admins and the course's teacher only). A student who
+/// "Rate this course": 1 to 5 stars, plus a private comment box (it reaches
+/// the admins and the course's teacher only). A student who
 /// already rated can change the rating or remove it. Resolves to true when
 /// the rating changed.
 Future<bool?> showRatingSheet(
@@ -113,7 +113,7 @@ class _RatingSheetState extends State<_RatingSheet> {
     try {
       final text = _comment.text.trim();
       await RatingService.instance.rate(widget.courseId, _rating,
-          _rating <= 3 && text.isNotEmpty ? text : null);
+          text.isNotEmpty ? text : null);
       if (!mounted) return;
       Navigator.of(context).pop(true);
       messenger.showSnackBar(SnackBar(content: Text(_t('rate_thanks'))));
@@ -184,7 +184,7 @@ class _RatingSheetState extends State<_RatingSheet> {
                         color: kStarColor)),
               ),
             ),
-            if (_rating >= 1 && _rating <= 3) ...[
+            if (_rating >= 1) ...[
               const SizedBox(height: 12),
               TextField(
                 controller: _comment,

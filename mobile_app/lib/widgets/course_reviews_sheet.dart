@@ -8,9 +8,10 @@ import 'arc_icons.dart';
 import 'dashboard_kit.dart';
 import 'glass_card.dart';
 import 'rating_sheet.dart';
+import 'review_share_sheet.dart';
 
 /// Admin or the course's own teacher: every rating of one course with the
-/// student's name and ID, and the private comments (1 to 3 stars). Nobody else
+/// student's name and ID, and the private comments. Tapping a review opens a picture card to share. Nobody else
 /// can open this; the database refuses anyone who is neither.
 Future<void> showCourseReviews(BuildContext context,
     {required String courseId, String? title}) {
@@ -145,6 +146,8 @@ class _CourseReviewsSheetState extends State<_CourseReviewsSheet> {
     final comment = (r['comment'] as String?)?.trim() ?? '';
     final pid = (r['public_id'] as String?) ?? '';
     return GlassCard(
+      onTap: () => showReviewShare(context,
+          review: r, courseTitle: widget.title),
       padding: const EdgeInsets.all(14),
       borderRadius: BorderRadius.circular(18),
       child: Column(
