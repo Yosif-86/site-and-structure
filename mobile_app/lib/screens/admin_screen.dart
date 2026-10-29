@@ -126,6 +126,7 @@ class _AdminScreenState extends State<AdminScreen> {
   // Free (no payment) enrollment requests, sent to the course's teacher.
   List<Map<String, dynamic>> _freeRequests = [];
   final _freeIdCtrl = TextEditingController();
+  final _freeSearchCtrl = TextEditingController();
   String? _freeCourseSlug;
   // All-accounts list filter: 'all', 'student' or 'teacher'.
   String _accFilter = 'all';
@@ -184,6 +185,7 @@ class _AdminScreenState extends State<AdminScreen> {
     _payQiCtrl.dispose();
     _searchCtrl.dispose();
     _freeIdCtrl.dispose();
+    _freeSearchCtrl.dispose();
     super.dispose();
   }
 
@@ -1472,14 +1474,14 @@ class _AdminScreenState extends State<AdminScreen> {
             title: t('nav_admin'),
             subtitle: t('dash_admin_sub'),
             stats: [
-              (Money.iqd(revenue), t('est_revenue')),
-              ('$activeStudents', t('active_students')),
+              (Money.iqd(revenue), t('dash_revenue')),
+              ('${_allProfiles.length}', t('dash_all_accounts')),
               ('${_pendingReview.length + myPendingPayments + _editRequests.length + _pendingUploads.length + _pendingFiles.length + _reports.length}',
                   t('dash_needs_attention')),
             ],
             statTaps: [
               () => _goto(_View.revenue),
-              () => _goto(_View.students),
+              () => _goto(_View.accounts),
               () => _goto(_View.attention),
             ],
           ),
@@ -1819,6 +1821,47 @@ class _AdminScreenState extends State<AdminScreen> {
     }));
   }
 
+  /// Accounts matching the search box (name, email, phone or #ID); tapping
+  /// one fills the student number below.
+  List<Widget> _freeMatches(String Function(String) t) {
+    final q = _freeSearchCtrl.text.trim().toLowerCase().replaceAll('#', '');
+    if (q.isEmpty) return const [];
+    bool has(Object? v) => (v?.toString().toLowerCase() ?? '').contains(q);
+    final hits = _allProfiles
+        .where((p) =>
+            has(p['full_name']) ||
+            has(p['phone']) ||
+            has(p['public_id']) ||
+            has(_emailByUser[p['id']]))
+        .take(5)
+        .toList();
+    if (hits.isEmpty) {
+      return [
+        const SizedBox(height: 8),
+        Text(t('free_add_no_match'),
+            style: AppFonts.body(size: 13, color: AppColors.muted)),
+      ];
+    }
+    return [
+      for (final p in hits) ...[
+        const SizedBox(height: 8),
+        DashCard(
+          leading: DashAvatar(name: p['full_name'] as String?),
+          title: (p['full_name'] as String?) ?? '—',
+          subtitle: [
+            if (_idTag(p) != null) _idTag(p)!,
+            if (_emailByUser[p['id']] != null) _emailByUser[p['id']]!,
+          ].join(' · '),
+          onTap: () => setState(() {
+            _freeIdCtrl.text = p['public_id']?.toString() ?? '';
+            _freeSearchCtrl.clear();
+            FocusScope.of(context).unfocus();
+          }),
+        ),
+      ],
+    ];
+  }
+
   Widget _buildFreeAdd(String Function(String) t) {
     // A paid, published course with a teacher (the requester may own it).
     final courses = _publishedCourses
@@ -1851,6 +1894,15 @@ class _AdminScreenState extends State<AdminScreen> {
             Text(t('free_add_sub'),
                 style: AppFonts.body(size: 13, color: AppColors.muted)),
             const SizedBox(height: 12),
+            TextField(
+              controller: _freeSearchCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                  hintText: t('free_add_search_hint'),
+                  prefixIcon: const Icon(Icons.search_rounded)),
+            ),
+            ..._freeMatches(t),
+            const SizedBox(height: 10),
             TextField(
               controller: _freeIdCtrl,
               keyboardType: TextInputType.number,
