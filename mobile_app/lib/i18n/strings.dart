@@ -373,6 +373,7 @@ class AppStrings extends ChangeNotifier {
     'no_course_files': 'لا توجد ملفات لهذه الدورة بعد.',
     'files_general': 'ملفات عامة',
     'lecture_files': 'ملفات المحاضرة',
+    'fs_lectures': 'المحاضرات',
     'file_locked': 'اشترك في الدورة لفتح هذا الملف.',
     'files_after_first_lecture': 'أضف أول محاضرة، ثم يمكنك رفع ملفات الدورة هنا.',
     'file_rejected': 'مرفوض',

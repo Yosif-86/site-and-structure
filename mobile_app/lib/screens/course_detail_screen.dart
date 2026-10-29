@@ -53,6 +53,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Course? _course;
   List<Lecture> _lectures = [];
   List<CourseChapter> _chapters = [];
+  // Teacher's public name and photo (many courses have no teacher_name).
+  String? _teacherName;
+  String? _teacherPhoto;
   // Bumped after every load so an open chapter page repaints.
   final _rev = ValueNotifier<int>(0);
   List<Map<String, dynamic>> _files = [];
@@ -153,6 +156,21 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             .toList();
       } catch (_) {
         // Chapters not set up yet: one flat list of lectures.
+      }
+      String? teacherName;
+      String? teacherPhoto;
+      if (course.teacherId != null) {
+        try {
+          final tp = await sb
+              .from('teacher_public_profiles')
+              .select('full_name, teacher_photo_url')
+              .eq('id', course.teacherId!)
+              .maybeSingle();
+          teacherName = tp?['full_name'] as String?;
+          teacherPhoto = tp?['teacher_photo_url'] as String?;
+        } catch (_) {
+          // No public profile: the name on the course (if any) is used.
+        }
       }
       var files = <Map<String, dynamic>>[];
       try {
@@ -265,6 +283,8 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         _course = course;
         _lectures = lectures;
         _chapters = chapters;
+        _teacherName = teacherName;
+        _teacherPhoto = teacherPhoto;
         _files = files;
         _applePrice = applePrice;
         _myRating = myRating;
@@ -383,6 +403,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
         isUnlocked: (l) => l.isFree || isActive,
         files: _files,
         filesUnlocked: isActive,
+        chapters: _chapters,
+        courseLectures: _lectures,
+        completedIds: {..._completedLectureIds},
       ),
     ));
     if (!mounted) return;
@@ -479,7 +502,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Widget _buildContent() {
     final ar = AppStrings.instance.isAr;
     final course = _course!;
-    final teacher = course.localizedTeacherName(ar);
+    final teacher = course.localizedTeacherName(ar) ?? _teacherName;
     final tag = course.localizedTagLabel(ar);
     final desc = (course.localizedDescription(ar) ?? '').trim();
     final freeLecture = _lectures.where((l) => l.isFree).firstOrNull;
@@ -535,23 +558,34 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                     builder: (_) => TeacherProfileScreen(
                         teacherId: course.teacherId!, fallbackName: teacher))),
             child: Row(children: [
-              Container(
-                width: 38,
-                height: 38,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                      colors: [AppColors.red, AppColors.teal],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight),
-                ),
-                child: Text(teacher.characters.first.toUpperCase(),
-                    style: AppFonts.body(
-                        size: 15,
-                        weight: FontWeight.w700,
-                        color: Colors.white)),
-              ),
+              Builder(builder: (_) {
+                final initial = Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                        colors: [AppColors.red, AppColors.teal],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight),
+                  ),
+                  child: Text(teacher.characters.first.toUpperCase(),
+                      style: AppFonts.body(
+                          size: 15,
+                          weight: FontWeight.w700,
+                          color: Colors.white)),
+                );
+                final photo = _teacherPhoto;
+                if (photo == null || photo.isEmpty) return initial;
+                return ClipOval(
+                  child: Image.network(photo,
+                      width: 38,
+                      height: 38,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => initial),
+                );
+              }),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

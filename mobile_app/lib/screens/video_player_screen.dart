@@ -42,6 +42,12 @@ class VideoPlayerScreen extends StatefulWidget {
   /// The course's files; the ones of the lecture playing get a button.
   final List<Map<String, dynamic>> files;
   final bool filesUnlocked;
+
+  /// Chapter context (empty when the course has none): the fullscreen lesson
+  /// list groups by chapter, numbers lessons course-wide and ticks finished ones.
+  final List<CourseChapter> chapters;
+  final List<Lecture> courseLectures;
+  final Set<String> completedIds;
   const VideoPlayerScreen({
     super.key,
     required this.lectureId,
@@ -51,6 +57,9 @@ class VideoPlayerScreen extends StatefulWidget {
     this.preview = false,
     this.files = const [],
     this.filesUnlocked = true,
+    this.chapters = const [],
+    this.courseLectures = const [],
+    this.completedIds = const {},
   });
 
   static bool _alwaysUnlocked(Lecture _) => true;
@@ -102,6 +111,10 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
   bool _controlsVisible = true;
   bool _showEpisodeList = false;
   Timer? _hideControlsTimer;
+  // Finished lectures (ticked in the fullscreen list) and the chapter the
+  // list is currently showing (null = the one being watched).
+  late final Set<String> _done = {...widget.completedIds};
+  String? _panelKey;
 
   @override
   void initState() {
@@ -345,6 +358,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     final duration = controller.value.duration;
     if (duration <= Duration.zero) return;
     final completed = position >= duration - const Duration(seconds: 15);
+    if (completed) _done.add(widget.lectureId);
     try {
       await SupabaseService.instance.client.from('lesson_progress').upsert({
         'user_id': user.id,
@@ -532,16 +546,60 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
     _playLecture(next);
   }
 
+  /// Chapters (with their lectures) for the fullscreen list; a course with
+  /// no chapters is one group.
+  List<({String key, String title, List<Lecture> lectures})> get _groups {
+    final all = widget.courseLectures.isNotEmpty ? widget.courseLectures : widget.playlist;
+    if (widget.chapters.isEmpty) {
+      return [(key: '_all', title: AppStrings.instance.t('course_lessons'), lectures: all)];
+    }
+    final known = {for (final c in widget.chapters) c.id};
+    return [
+      for (final c in widget.chapters)
+        (key: c.id, title: c.title, lectures: all.where((l) => l.chapterId == c.id).toList()),
+      (
+        key: '_general',
+        title: AppStrings.instance.t('chapter_general'),
+        lectures: all.where((l) => l.chapterId == null || !known.contains(l.chapterId)).toList()
+      ),
+    ].where((g) => g.lectures.isNotEmpty).toList();
+  }
+
+  String _groupKeyOf(Lecture l) {
+    if (widget.chapters.isEmpty) return '_all';
+    return l.chapterId != null && widget.chapters.any((c) => c.id == l.chapterId)
+        ? l.chapterId!
+        : '_general';
+  }
+
+  String get _currentGroupKey {
+    for (final l in widget.playlist) {
+      if (l.id == widget.lectureId) return _groupKeyOf(l);
+    }
+    return widget.chapters.isEmpty ? '_all' : '_general';
+  }
+
   void _playLecture(Lecture lecture) {
     if (!widget.isUnlocked(lecture)) return;
+    // Next/previous and the portrait list stay inside the lecture's chapter.
+    final key = _groupKeyOf(lecture);
+    final playlist = widget.chapters.isEmpty
+        ? widget.playlist
+        : _groups
+            .firstWhere((g) => g.key == key,
+                orElse: () => (key: key, title: '', lectures: widget.playlist))
+            .lectures;
     Navigator.of(context).pushReplacement(MaterialPageRoute(
       builder: (_) => VideoPlayerScreen(
         lectureId: lecture.id,
         title: lecture.localizedTitle(AppStrings.instance.isAr),
-        playlist: widget.playlist,
+        playlist: playlist,
         isUnlocked: widget.isUnlocked,
         files: widget.files,
         filesUnlocked: widget.filesUnlocked,
+        chapters: widget.chapters,
+        courseLectures: widget.courseLectures,
+        completedIds: _done,
       ),
     ));
   }
@@ -923,24 +981,47 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen>
                 ],
               ),
             ),
-            // Portrait lists the lessons under the video; the overlay list
-            // is only needed when the video fills the screen.
-            if (_isFullscreen && !_hlsController!.value.isPlaying && widget.playlist.isNotEmpty)
+            // Portrait lists the lessons under the video; in fullscreen the same
+            // two buttons come with the controls on any tap (no pause needed):
+            // lecture files on the left, the chapter's lectures on the right.
+            if (_isFullscreen && _lectureFiles.isNotEmpty)
+              Positioned(
+                left: 8,
+                top: 8,
+                child: _FsPill(
+                  icon: ArcIcon.lessons,
+                  label: '${AppStrings.instance.t('lecture_files')} (${_lectureFiles.length})',
+                  onTap: () {
+                    _scheduleAutoHide();
+                    showLectureFilesSheet(context, _lectureFiles,
+                        unlocked: widget.filesUnlocked);
+                  },
+                ),
+              ),
+            if (_isFullscreen && widget.playlist.isNotEmpty)
               Positioned(
                 right: 8,
                 top: 8,
-                child: _EpisodeListButton(
-                  open: _showEpisodeList,
-                  onTap: () => setState(() => _showEpisodeList = !_showEpisodeList),
+                child: _FsPill(
+                  icon: _showEpisodeList ? ArcIcon.close : ArcIcon.playlist,
+                  label: AppStrings.instance.t('fs_lectures'),
+                  onTap: () => setState(() {
+                    _showEpisodeList = !_showEpisodeList;
+                    _panelKey = null;
+                  }),
                 ),
               ),
             if (_showEpisodeList && _isFullscreen)
               Positioned(
                 right: 8,
                 top: 48,
-                child: _EpisodeList(
-                  playlist: widget.playlist,
+                child: _FsLessonList(
+                  groups: _groups,
+                  activeKey: _panelKey ?? _currentGroupKey,
+                  onKey: (k) => setState(() => _panelKey = k),
+                  numbering: widget.courseLectures.isNotEmpty ? widget.courseLectures : widget.playlist,
                   currentLectureId: widget.lectureId,
+                  done: _done,
                   isUnlocked: widget.isUnlocked,
                   onSelect: _playLecture,
                 ),
@@ -1135,10 +1216,12 @@ class _SideButton extends StatelessWidget {
   }
 }
 
-class _EpisodeListButton extends StatelessWidget {
-  final bool open;
+/// Frosted pill for the fullscreen top corners (lecture files, lectures).
+class _FsPill extends StatelessWidget {
+  final ArcIcon icon;
+  final String label;
   final VoidCallback onTap;
-  const _EpisodeListButton({required this.open, required this.onTap});
+  const _FsPill({required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1158,9 +1241,11 @@ class _EpisodeListButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ArcIconView(open ? ArcIcon.close : ArcIcon.playlist, color: Colors.white, size: 17),
+                ArcIconView(icon, color: Colors.white, size: 17),
                 const SizedBox(width: 4),
-                Text(AppStrings.instance.t('episodes'), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -1170,16 +1255,25 @@ class _EpisodeListButton extends StatelessWidget {
   }
 }
 
-/// Small "up next"-style list shown bottom-left while paused, mirroring the
-/// mobile YouTube pattern the request asked to match.
-class _EpisodeList extends StatelessWidget {
-  final List<Lecture> playlist;
+/// Fullscreen lecture list: the chapter title on top (arrows move between
+/// chapters), then that chapter's lectures with their course-wide numbers
+/// and a tick on the finished ones.
+class _FsLessonList extends StatelessWidget {
+  final List<({String key, String title, List<Lecture> lectures})> groups;
+  final String activeKey;
+  final ValueChanged<String> onKey;
+  final List<Lecture> numbering;
   final String currentLectureId;
+  final Set<String> done;
   final bool Function(Lecture) isUnlocked;
   final void Function(Lecture) onSelect;
-  const _EpisodeList({
-    required this.playlist,
+  const _FsLessonList({
+    required this.groups,
+    required this.activeKey,
+    required this.onKey,
+    required this.numbering,
     required this.currentLectureId,
+    required this.done,
     required this.isUnlocked,
     required this.onSelect,
   });
@@ -1187,57 +1281,102 @@ class _EpisodeList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ar = AppStrings.instance.isAr;
+    if (groups.isEmpty) return const SizedBox.shrink();
+    var gi = groups.indexWhere((g) => g.key == activeKey);
+    if (gi < 0) gi = 0;
+    final group = groups[gi];
+    final numbers = {for (var i = 0; i < numbering.length; i++) numbering[i].id: i + 1};
+    Widget arrow(IconData icon, int to) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: to < 0 || to >= groups.length ? null : () => onKey(groups[to].key),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon,
+                size: 20,
+                color: to < 0 || to >= groups.length ? Colors.white24 : Colors.white),
+          ),
+        );
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220, maxHeight: 220),
+      constraints: const BoxConstraints(maxWidth: 270, maxHeight: 230),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-        ),
-        child: ListView.separated(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          itemCount: playlist.length,
-          separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
-          itemBuilder: (context, i) {
-            final lecture = playlist[i];
-            final isCurrent = lecture.id == currentLectureId;
-            final unlocked = isUnlocked(lecture);
-            return InkWell(
-              onTap: unlocked ? () => onSelect(lecture) : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                child: Row(
-                  children: [
-                    ArcIconView(
-                      isCurrent ? ArcIcon.play : (unlocked ? ArcIcon.lessons : ArcIcon.lock),
-                      color: isCurrent ? AppColors.red : Colors.white70,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 8),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(children: [
+                    if (groups.length > 1) arrow(Icons.chevron_left_rounded, gi - 1),
                     Expanded(
-                      child: Text(
-                        lecture.localizedTitle(ar),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: isCurrent ? AppColors.red : (unlocked ? Colors.white : Colors.white38),
-                          fontSize: 12.5,
-                          fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
-                        ),
-                      ),
+                      child: Text(group.title,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
                     ),
-                  ],
+                    if (groups.length > 1) arrow(Icons.chevron_right_rounded, gi + 1),
+                  ]),
                 ),
-              ),
-            );
-          },
-        ),
+                const Divider(height: 1, color: Colors.white12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: group.lectures.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white12),
+                    itemBuilder: (context, i) {
+                      final l = group.lectures[i];
+                      final isCurrent = l.id == currentLectureId;
+                      final unlocked = isUnlocked(l);
+                      final finished = done.contains(l.id);
+                      return InkWell(
+                        onTap: unlocked && !isCurrent ? () => onSelect(l) : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                          child: Row(children: [
+                            SizedBox(
+                              width: 24,
+                              child: Text((numbers[l.id] ?? i + 1).toString().padLeft(2, '0'),
+                                  style: TextStyle(
+                                      color: isCurrent ? AppColors.red : Colors.white54,
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            Expanded(
+                              child: Text(l.localizedTitle(ar),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: isCurrent
+                                          ? AppColors.red
+                                          : (unlocked ? Colors.white : Colors.white38),
+                                      fontSize: 12.5,
+                                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400)),
+                            ),
+                            const SizedBox(width: 6),
+                            if (isCurrent)
+                              ArcIconView(ArcIcon.play, color: AppColors.red, size: 15)
+                            else if (!unlocked)
+                              const ArcIconView(ArcIcon.lock, color: Colors.white38, size: 15)
+                            else if (finished)
+                              ArcIconView(ArcIcon.check, color: AppColors.teal, size: 16),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

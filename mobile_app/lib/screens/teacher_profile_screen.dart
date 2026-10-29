@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../i18n/strings.dart';
 import '../services/payment_rules.dart';
 import '../models/course.dart';
+import '../services/deep_links.dart';
 import '../services/error_reporter.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
@@ -232,9 +233,11 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (insta != null && insta.isNotEmpty)
-              _BrandHandle(FontAwesomeIcons.instagram, insta),
+              _BrandHandle(FontAwesomeIcons.instagram, insta,
+                  () => DeepLinks.instagram(insta)),
             if (tele != null && tele.isNotEmpty)
-              _BrandHandle(FontAwesomeIcons.telegram, tele),
+              _BrandHandle(FontAwesomeIcons.telegram, tele,
+                  () => DeepLinks.telegram(tele)),
           ]),
         ],
         if (widget.adminView && _private != null) ...[
@@ -356,11 +359,20 @@ class _TeacherProfileScreenState extends State<TeacherProfileScreen> {
 class _BrandHandle extends StatelessWidget {
   final FaIconData icon;
   final String handle;
-  const _BrandHandle(this.icon, this.handle);
+  final Future<bool> Function() launch;
+  const _BrandHandle(this.icon, this.handle, this.launch);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: () async {
+        final ok = await launch();
+        if (!ok && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(AppStrings.instance.t('err_link_failed'))));
+        }
+      },
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: AppColors.muted.withValues(alpha: 0.14),
@@ -374,6 +386,6 @@ class _BrandHandle extends StatelessWidget {
             textDirection: TextDirection.ltr,
             style: AppFonts.body(size: 12.5, color: AppColors.text)),
       ]),
-    );
+    ));
   }
 }
