@@ -4,7 +4,7 @@
 // TODO(Yosif): fill these in at launch. Left empty on purpose: an empty
 // store link shows "coming soon", an empty contact hides that contact,
 // so nothing ships pointing at a wrong or dead address.
-const PLAY_STORE_URL = '';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.arcplatformiq.app';
 const APP_STORE_URL = 'https://apps.apple.com/app/id6822579758';
 const SUPPORT_EMAIL = 'support@arcplatformiq.com';
 const SUPPORT_WHATSAPP = '07761560088'; // Iraqi format, e.g. 07XXXXXXXXX
