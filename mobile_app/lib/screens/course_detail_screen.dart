@@ -282,7 +282,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       setState(() {
         _course = course;
         _lectures = lectures;
-        _chapters = chapters;
+        _chapters = course.usesChapters ? chapters : <CourseChapter>[];
         _teacherName = teacherName;
         _teacherPhoto = teacherPhoto;
         _files = files;

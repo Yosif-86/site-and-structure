@@ -289,6 +289,8 @@ class AppStrings extends ChangeNotifier {
     'chapter_general': 'محاضرات عامة',
     'chapter_count': '{n} محاضرات',
     'chapters_title': 'الفصول',
+    'chapters_switch': 'تقسيم الدورة إلى فصول',
+    'chapters_switch_sub': 'إذا أُطفئ يرى الطالب المحاضرات في قائمة واحدة، والفصول تبقى محفوظة.',
     'label_chapter': 'الفصل',
     'chapter_none': 'بدون فصل',
     'chapter_new': '+ فصل جديد',

@@ -23,6 +23,8 @@ class Course {
   // Chosen by an admin for Home (one at a time, optional end date).
   final bool isFeatured;
   final DateTime? featuredUntil;
+  // The teacher groups the lectures into chapters (courses.uses_chapters).
+  final bool usesChapters;
 
   Course({
     required this.id,
@@ -47,6 +49,7 @@ class Course {
     this.learningPoints = const [],
     this.isFeatured = false,
     this.featuredUntil,
+    this.usesChapters = false,
   });
 
   factory Course.fromJson(Map<String, dynamic> json) => Course(
@@ -74,6 +77,7 @@ class Course {
                 .where((p) => p.trim().isNotEmpty)
                 .toList() ??
             const [],
+        usesChapters: json['uses_chapters'] as bool? ?? false,
         isFeatured: json['is_featured'] as bool? ?? false,
         featuredUntil: json['featured_until'] == null
             ? null

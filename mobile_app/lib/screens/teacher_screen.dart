@@ -378,6 +378,24 @@ class _TeacherScreenState extends State<TeacherScreen> {
   // Chapters of the open course and the one the next upload goes into.
   List<Map<String, dynamic>> _activeChapters = [];
   String? _lChapterId;
+  bool get _chaptersOn => _activeCourse?['uses_chapters'] == true;
+
+  Future<void> _setChaptersOn(bool on) async {
+    final id = _activeCourse?['id'];
+    if (id == null) return;
+    try {
+      await SupabaseService.instance.client
+          .from('courses')
+          .update({'uses_chapters': on}).eq('id', id);
+      if (!mounted) return;
+      setState(() {
+        _activeCourse = {..._activeCourse!, 'uses_chapters': on};
+        if (!on) _lChapterId = null;
+      });
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+    }
+  }
   String? _lFormError;
   // Reading the picked video's length before handing it to the uploader.
   bool _lPreparing = false;
@@ -989,7 +1007,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
       isFree: _lIsFree,
       durationSeconds: info.seconds,
       file: file,
-      chapterId: _lChapterId,
+      chapterId: _chaptersOn ? _lChapterId : null,
     ));
     setState(() {
       _lPreparing = false;
@@ -2254,6 +2272,16 @@ class _TeacherScreenState extends State<TeacherScreen> {
             ]);
           },
         ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(t('chapters_switch'),
+              style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+          subtitle: Text(t('chapters_switch_sub'),
+              style: AppFonts.body(size: 12, color: AppColors.muted)),
+          value: _chaptersOn,
+          onChanged: _setChaptersOn,
+        ),
+        const SizedBox(height: 6),
         if (_activeLectures.isEmpty)
           DashEmpty(icon: ArcIcon.video, message: t('no_lectures_teacher'))
         else
@@ -2261,7 +2289,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
             _lectureRow(i, _activeLectures[i], t),
             const SizedBox(height: 10),
           ],
-        if (_activeChapters.isNotEmpty) ...[
+        if (_chaptersOn && _activeChapters.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(t('chapters_title'),
               style: AppFonts.body(size: 14, weight: FontWeight.w700)),
@@ -2294,6 +2322,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
             controller: _lTitle,
             decoration: InputDecoration(labelText: t('label_lecture_title'))),
         const SizedBox(height: 12),
+        if (_chaptersOn) ...[
         DropdownButtonFormField<String>(
           value: _lChapterId ?? '',
           decoration: InputDecoration(labelText: t('label_chapter')),
@@ -2319,6 +2348,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
           },
         ),
         const SizedBox(height: 12),
+        ],
         FilePickBox(
           file: _lVideoFile,
           video: true,
@@ -2383,13 +2413,14 @@ class _TeacherScreenState extends State<TeacherScreen> {
           tone: live ? StatusTone.good : StatusTone.warn),
       meta: [
         if (l['is_free'] == true) t('free_tag'),
-        ..._activeChapters
+        if (_chaptersOn)
+          ..._activeChapters
             .where((c) => c['id'] == l['chapter_id'])
             .map((c) => c['title'] as String? ?? ''),
       ],
       metaColor: AppColors.teal,
       actions: [
-        if (_activeChapters.isNotEmpty)
+        if (_chaptersOn && _activeChapters.isNotEmpty)
           DashButton(t('btn_move_chapter'), onPressed: () => _moveToChapter(l)),
         if (i > 0)
           DashButton(t('btn_move_up'), onPressed: () => _moveLecture(i, -1)),
