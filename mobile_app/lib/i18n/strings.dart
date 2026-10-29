@@ -632,8 +632,6 @@ class AppStrings extends ChangeNotifier {
     'review_theme_dark': 'داكن',
     'review_theme_cream': 'كريمي',
     'review_theme_light': 'فاتح',
-    'review_theme_mono_white': 'أبيض أحادي',
-    'review_theme_mono_dark': 'داكن أحادي',
     'review_tag': 'تقييم طالب',
     'rate_comment_note': 'تعليقك خاص: يصل إلى الإدارة ومدرّس الدورة فقط ولا يظهر لأي شخص آخر.',
     'rate_send': 'إرسال التقييم',
