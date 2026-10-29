@@ -478,7 +478,12 @@ class _CatalogueScreenState extends State<CatalogueScreen> with RouteAware {
     }
 
     final loggedIn = SupabaseService.instance.isLoggedIn;
-    final courses = _courses;
+    // The admin's featured course goes first; otherwise the list order stands.
+    final loaded = _courses;
+    final featured = loaded?.where((c) => c.featuredNow).firstOrNull;
+    final courses = (loaded == null || featured == null)
+        ? loaded
+        : [featured, ...loaded.where((c) => c.id != featured.id)];
     final learning = _myLearning ?? const <MyCourseProgress>[];
     final active = learning.where((m) => m.isActive && m.totalLectures > 0);
     final continueItems = learning

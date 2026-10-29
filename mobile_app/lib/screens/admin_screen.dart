@@ -230,7 +230,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final sb = SupabaseService.instance.client;
       final results = await Future.wait([
         sb.from('courses').select(
-            'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status'),
+            'id, slug, title, description, price, is_free, thumbnail_url, learning_points, teacher_id, pay_to_teacher, status, pending_edit, edit_status, is_featured, featured_until'),
         sb.from('profiles').select(
             'id, full_name, phone, public_id, created_at, is_teacher, is_admin, teacher_payment_method, teacher_payment_detail, teacher_zaincash_phone, teacher_qi_account_number, teacher_qi_qr_url, direct_payment_allowed, platform_rate'),
         _loadEmails(),
@@ -981,6 +981,69 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  bool _featuredNow(Map<String, dynamic> c) {
+    if (c['is_featured'] != true) return false;
+    final until = DateTime.tryParse(c['featured_until'] as String? ?? '');
+    return until == null || until.isAfter(DateTime.now());
+  }
+
+  /// Makes this the Home course for a week, a month, until a date, or with
+  /// no end (the previous featured course is released by the database).
+  Future<void> _featureCourse(Map<String, dynamic> c) async {
+    final t = AppStrings.instance.t;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text(t('feature_for')),
+        children: [
+          for (final o in const ['week', 'month', 'date', 'none'])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(ctx).pop(o),
+              child: Text(t({
+                'week': 'feature_week',
+                'month': 'feature_month',
+                'date': 'feature_pick_date',
+                'none': 'feature_forever',
+              }[o]!)),
+            ),
+        ],
+      ),
+    );
+    if (choice == null || !mounted) return;
+    DateTime? until;
+    final now = DateTime.now();
+    if (choice == 'week') until = now.add(const Duration(days: 7));
+    if (choice == 'month') until = now.add(const Duration(days: 30));
+    if (choice == 'date') {
+      final d = await showDatePicker(
+        context: context,
+        initialDate: now.add(const Duration(days: 14)),
+        firstDate: now.add(const Duration(days: 1)),
+        lastDate: now.add(const Duration(days: 365)),
+      );
+      if (d == null || !mounted) return;
+      until = DateTime(d.year, d.month, d.day, 23, 59);
+    }
+    try {
+      await SupabaseService.instance.client.rpc('admin_set_featured', params: {
+        'p_course': c['id'],
+        'p_until': until?.toUtc().toIso8601String(),
+      });
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  }
+
+  Future<void> _unfeatureCourse() async {
+    try {
+      await SupabaseService.instance.client.rpc('admin_clear_featured');
+      await _loadAll();
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'admin'));
+    }
+  }
+
   Future<void> _createInvite() => _once('invite', () async {
     try {
       final sb = SupabaseService.instance.client;
@@ -1556,6 +1619,13 @@ class _AdminScreenState extends State<AdminScreen> {
         leading: DashIconBadge(icon: ArcIcon.courses, accent: AppColors.teal),
         title: c['title'] as String? ?? '—',
         subtitle: tag == null ? teacherName : '$teacherName · $tag',
+        meta: [
+          if (_featuredNow(c))
+            c['featured_until'] == null
+                ? t('featured_no_end')
+                : t('featured_until').replaceAll(
+                    '{d}', _date(c['featured_until'] as String?)),
+        ],
         trailing: StatusPill(_priceLabel(c, t),
             tone: c['is_free'] == true ? StatusTone.good : StatusTone.neutral),
         onTap: c['slug'] == null
@@ -1563,6 +1633,11 @@ class _AdminScreenState extends State<AdminScreen> {
             : () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => CourseDetailScreen(slug: c['slug'] as String))),
         actions: [
+          _featuredNow(c)
+              ? DashButton(t('btn_unfeature'),
+                  icon: ArcIcon.close, onPressed: _unfeatureCourse)
+              : DashButton(t('btn_feature'),
+                  icon: ArcIcon.award, onPressed: () => _featureCourse(c)),
           DashButton(t('btn_reviews'),
               icon: ArcIcon.review,
               onPressed: () => showCourseReviews(context,

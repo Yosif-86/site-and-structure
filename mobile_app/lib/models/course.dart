@@ -20,6 +20,9 @@ class Course {
   final String? thumbnailUrl;
   // "What you'll learn" bullets (courses.learning_points, text[]).
   final List<String> learningPoints;
+  // Chosen by an admin for Home (one at a time, optional end date).
+  final bool isFeatured;
+  final DateTime? featuredUntil;
 
   Course({
     required this.id,
@@ -42,6 +45,8 @@ class Course {
     required this.status,
     this.thumbnailUrl,
     this.learningPoints = const [],
+    this.isFeatured = false,
+    this.featuredUntil,
   });
 
   factory Course.fromJson(Map<String, dynamic> json) => Course(
@@ -69,7 +74,16 @@ class Course {
                 .where((p) => p.trim().isNotEmpty)
                 .toList() ??
             const [],
+        isFeatured: json['is_featured'] as bool? ?? false,
+        featuredUntil: json['featured_until'] == null
+            ? null
+            : DateTime.tryParse(json['featured_until'] as String),
       );
+
+  /// Featured and not past its end date.
+  bool get featuredNow =>
+      isFeatured &&
+      (featuredUntil == null || featuredUntil!.isAfter(DateTime.now()));
 
   String localizedTitle(bool ar) => (ar && titleAr != null && titleAr!.isNotEmpty) ? titleAr! : title;
   String? localizedDescription(bool ar) =>
