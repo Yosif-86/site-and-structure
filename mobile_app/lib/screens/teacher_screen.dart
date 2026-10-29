@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 import 'package:uuid/uuid.dart';
@@ -1000,26 +1001,64 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   bool _reordering = false;
 
-  /// Moves a lecture one place up (-1) or down (+1) and saves the new order.
-  /// Every lecture is renumbered 0..n-1, which also fixes equal positions.
-  Future<void> _moveLecture(int i, int delta) async {
-    final j = i + delta;
-    if (_reordering || j < 0 || j >= _activeLectures.length) return;
+  /// Drag and drop inside one group of lectures (a chapter, the unsorted
+  /// ones, or the whole list when chapters are off). The group's members swap
+  /// among the slots they already occupy, so nothing else moves; every
+  /// lecture is then renumbered 0..n-1, which also fixes equal positions.
+  Future<void> _reorderGroup(
+      bool Function(Map<String, dynamic>) test, int oldI, int newI) async {
+    if (_reordering) return;
+    final group = [
+      for (final l in _activeLectures)
+        if (test(l)) l
+    ];
+    if (newI > oldI) newI -= 1;
+    if (oldI == newI || oldI < 0 || oldI >= group.length) return;
+    final moved = group.removeAt(oldI);
+    group.insert(newI, moved);
+    final result = [..._activeLectures];
+    var g = 0;
+    for (var k = 0; k < result.length; k++) {
+      if (test(result[k])) result[k] = group[g++];
+    }
+    final stored = {for (final l in _activeLectures) l['id']: l['order_index']};
     _reordering = true;
-    final list = [..._activeLectures];
-    final moved = list.removeAt(i);
-    list.insert(j, moved);
     setState(() => _activeLectures = [
+          for (var k = 0; k < result.length; k++) {...result[k], 'order_index': k}
+        ]);
+    try {
+      final sb = SupabaseService.instance.client;
+      for (var k = 0; k < result.length; k++) {
+        if (stored[result[k]['id']] == k) continue;
+        await sb
+            .from('lectures')
+            .update({'order_index': k}).eq('id', result[k]['id']);
+      }
+    } catch (e) {
+      _showError(ErrorReporter.userMessage(e, page: 'teacher'));
+      await _loadLectures();
+    } finally {
+      _reordering = false;
+    }
+  }
+
+  /// Drag and drop of the chapters themselves.
+  Future<void> _reorderChapters(int oldI, int newI) async {
+    if (_reordering) return;
+    if (newI > oldI) newI -= 1;
+    if (oldI == newI) return;
+    final list = [..._activeChapters];
+    final moved = list.removeAt(oldI);
+    list.insert(newI, moved);
+    _reordering = true;
+    setState(() => _activeChapters = [
           for (var k = 0; k < list.length; k++) {...list[k], 'order_index': k}
         ]);
     try {
       final sb = SupabaseService.instance.client;
       for (var k = 0; k < list.length; k++) {
-        // `list` still holds the rows as stored, so this skips only rows
-        // already saved at position k.
-        if (list[k]['order_index'] == k) continue;
         await sb
-            .from('lectures')
+            .from('course_chapters')
             .update({'order_index': k}).eq('id', list[k]['id']);
       }
     } catch (e) {
@@ -1029,6 +1068,29 @@ class _TeacherScreenState extends State<TeacherScreen> {
       _reordering = false;
     }
   }
+
+  /// The lifted look of a row while it is dragged.
+  Widget _dragDecorator(Widget child, int index, Animation<double> animation) =>
+      AnimatedBuilder(
+        animation: animation,
+        builder: (context, child) => Material(
+          color: AppColors.panel,
+          elevation: 8 * Curves.easeOut.transform(animation.value),
+          shadowColor: Colors.black,
+          borderRadius: BorderRadius.circular(14),
+          child: child,
+        ),
+        child: child,
+      );
+
+  Widget _dragHandle(int index) => ReorderableDragStartListener(
+        index: index,
+        child: Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: Icon(Icons.drag_indicator_rounded,
+              size: 22, color: AppColors.muted),
+        ),
+      );
 
   Future<void> _addLecture() async {
     if (_lPreparing) return;
@@ -2358,14 +2420,27 @@ class _TeacherScreenState extends State<TeacherScreen> {
     int countIn(bool Function(Map<String, dynamic>) test) =>
         _activeLectures.where(test).length;
 
-    Widget lectureList(bool Function(Map<String, dynamic>) test) => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var i = 0; i < _activeLectures.length; i++)
-              if (test(_activeLectures[i]))
-                _lectureRow(i, _activeLectures[i], t),
-          ],
-        );
+    Widget lectureList(bool Function(Map<String, dynamic>) test) {
+      final at = [
+        for (var i = 0; i < _activeLectures.length; i++)
+          if (test(_activeLectures[i])) i
+      ];
+      return ReorderableListView(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        buildDefaultDragHandles: false,
+        proxyDecorator: _dragDecorator,
+        onReorderStart: (_) => HapticFeedback.mediumImpact(),
+        onReorder: (o, n) => _reorderGroup(test, o, n),
+        children: [
+          for (var g = 0; g < at.length; g++)
+            KeyedSubtree(
+              key: ValueKey('lec-${_activeLectures[at[g]]['id']}'),
+              child: _lectureRow(at[g], _activeLectures[at[g]], t, g),
+            ),
+        ],
+      );
+    }
 
     Widget panel(
         {required String id,
@@ -2373,6 +2448,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
         required String name,
         required bool Function(Map<String, dynamic>) test,
         String? chapterId,
+        int? dragIndex,
         Map<String, dynamic>? chapter}) {
       final open = _openChapter == id;
       return Container(
@@ -2391,6 +2467,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Row(children: [
+                  if (dragIndex != null) _dragHandle(dragIndex),
                   badge,
                   const SizedBox(width: 10),
                   Expanded(
@@ -2542,15 +2619,32 @@ class _TeacherScreenState extends State<TeacherScreen> {
           _greyButton(t('btn_add_lecture'), () => _addLectureSheet(null),
               icon: Icons.add_rounded),
         ] else ...[
-          for (var n = 0; n < _activeChapters.length; n++)
-            panel(
-              id: _activeChapters[n]['id'] as String,
-              badge: numberBadge('${n + 1}'),
-              name: _activeChapters[n]['title'] as String? ?? '—',
-              test: (l) => l['chapter_id'] == _activeChapters[n]['id'],
-              chapterId: _activeChapters[n]['id'] as String,
-              chapter: _activeChapters[n],
-            ),
+          ReorderableListView(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            proxyDecorator: _dragDecorator,
+            onReorderStart: (_) {
+              HapticFeedback.mediumImpact();
+              setState(() => _openChapter = null);
+            },
+            onReorder: _reorderChapters,
+            children: [
+              for (var n = 0; n < _activeChapters.length; n++)
+                KeyedSubtree(
+                  key: ValueKey('chap-${_activeChapters[n]['id']}'),
+                  child: panel(
+                    id: _activeChapters[n]['id'] as String,
+                    badge: numberBadge('${n + 1}'),
+                    name: _activeChapters[n]['title'] as String? ?? '—',
+                    test: (l) => l['chapter_id'] == _activeChapters[n]['id'],
+                    chapterId: _activeChapters[n]['id'] as String,
+                    dragIndex: n,
+                    chapter: _activeChapters[n],
+                  ),
+                ),
+            ],
+          ),
           if (_activeChapters.isEmpty ||
               countIn((l) => !chapterIds.contains(l['chapter_id'])) > 0)
             panel(
@@ -2582,16 +2676,18 @@ class _TeacherScreenState extends State<TeacherScreen> {
 
   /// A lecture as a compact row: number, title, free tag, status. Tap for
   /// the actions (move, delete).
-  Widget _lectureRow(int i, Map<String, dynamic> l, String Function(String) t) {
+  Widget _lectureRow(
+      int i, Map<String, dynamic> l, String Function(String) t, int dragIndex) {
     final live = l['r2_path'] != null;
     return InkWell(
-      onTap: () => _lectureActions(i, l, t),
+      onTap: () => _lectureActions(l, t),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           border: Border(top: BorderSide(color: AppColors.line)),
         ),
         child: Row(children: [
+          _dragHandle(dragIndex),
           SizedBox(
             width: 26,
             child: Text((i + 1).toString().padLeft(2, '0'),
@@ -2619,7 +2715,7 @@ class _TeacherScreenState extends State<TeacherScreen> {
   }
 
   Future<void> _lectureActions(
-      int i, Map<String, dynamic> l, String Function(String) t) async {
+      Map<String, dynamic> l, String Function(String) t) async {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.bg,
@@ -2647,24 +2743,6 @@ class _TeacherScreenState extends State<TeacherScreen> {
                   onTap: () {
                     Navigator.of(ctx).pop();
                     _moveToChapter(l);
-                  },
-                ),
-              if (i > 0)
-                ListTile(
-                  leading: const Icon(Icons.arrow_upward_rounded),
-                  title: Text(t('btn_move_up')),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _moveLecture(i, -1);
-                  },
-                ),
-              if (i < _activeLectures.length - 1)
-                ListTile(
-                  leading: const Icon(Icons.arrow_downward_rounded),
-                  title: Text(t('btn_move_down')),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _moveLecture(i, 1);
                   },
                 ),
               ListTile(
