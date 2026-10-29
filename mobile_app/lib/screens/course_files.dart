@@ -473,8 +473,14 @@ class TeacherCourseFiles extends StatefulWidget {
   final String courseId;
   /// The course's lectures (id, title): a file can belong to one of them.
   final List<Map<String, dynamic>> lectures;
+
+  /// Called with the number of files whenever the list loads.
+  final ValueChanged<int>? onCount;
   const TeacherCourseFiles(
-      {super.key, required this.courseId, this.lectures = const []});
+      {super.key,
+      required this.courseId,
+      this.lectures = const [],
+      this.onCount});
 
   @override
   State<TeacherCourseFiles> createState() => _TeacherCourseFilesState();
@@ -517,6 +523,7 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
           .order('created_at');
       if (!mounted) return;
       setState(() => _files = (rows as List).cast<Map<String, dynamic>>());
+      widget.onCount?.call(_files.length);
     } catch (_) {
       // Table not added yet (add-oct05-fixes.sql): section stays empty.
     }
@@ -655,10 +662,278 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
   }
 
   String _lectureTitle(String? id) {
-    if (id == null) return _t('file_whole_course');
-    return (widget.lectures.where((l) => l['id'] == id).firstOrNull?['title']
+    if (id == null) return _t('ce_file_general');
+    final title = (widget.lectures.where((l) => l['id'] == id).firstOrNull?['title']
             as String?) ??
         '';
+    return _t('ce_file_linked').replaceAll('{title}', title);
+  }
+
+  Widget _chip(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(99),
+          color: color.withValues(alpha: 0.14),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Text(label,
+            style:
+                AppFonts.body(size: 11.5, weight: FontWeight.w700, color: color)),
+      );
+
+  Widget _fileRow(Map<String, dynamic> f) {
+    final kind = switch (f['kind']) {
+      'pdf' => 'PDF',
+      'image' => 'IMG',
+      'cad' => 'CAD',
+      _ => 'DOC',
+    };
+    final status = f['status'];
+    final canPreview =
+        (status == 'published' || status == 'pending_review') && _viewable(f);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: AppColors.bg.withValues(alpha: 0.35),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 46,
+          height: 46,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            color: AppColors.teal.withValues(alpha: 0.16),
+          ),
+          child: Text(kind,
+              style: AppFonts.body(
+                  size: 12, weight: FontWeight.w800, color: AppColors.teal)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(f['title'] as String? ?? '—',
+                  style: AppFonts.body(size: 14.5, weight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(_lectureTitle(f['lecture_id'] as String?),
+                  style: AppFonts.body(size: 12, color: AppColors.muted)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                if (f['allow_download'] == true)
+                  _chip(_t('ce_chip_download'), const Color(0xFFE0A030)),
+                if (f['is_free'] == true)
+                  _chip(_t('ce_chip_free'), AppColors.teal),
+                if (status != 'published')
+                  StatusPill(
+                    switch (status) {
+                      'pending_review' => _t('file_pending_review'),
+                      'rejected' => _t('file_rejected'),
+                      'failed' => _t('file_failed'),
+                      _ => _t('file_processing'),
+                    },
+                    tone: switch (status) {
+                      'failed' || 'rejected' => StatusTone.bad,
+                      _ => StatusTone.warn,
+                    },
+                  ),
+              ]),
+            ],
+          ),
+        ),
+        PopupMenuButton<String>(
+          icon: Icon(Icons.more_horiz_rounded, color: AppColors.muted),
+          onSelected: (v) {
+            if (v == 'preview') {
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => CourseFileViewerScreen(file: f)));
+            } else {
+              _delete(f);
+            }
+          },
+          itemBuilder: (_) => [
+            if (canPreview)
+              PopupMenuItem(value: 'preview', child: Text(_t('btn_preview'))),
+            PopupMenuItem(
+                value: 'delete',
+                child: Text(_t('btn_delete'),
+                    style: TextStyle(color: AppColors.error))),
+          ],
+        ),
+      ]),
+    );
+  }
+
+  Widget _lbl(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(text,
+            style: AppFonts.body(
+                size: 12.5, weight: FontWeight.w600, color: AppColors.muted)),
+      );
+
+  Widget _switchRow(String title, String sub, bool value,
+          ValueChanged<bool>? onChanged) =>
+      Container(
+        margin: const EdgeInsets.only(top: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: AppColors.bg.withValues(alpha: 0.35),
+          border: Border.all(color: AppColors.line),
+        ),
+        child: SwitchListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+          title: Text(title,
+              style: AppFonts.body(size: 14, weight: FontWeight.w700)),
+          subtitle: Text(sub,
+              style: AppFonts.body(size: 12, color: AppColors.muted)),
+          value: value,
+          onChanged: onChanged,
+        ),
+      );
+
+  /// The add-file form as a sheet: name, lecture link, file, the download and
+  /// free-preview switches.
+  Future<void> _addSheet() async {
+    setState(() => _error = null);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.bg,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) => Directionality(
+        textDirection:
+            AppStrings.instance.isAr ? TextDirection.rtl : TextDirection.ltr,
+        child: StatefulBuilder(builder: (ctx, setSheet) {
+          void both(VoidCallback f) {
+            setState(f);
+            setSheet(() {});
+          }
+
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 10, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 44,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 14),
+                      decoration: BoxDecoration(
+                          color: AppColors.line,
+                          borderRadius: BorderRadius.circular(4)),
+                    ),
+                  ),
+                  Text(_t('ce_file_sheet_title'),
+                      style: AppFonts.body(size: 18, weight: FontWeight.w800)),
+                  const SizedBox(height: 14),
+                  _lbl(_t('ce_file_name')),
+                  TextField(
+                      controller: _title,
+                      decoration:
+                          InputDecoration(hintText: _t('ce_file_name_hint'))),
+                  const SizedBox(height: 14),
+                  _lbl(_t('ce_file_link')),
+                  DropdownButtonFormField<String?>(
+                    value: _lectureId,
+                    isExpanded: true,
+                    items: [
+                      DropdownMenuItem<String?>(
+                          value: null, child: Text(_t('ce_file_general'))),
+                      for (final l in widget.lectures)
+                        DropdownMenuItem<String?>(
+                          value: l['id'] as String,
+                          child: Text(l['title'] as String? ?? '—',
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged:
+                        _busy ? null : (v) => both(() => _lectureId = v),
+                  ),
+                  const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _busy
+                        ? null
+                        : () async {
+                            await _pick();
+                            setSheet(() {});
+                          },
+                    child: Container(
+                      height: 72,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.muted2),
+                        color: AppColors.bg.withValues(alpha: 0.28),
+                      ),
+                      child: Text(_picked?.name ?? _t('ce_pick_file'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppFonts.body(
+                              size: 14, weight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(_t('file_types_hint'),
+                      style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
+                  _switchRow(
+                      _t('ce_allow_dl'),
+                      _mustDownload
+                          ? _t('label_download_forced')
+                          : _t('ce_allow_dl_sub'),
+                      _allowDownload || _mustDownload,
+                      _mustDownload
+                          ? null
+                          : (v) => both(() => _allowDownload = v)),
+                  _switchRow(_t('ce_free_prev'), _t('ce_free_prev_sub'), _isFree,
+                      (v) => both(() => _isFree = v)),
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(_error!,
+                          style:
+                              AppFonts.body(size: 12, color: AppColors.error)),
+                    ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final run = _add();
+                            setSheet(() {});
+                            await run;
+                            if (!ctx.mounted) return;
+                            if (_error == null && _picked == null) {
+                              Navigator.of(ctx).pop();
+                            } else {
+                              setSheet(() {});
+                            }
+                          },
+                    child: _busy
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : Text(_t('ce_upload_file')),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
   }
 
   @override
@@ -666,141 +941,40 @@ class _TeacherCourseFilesState extends State<TeacherCourseFiles> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DashSection('${_t('course_files')} (${_files.length})',
-            trailing: IconButton(
-                onPressed: _load,
-                icon: ArcIconView(ArcIcon.replay, size: 18, color: AppColors.muted2))),
-        for (final f in _files) ...[
-          DashCard(
-            leading: DashIconBadge(
-                icon: _iconFor(f['kind'] as String?), accent: AppColors.teal),
-            title: f['title'] as String? ?? '—',
-            subtitle: [
-              _lectureTitle(f['lecture_id'] as String?),
-              f['original_name'] as String? ?? '',
-              f['allow_download'] == true ? _t('file_downloadable') : _t('file_view_only'),
-            ].where((s) => s.isNotEmpty).join(' · '),
-            trailing: StatusPill(
-              switch (f['status']) {
-                'published' => _t('file_ready'),
-                'pending_review' => _t('file_pending_review'),
-                'rejected' => _t('file_rejected'),
-                'failed' => _t('file_failed'),
-                _ => _t('file_processing'),
-              },
-              tone: switch (f['status']) {
-                'published' => StatusTone.good,
-                'failed' || 'rejected' => StatusTone.bad,
-                _ => StatusTone.warn,
-              },
-            ),
-            actions: [
-              if ((f['status'] == 'published' || f['status'] == 'pending_review') &&
-                  _viewable(f))
-                DashButton(_t('btn_preview'),
-                    icon: ArcIcon.image,
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => CourseFileViewerScreen(file: f)))),
-              DashButton(_t('btn_delete'),
-                  danger: true, icon: ArcIcon.trash, onPressed: () => _delete(f)),
-            ],
+        if (_files.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(_t('ce_no_files'),
+                textAlign: TextAlign.center,
+                style: AppFonts.body(size: 13, color: AppColors.muted)),
           ),
-          const SizedBox(height: 10),
-        ],
+        for (final f in _files) _fileRow(f),
         if (widget.lectures.isEmpty)
-          DashCard(
-            leading: DashIconBadge(icon: ArcIcon.lessons, accent: AppColors.muted),
-            title: _t('files_after_first_lecture'),
-            titleStyle: AppFonts.body(size: 13, color: AppColors.muted),
-          )
+          Text(_t('files_after_first_lecture'),
+              textAlign: TextAlign.center,
+              style: AppFonts.body(size: 13, color: AppColors.muted))
         else
-        DashFormPanel(
-          title: _t('add_course_file'),
-          icon: ArcIcon.lessons,
-          children: [
-            TextField(
-                controller: _title,
-                decoration: InputDecoration(labelText: _t('label_file_title'))),
-            const SizedBox(height: 12),
-            if (widget.lectures.isNotEmpty) ...[
-              DropdownButtonFormField<String?>(
-                value: _lectureId,
-                isExpanded: true,
-                decoration:
-                    InputDecoration(labelText: _t('label_file_lecture')),
-                items: [
-                  DropdownMenuItem<String?>(
-                      value: null, child: Text(_t('file_whole_course'))),
-                  for (final l in widget.lectures)
-                    DropdownMenuItem<String?>(
-                      value: l['id'] as String,
-                      child: Text(l['title'] as String? ?? '—',
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
-                onChanged:
-                    _busy ? null : (v) => setState(() => _lectureId = v),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: _addSheet,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: AppColors.panel2,
+                border: Border.all(color: AppColors.line),
               ),
-              const SizedBox(height: 12),
-            ],
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _pick,
-              icon: ArcIconView(ArcIcon.plus, size: 16, color: AppColors.text),
-              label: Text(_picked?.name ?? _t('btn_choose_file'),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_rounded, size: 18, color: AppColors.text),
+                    const SizedBox(width: 6),
+                    Text(_t('ce_add_file'),
+                        style:
+                            AppFonts.body(size: 13.5, weight: FontWeight.w700)),
+                  ]),
             ),
-            const SizedBox(height: 6),
-            Text(_t('file_types_hint'),
-                style: AppFonts.body(size: 11.5, color: AppColors.muted2)),
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: _mustDownload
-                  ? null
-                  : () => setState(() => _allowDownload = !_allowDownload),
-              child: Row(children: [
-                Checkbox(
-                    value: _allowDownload || _mustDownload,
-                    onChanged: _mustDownload
-                        ? null
-                        : (v) => setState(() => _allowDownload = v ?? false)),
-                Expanded(
-                    child: Text(
-                        _mustDownload
-                            ? _t('label_download_forced')
-                            : _t('label_allow_download'),
-                        style: AppFonts.body(size: 13, color: AppColors.muted))),
-              ]),
-            ),
-            InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => setState(() => _isFree = !_isFree),
-              child: Row(children: [
-                Checkbox(
-                    value: _isFree,
-                    onChanged: (v) => setState(() => _isFree = v ?? false)),
-                Expanded(
-                    child: Text(_t('label_free_file'),
-                        style: AppFonts.body(size: 13, color: AppColors.muted))),
-              ]),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(_error!,
-                    style: AppFonts.body(size: 12, color: AppColors.error)),
-              ),
-            ElevatedButton(
-              onPressed: _busy ? null : _add,
-              child: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : Text(_t('btn_add')),
-            ),
-          ],
-        ),
+          ),
       ],
     );
   }
