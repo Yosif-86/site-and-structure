@@ -57,7 +57,7 @@ workflows:
         # STORE BUILDS MUST BE "false" (protection on). "true" = test build: screenshot shield, recording cover and capture
         # reports are OFF so issues can be shown with screenshots/recordings.
         # Set to "false" for the build that goes to the App Store.
-        NO_SCREEN_PROTECTION: "false"
+        NO_SCREEN_PROTECTION: "true"
     triggering:
       events: []  # manual builds only
     scripts:
