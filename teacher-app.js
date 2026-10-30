@@ -50,6 +50,7 @@ const IC = {
   chevron: '<path d="M14.5 6L9 12l5.5 6"/>',
   calendar: '<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  drag: '<circle cx="9" cy="6" r="1.1"/><circle cx="15" cy="6" r="1.1"/><circle cx="9" cy="12" r="1.1"/><circle cx="15" cy="12" r="1.1"/><circle cx="9" cy="18" r="1.1"/><circle cx="15" cy="18" r="1.1"/>',
   review: '<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9 6.8 19.7l1-5.9L3.5 9.7l5.9-.8z"/>',
   dashboard: '<rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5-5 4 4 3-3 4 4"/>',
@@ -82,9 +83,9 @@ function toggleTheme(){
 const S = {
   user: null, view: 'overview', stack: [],
   courses: [], rows: [], rate: DEFAULT_RATE, prof: {},
-  course: null, lectures: [], codes: [],
+  course: null, lectures: [], chapters: [], step: 0, openCh: null, drag: null, reordering: false, codes: [],
   form: { title: '', description: '', price: '' }, points: [], thumbFile: null, thumbPreview: null, thumbUrl: null,
-  lf: { title: '', free: false, file: null }, uploading: false, upMsg: '', upPct: null,
+  lf: { title: '', free: false, file: null, chapter: '' }, uploading: false, upMsg: '', upPct: null,
   cf: { code: '', type: 'percent', value: '', max: '10', expires: '' }, err: {}, ok: {},
   files: [], ff: { title: '', lecture: '', allowDl: false, free: false, file: null, busy: false },
   pf: { zain: '', qi: '', qrFile: null }, saving: false, ready: false
@@ -263,50 +264,151 @@ function courseCard(c){
   </div>`;
 }
 
+// ---------- course editor: three steps (info, lectures, files), like the app ----------
+const stepDone = (n) => (n === 0 ? !!S.course : n === 1 ? S.lectures.length > 0 : S.files.length > 0);
+const chaptersOn = () => !!(S.course && S.course.uses_chapters);
+const chapterIds = () => new Set(S.chapters.map((c) => c.id));
+// Group key of a lecture: its chapter, or '_' (no chapter, or chapters are off).
+const grpOf = (l) => (chaptersOn() && chapterIds().has(l.chapter_id) ? l.chapter_id : '_');
+
+function tstep(n, title, sub, body, last){
+  const open = S.step === n, locked = n > 0 && !S.course, done = stepDone(n);
+  const state = open ? 'on' : done ? 'ok' : 'off';
+  return `
+  <div class="ts ${open ? 'open' : ''} ${locked ? 'locked' : ''}">
+    <div class="rail"><div class="dt ${state}">${state === 'ok' ? icon('check') : state === 'off' ? (n + 1) : ''}</div>${last ? '' : `<i class="ln ${done ? 'fill' : ''}"></i>`}</div>
+    <div class="tc">
+      <button class="th" data-act="step" data-id="${n}" ${locked ? 'disabled' : ''}>
+        <div><div class="tt">${esc(title)}</div><div class="tsub">${esc(locked ? t('step_locked') : sub)}</div></div>
+        ${locked ? '' : `<span class="tst ${done ? 'ok' : ''}">${esc(done ? t('ce_complete') : t('ce_incomplete'))}</span>`}
+      </button>
+      ${open ? `<div class="tb">${body}</div>` : ''}
+    </div>
+  </div>`;
+}
+
 VIEWS.course = () => {
+  const c = S.course;
+  const lecSub = chaptersOn() ? t('ce_chapters_n').replace('{n}', S.chapters.length) : t('ce_lectures_n').replace('{n}', S.lectures.length);
+  return `
+  <div class="ce-h"><h1>${esc(t(c ? 'edit_course' : 'new_course_title'))}</h1><div class="sub">${esc(t('ce_sub'))}</div></div>
+  ${tstep(0, t('step_info'), t('ce_info_sub'), infoBody())}
+  ${tstep(1, t('step_lectures'), c ? lecSub : t('ce_lectures_sub'), lecturesBody())}
+  ${tstep(2, t('step_files'), c ? t('ce_files_n').replace('{n}', S.files.length) : t('ce_files_sub'), filesBody(), true)}`;
+};
+
+function infoBody(){
   const f = S.form;
   const filled = S.points.map((p) => p.trim()).filter(Boolean);
   const price = digits(f.price);
   const share = price > 0 ? Math.round(price * S.rate) : 0;
   const preview = S.thumbPreview || S.thumbUrl;
-  const info = `
-  <div class="glass panel">
-    <div class="panel-h">${badge('edit', 'red', true)}<div class="t">${esc(t(S.course ? 'edit_course' : 'new_course_title'))}</div></div>
+  return `
     ${S.course && S.course.status === 'published' ? `<div class="hint" style="margin-bottom:12px">${esc(t('pending_edit_note'))}</div>` : ''}
-    <div class="boxes">
-      <div class="box"><div class="bl">${esc(t('label_title'))}</div>
-        <textarea rows="2" data-bind="form.title">${esc(f.title)}</textarea></div>
-      <div class="box"><div class="bl">${esc(t('what_you_learn'))}</div>
-        <button class="tagbtn" data-act="edit-points">
-          <div class="n">${filled.length ? `<bdi dir="ltr">${filled.length} / ${MAX_POINTS}</bdi>` : esc(t('learning_point_add'))}</div>
-          ${filled.length ? `<div class="p">${esc(filled.slice(0, 2).join(' · '))}</div>` : ''}
-        </button></div>
+    <label class="f">${esc(t('ce_course_image'))}</label>
+    <div class="pick" data-act="pick-thumb" style="height:150px">
+      ${preview ? `<img src="${esc(preview)}" alt=""><span class="chg">${esc(t('btn_change'))}</span>`
+                : `<div class="ph"><div class="c">${icon('image')}</div>${esc(t('ce_pick_image'))}</div>`}
     </div>
-    <div class="boxes" style="margin-top:10px">
-      <div class="box"><div class="bl">${esc(t('label_thumbnail'))}</div>
-        <div class="pick" data-act="pick-thumb">
-          ${preview ? `<img src="${esc(preview)}" alt=""><span class="chg">${esc(t('btn_change'))}</span>`
-                    : `<div class="ph"><div class="c">${icon('image')}</div>${esc(t('label_thumbnail'))}</div>`}
-        </div>
-        <input type="file" id="thumbInput" accept="image/*" hidden></div>
-      <div class="box"><div class="bl">${esc(t('label_price'))}</div>
+    <input type="file" id="thumbInput" accept="image/*" hidden>
+    <div style="margin-top:14px"><label class="f">${esc(t('ce_name'))}</label>
+      <input type="text" data-bind="form.title" value="${esc(f.title)}" placeholder="${esc(t('ce_name_hint'))}"></div>
+    <div class="row2" style="margin-top:14px">
+      <div><label class="f">${esc(t('ce_price'))}</label>
         <input type="text" inputmode="numeric" dir="ltr" data-bind="form.price" value="${esc(f.price)}"></div>
+      <div><label class="f">${esc(t('ce_income'))}</label>
+        <div class="income">${price > 0 ? iqd(price - share) : '—'}</div></div>
     </div>
-    <div style="margin-top:12px"><label class="f">${esc(t('label_description'))}</label>
-      <textarea rows="4" data-bind="form.description">${esc(f.description)}</textarea></div>
-    ${price > 0 ? `<div class="split">
-      <div class="c-teal" style="--c:var(--muted)">${esc(fill(t('split_platform'), { pct: pct(S.rate) }))}<b>${iqd(share)}</b></div>
-      <div style="--c:var(--teal)">${esc(fill(t('split_yours'), { pct: pct(1 - S.rate) }))}<b>${iqd(price - share)}</b></div></div>` : ''}
+    <div style="margin-top:14px"><label class="f">${esc(t('ce_desc'))}</label>
+      <textarea rows="4" data-bind="form.description" placeholder="${esc(t('ce_desc_hint'))}">${esc(f.description)}</textarea></div>
+    <div style="margin-top:14px"><label class="f">${esc(t('ce_learn'))}</label>
+      <button class="tagbtn wide" data-act="edit-points" type="button">
+        <div class="n">${filled.length ? `<bdi dir="ltr">${filled.length} / ${MAX_POINTS}</bdi>` : esc(t('learning_point_add'))}</div>
+        ${filled.length ? `<div class="p">${esc(filled.slice(0, 2).join(' · '))}</div>` : ''}
+      </button></div>
     ${errBox('course')}
-    <div class="rowbtns">
-      <button class="btn primary" data-act="save-course" ${S.saving ? 'disabled' : ''}>${esc(t('save'))}</button>
-      <button class="btn" data-act="back">${esc(t('cancel'))}</button>
-    </div>
-  </div>`;
-  return info + (S.course ? curriculumCard() + filesCard() : '');
-};
+    <div style="margin-top:16px">${btn(t('ce_next_lectures'), 'save-course', { primary: true, block: true, disabled: S.saving })}</div>`;
+}
 
-// ---------- course files (PDF, Word, Excel, PowerPoint, CAD, photos) ----------
+// ---------- step 2: chapters and lectures ----------
+function lecNumbered(list){ return list.map((l, i) => lectureRow(l, i + 1)); }
+
+function lectureRow(l, n){
+  const live = !!l.r2_path;
+  const chSel = chaptersOn() ? `<select class="sel-sm" data-lecch="${esc(l.id)}">
+      <option value="">${esc(t('chapter_none'))}</option>
+      ${S.chapters.map((c) => `<option value="${esc(c.id)}" ${l.chapter_id === c.id ? 'selected' : ''}>${esc(c.title || '—')}</option>`).join('')}
+    </select>` : '';
+  return `
+  <div class="lr" draggable="true" data-drag="lec" data-id="${esc(l.id)}" data-grp="${esc(grpOf(l))}">
+    <span class="dh" aria-hidden="true">${icon('drag')}</span>
+    <span class="num code">${String(n).padStart(2, '0')}</span>
+    <div class="lt">${esc(l.title || '—')}</div>
+    ${l.is_free ? `<span class="chip teal">${esc(t('ce_free'))}</span>` : ''}
+    ${pill(live ? t('status_live') : t('lecture_pending_review'), live ? 'good' : 'warn')}
+    ${chSel}
+    <button class="iconbtn sm" data-act="lec-del" data-id="${esc(l.id)}" aria-label="${esc(t('btn_delete'))}">${icon('trash')}</button>
+  </div>`;
+}
+
+function lecturesBody(){
+  if(!S.course) return '';
+  const on = chaptersOn();
+  const ids = chapterIds();
+  const inGrp = (g) => S.lectures.filter((l) => grpOf(l) === g);
+  let list = '';
+  if(!S.lectures.length && !S.chapters.length){
+    list = empty('video', t('no_lectures_teacher'));
+  } else if(!on){
+    list = `<div class="lgrp">${lecNumbered(S.lectures).join('')}</div>`;
+  } else {
+    const panel = (key, name, num, chapter) => {
+      const open = S.openCh === key;
+      const items = inGrp(key);
+      return `
+      <div class="chp ${open ? 'open' : ''}">
+        <div class="chh" ${chapter ? `draggable="true" data-drag="chap" data-id="${esc(key)}"` : ''}>
+          ${chapter ? `<span class="dh" aria-hidden="true">${icon('drag')}</span>` : ''}
+          <span class="cnum">${esc(num)}</span>
+          <button class="cname" data-act="open-chapter" data-id="${esc(key)}" type="button">
+            <b>${esc(name)}</b><small>${esc(t('chapter_count').replace('{n}', items.length))}</small></button>
+          ${chapter && open ? `<button class="iconbtn sm" data-act="rename-chapter" data-id="${esc(key)}" aria-label="rename">${icon('edit')}</button>
+            <button class="iconbtn sm" data-act="del-chapter" data-id="${esc(key)}" aria-label="${esc(t('btn_delete'))}">${icon('trash')}</button>` : ''}
+          <span class="chev ${open ? 'up' : ''}">${icon('chevron')}</span>
+        </div>
+        ${open ? `<div class="lgrp">${lecNumbered(items).join('') || `<div class="hint" style="padding:10px 4px">${esc(t('no_lectures_teacher'))}</div>`}</div>` : ''}
+      </div>`;
+    };
+    list = S.chapters.map((c, i) => panel(c.id, c.title || '—', String(i + 1), true)).join('') +
+      (S.lectures.some((l) => !ids.has(l.chapter_id)) ? panel('_', t('chapter_none'), '·', false) : '') +
+      `<button class="btn block addch" data-act="new-chapter" type="button">${icon('plus')}${esc(t('ce_new_chapter'))}</button>`;
+  }
+  const chPick = on && S.chapters.length ? `
+    <div><label class="f">${esc(t('label_chapter'))}</label>
+      <select data-bind="lf.chapter"><option value="">${esc(t('chapter_none'))}</option>
+      ${S.chapters.map((c) => `<option value="${esc(c.id)}" ${S.lf.chapter === c.id ? 'selected' : ''}>${esc(c.title || '—')}</option>`).join('')}</select></div>` : '';
+  return `
+    <div class="swrow"><div><b>${esc(t('chapters_switch'))}</b><small>${esc(t('ce_chapters_sub'))}</small></div>
+      <input type="checkbox" class="sw" id="chaptersSwitch" ${on ? 'checked' : ''}></div>
+    <div class="lwrap">${list}</div>
+    <div class="section" style="padding-top:20px"><span>${esc(t('ce_add_lecture_chapter').replace(/ لهذا الفصل$/, ''))}</span></div>
+    <div class="gap">
+      <input type="text" data-bind="lf.title" value="${esc(S.lf.title)}" placeholder="${esc(t('label_lecture_title'))}">
+      ${chPick}
+      <div class="pick" data-act="pick-video" style="height:96px">
+        <div class="ph"><div class="c">${icon('video')}</div>${esc(S.lf.file ? S.lf.file.name : t('label_video_file'))}</div>
+      </div>
+      <input type="file" id="videoInput" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" hidden>
+      <label class="check"><input type="checkbox" data-bind="lf.free" ${S.lf.free ? 'checked' : ''}>${esc(t('label_free_lecture'))}</label>
+    </div>
+    ${S.upPct != null ? `<div class="prog"><i style="width:${Math.round(S.upPct * 100)}%"></i></div>` : ''}
+    ${S.upMsg ? `<div class="${S.err.lecture ? 'err' : 'ok'}">${esc(S.upMsg)}</div>` : errBox('lecture')}
+    <div style="margin-top:10px">${btn(t('btn_add'), 'add-lecture', { primary: true, block: true, disabled: S.uploading })}</div>
+    <div class="hint" style="text-align:center;margin-top:8px">${esc(t('keep_open'))}</div>
+    <div style="margin-top:16px">${btn(t('ce_next_files'), 'step-files', { block: true })}</div>`;
+}
+
+// ---------- step 3: files ----------
 const FILE_OFFICE = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'];
 const FILE_IMAGES = ['jpg', 'jpeg', 'png'];
 const FILE_CAD = ['dwg', 'dxf', 'dwf', 'dgn', 'rvt', 'skp', 'ifc'];
@@ -314,39 +416,41 @@ const FILE_MAX = 50 * 1024 * 1024;
 const fileExt = (f) => ((f && f.name.split('.').pop()) || '').toLowerCase();
 const fileMustDownload = () => !!S.ff.file && (FILE_OFFICE.includes(fileExt(S.ff.file)) || FILE_CAD.includes(fileExt(S.ff.file)));
 
-function filesCard(){
+function filesBody(){
+  if(!S.course) return '';
   const f = S.ff;
-  const lectureTitle = (id) => id ? ((S.lectures.find((l) => l.id === id) || {}).title || '') : t('file_whole_course');
+  const lectureTitle = (id) => (id ? t('ce_file_linked').replace('{title}', (S.lectures.find((l) => l.id === id) || {}).title || '') : t('ce_file_general'));
   const statusLabel2 = (s) => ({ published: t('file_ready'), pending_review: t('file_pending_review'), rejected: t('file_rejected'), failed: t('file_failed') }[s] || t('file_processing'));
   const statusTone2 = (s) => (s === 'published' ? 'good' : (s === 'failed' || s === 'rejected') ? 'bad' : 'warn');
+  const kindOf = (k) => ({ pdf: 'PDF', image: 'IMG', cad: 'CAD' }[k] || 'DOC');
   const list = S.files.map((x) => `
-    <div class="glass"><div class="dc">${badge(x.kind === 'image' ? 'image' : 'courses', 'teal')}
-      <div class="body"><div class="t">${esc(x.title || '—')}</div>
-        <div class="s">${esc([lectureTitle(x.lecture_id), x.original_name || '', x.allow_download ? t('file_downloadable') : t('file_view_only')].filter(Boolean).join(' · '))}</div></div>
-      ${pill(statusLabel2(x.status), statusTone2(x.status))}</div>
-      <div class="actions">${btn(t('btn_delete'), 'del-file', { danger: true, icon: 'trash', id: x.id })}</div></div>`).join('');
+    <div class="frow">
+      <div class="fk">${kindOf(x.kind)}</div>
+      <div class="fb"><div class="t">${esc(x.title || '—')}</div><div class="s">${esc(lectureTitle(x.lecture_id))}</div>
+        <div class="chips">${x.allow_download ? `<span class="chip warn">${esc(t('ce_chip_download'))}</span>` : ''}${x.is_free ? `<span class="chip teal">${esc(t('ce_chip_free'))}</span>` : ''}${x.status !== 'published' ? pill(statusLabel2(x.status), statusTone2(x.status)) : ''}</div></div>
+      <button class="iconbtn sm" data-act="del-file" data-id="${esc(x.id)}" aria-label="${esc(t('btn_delete'))}">${icon('trash')}</button>
+    </div>`).join('');
   const form = S.lectures.length ? `
-    <div class="gap">
-      <input type="text" data-bind="ff.title" value="${esc(f.title)}" placeholder="${esc(t('label_file_title'))}">
-      <div><label class="f">${esc(t('label_file_lecture'))}</label>
-        <select data-bind="ff.lecture"><option value="">${esc(t('file_whole_course'))}</option>
+    <div class="gap fform">
+      <div class="section" style="padding:6px 0 4px"><span>${esc(t('ce_file_sheet_title'))}</span></div>
+      <div><label class="f">${esc(t('ce_file_name'))}</label>
+        <input type="text" data-bind="ff.title" value="${esc(f.title)}" placeholder="${esc(t('ce_file_name_hint'))}"></div>
+      <div><label class="f">${esc(t('ce_file_link'))}</label>
+        <select data-bind="ff.lecture"><option value="">${esc(t('ce_file_general'))}</option>
         ${S.lectures.map((l) => `<option value="${esc(l.id)}" ${f.lecture === l.id ? 'selected' : ''}>${esc(l.title || '—')}</option>`).join('')}</select></div>
-      <button class="btn" data-act="pick-file" type="button">${icon('plus')}${esc(f.file ? f.file.name : t('btn_choose_file'))}</button>
+      <button class="btn" data-act="pick-file" type="button">${icon('plus')}${esc(f.file ? f.file.name : t('ce_pick_file'))}</button>
       <input type="file" id="fileInput" accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.pdf,.dwg,.dxf,.dwf,.dgn,.rvt,.skp,.ifc" hidden>
       <div class="hint">${esc(t('file_types_hint'))}</div>
-      <label class="check"><input type="checkbox" data-bind="ff.allowDl" ${(f.allowDl || fileMustDownload()) ? 'checked' : ''} ${fileMustDownload() ? 'disabled' : ''}>${esc(fileMustDownload() ? t('label_download_forced') : t('label_allow_download'))}</label>
-      <label class="check"><input type="checkbox" data-bind="ff.free" ${f.free ? 'checked' : ''}>${esc(t('label_free_file'))}</label>
+      <label class="check"><input type="checkbox" data-bind="ff.allowDl" ${(f.allowDl || fileMustDownload()) ? 'checked' : ''} ${fileMustDownload() ? 'disabled' : ''}>${esc(fileMustDownload() ? t('label_download_forced') : t('ce_allow_dl'))}</label>
+      <label class="check"><input type="checkbox" data-bind="ff.free" ${f.free ? 'checked' : ''}>${esc(t('ce_free_prev'))}</label>
     </div>
     ${errBox('file')}${S.ok.file ? `<div class="ok">${esc(S.ok.file)}</div>` : ''}
-    <div style="margin-top:10px">${btn(t('btn_add'), 'add-file', { primary: true, block: true, disabled: f.busy })}</div>`
+    <div style="margin-top:10px">${btn(t('ce_upload_file'), 'add-file', { primary: true, block: true, disabled: f.busy })}</div>`
     : `<div class="hint">${esc(t('files_after_first_lecture'))}</div>`;
   return `
-  <div class="section"><span>${esc(t('course_files'))} (${S.files.length})</span></div>
-  ${list ? `<div class="stack">${list}</div><div style="height:14px"></div>` : ''}
-  <div class="glass panel">
-    <div class="panel-h">${badge('courses', 'teal', true)}<div class="t">${esc(t('add_course_file'))}</div></div>
+    ${list || `<div class="hint" style="text-align:center;padding:6px 0 14px">${esc(t('ce_no_files'))}</div>`}
     ${form}
-  </div>`;
+    ${S.course.status === 'draft' ? `<div style="margin-top:16px">${btn(t('ce_send_review'), 'submit-review-here', { primary: true, block: true, icon: 'check' })}</div>` : ''}`;
 }
 
 async function loadFiles(){
@@ -407,46 +511,6 @@ async function deleteFile(id){
   const paths = [x.view_path, x.raw_path].filter(Boolean);
   if(paths.length) sb.storage.from('course-files').remove(paths).then(() => {}, () => {});
   await loadFiles();
-}
-
-function curriculumCard(){
-  const lec = S.lectures;
-  return `
-  <div style="height:14px"></div>
-  <div class="glass panel">
-    <div class="panel-h">${badge('video', 'red', true)}<div class="t">${esc(t('curriculum'))} · ${esc(S.course.title || '')}</div></div>
-    ${lec.length ? `<div class="stack">${lec.map((l, i) => lectureRow(l, i)).join('')}</div>` : empty('video', t('no_lectures_teacher'))}
-    <div class="section" style="padding-top:20px"><span>${esc(t('btn_add'))}</span></div>
-    <div class="gap">
-      <input type="text" data-bind="lf.title" value="${esc(S.lf.title)}" placeholder="${esc(t('label_lecture_title'))}">
-      <div class="pick" data-act="pick-video" style="height:96px">
-        <div class="ph"><div class="c">${icon('video')}</div>${esc(S.lf.file ? S.lf.file.name : t('label_video_file'))}</div>
-      </div>
-      <input type="file" id="videoInput" accept="video/mp4,video/quicktime,video/webm,video/x-matroska" hidden>
-      <label class="check"><input type="checkbox" data-bind="lf.free" ${S.lf.free ? 'checked' : ''}>${esc(t('label_free_lecture'))}</label>
-    </div>
-    ${S.upPct != null ? `<div class="prog"><i style="width:${Math.round(S.upPct * 100)}%"></i></div>` : ''}
-    ${S.upMsg ? `<div class="${S.err.lecture ? 'err' : 'ok'}">${esc(S.upMsg)}</div>` : errBox('lecture')}
-    <div style="margin-top:10px">${btn(t('btn_add'), 'add-lecture', { primary: true, block: true, disabled: S.uploading })}</div>
-    <div class="hint" style="text-align:center;margin-top:8px">${esc(t('keep_open'))}</div>
-  </div>`;
-}
-
-function lectureRow(l, i){
-  const live = !!l.r2_path;
-  return `
-  <div class="glass">
-    <div class="dc">
-      <div class="badge sm" style="--c:var(--red)"><span class="code" style="font-size:13px">${String(i + 1).padStart(2, '0')}</span></div>
-      <div class="body"><div class="t">${esc(l.title || '—')}</div>${l.is_free ? `<div class="m teal">${esc(t('free_tag'))}</div>` : ''}</div>
-      ${pill(live ? t('status_live') : t('lecture_pending_review'), live ? 'good' : 'warn')}
-    </div>
-    <div class="actions">
-      ${i > 0 ? btn(t('btn_move_up'), 'lec-up', { id: l.id }) : ''}
-      ${i < S.lectures.length - 1 ? btn(t('btn_move_down'), 'lec-down', { id: l.id }) : ''}
-      ${btn(t('btn_delete'), 'lec-del', { danger: true, icon: 'trash', id: l.id })}
-    </div>
-  </div>`;
 }
 
 VIEWS.codes = () => {
@@ -570,7 +634,8 @@ function resetCourseForm(c){
   S.points = pts.slice(0, MAX_POINTS);
   while(S.points.length < MIN_POINT_ROWS) S.points.push('');
   S.thumbUrl = src.thumbnail_url || null; S.thumbFile = null; S.thumbPreview = null;
-  S.lf = { title: '', free: false, file: null }; S.upMsg = ''; S.upPct = null;
+  S.lf = { title: '', free: false, file: null, chapter: '' }; S.upMsg = ''; S.upPct = null;
+  S.step = 0; S.chapters = []; S.openCh = null; S.drag = null;
   S.ff = { title: '', lecture: '', allowDl: false, free: false, file: null, busy: false }; S.files = [];
   S.err = {};
 }
@@ -583,9 +648,27 @@ function openCourse(id){
 }
 async function loadLectures(){
   if(!S.course) return;
-  const { data } = await sb.from('lectures').select('*').eq('course_id', S.course.id).order('order_index').order('created_at');
-  S.lectures = data || [];
+  const [lr, cr] = await Promise.all([
+    sb.from('lectures').select('*').eq('course_id', S.course.id).order('order_index').order('created_at'),
+    sb.from('course_chapters').select('*').eq('course_id', S.course.id).order('order_index').order('created_at')
+  ]);
+  S.lectures = lr.data || [];
+  S.chapters = cr.error ? [] : (cr.data || []);
+  if(S.openCh !== '_' && !S.chapters.some((c) => c.id === S.openCh)) S.openCh = S.chapters[0] ? S.chapters[0].id : null;
+  if(S.lf.chapter && !S.chapters.some((c) => c.id === S.lf.chapter)) S.lf.chapter = '';
   if(S.view === 'course') render();
+}
+
+// True when the form differs from what is saved (a waiting edit counts as saved),
+// so "next" does not send an empty edit request.
+function infoChanged(title, description, price, points){
+  const c = S.course;
+  if(!c) return true;
+  const pend = c.edit_status === 'pending_review' && c.pending_edit && typeof c.pending_edit === 'object' ? c.pending_edit : null;
+  const src = Object.assign({}, c, pend || {});
+  const old = (Array.isArray(src.learning_points) ? src.learning_points : []).filter((x) => typeof x === 'string');
+  return !!S.thumbFile || title !== (src.title || '') || description !== (src.description || '') ||
+    price !== digits(src.price) || old.join('\u0000') !== points.join('\u0000');
 }
 
 async function saveCourse(){
@@ -598,6 +681,7 @@ async function saveCourse(){
   const description = f.description.trim();
   const price = digits(f.price);
   const points = S.points.map((p) => p.trim()).filter(Boolean).slice(0, MAX_POINTS).map((p) => p.slice(0, 200));
+  if(S.course && !infoChanged(title, description, price, points)){ S.step = 1; return render(); }
   S.saving = true; render();
   try{
     let thumbnailUrl = S.thumbUrl;
@@ -608,6 +692,7 @@ async function saveCourse(){
       thumbnailUrl = sb.storage.from('course-thumbnails').getPublicUrl(path).data.publicUrl;
     }
     const c = S.course;
+    let created = null;
     if(c && c.status === 'published'){
       const { error } = await sb.from('courses').update({
         pending_edit: { title, description, price, thumbnail_url: thumbnailUrl, learning_points: points },
@@ -626,12 +711,17 @@ async function saveCourse(){
         is_free: price === 0, thumbnail_url: thumbnailUrl, teacher_id: S.user.id, status: 'draft'
       };
       if(points.length) ins.learning_points = points;
-      const { error } = await sb.from('courses').insert(ins);
-      if(error) throw error;
+      const r = await sb.from('courses').insert(ins).select().single();
+      if(r.error) throw r.error;
+      created = r.data;
     }
     await loadAll();
-    S.saving = false;
-    back();
+    const id = created ? created.id : c.id;
+    S.course = S.courses.find((x) => x.id === id) || created || S.course;
+    S.thumbFile = null; S.thumbPreview = null; S.thumbUrl = thumbnailUrl;
+    S.saving = false; S.step = 1;
+    if(created){ S.lectures = []; S.chapters = []; S.files = []; loadLectures(); loadFiles(); }
+    render();
   }catch(e){
     S.saving = false;
     S.err.course = (e && e.message) || String(e);
@@ -722,7 +812,7 @@ async function addLecture(){
   const title = S.lf.title.trim();
   if(!title){ S.err.lecture = t('err_lecture_title_required'); return render(); }
   if(!S.lf.file){ S.err.lecture = t('err_video_required'); return render(); }
-  const course = S.course, file = S.lf.file, isFree = S.lf.free;
+  const course = S.course, file = S.lf.file, isFree = S.lf.free, chapterId = S.lf.chapter || null;
   const lectureId = crypto.randomUUID();
   S.uploading = true; S.upPct = 0; render();
   try{
@@ -734,12 +824,14 @@ async function addLecture(){
     const { data: last } = await sb.from('lectures').select('order_index').eq('course_id', course.id)
       .order('order_index', { ascending: false }).limit(1).maybeSingle();
     const orderIndex = last && last.order_index != null ? last.order_index + 1 : 0;
-    const { error } = await sb.from('lectures').insert({
+    const row = {
       id: lectureId, course_id: course.id, title, is_free: isFree, order_index: orderIndex,
       pending_upload_path: 'r2:videos/' + lectureId + '/source.mp4'
-    });
+    };
+    if(chaptersOn() && chapterId) row.chapter_id = chapterId;
+    const { error } = await sb.from('lectures').insert(row);
     if(error) throw error;
-    S.lf = { title: '', free: false, file: null };
+    S.lf = { title: '', free: false, file: null, chapter: chapterId || '' };
     S.upMsg = t('upload_done').replace('{title}', title);
   }catch(e){
     S.err.lecture = 'x'; S.upMsg = t('err_video_upload_failed') + ' ' + ((e && e.message) || '');
@@ -747,15 +839,108 @@ async function addLecture(){
   S.uploading = false; S.upPct = null;
   await loadLectures(); render();
 }
-async function moveLecture(id, dir){
-  const i = S.lectures.findIndex((l) => l.id === id), j = i + dir;
-  if(i < 0 || j < 0 || j >= S.lectures.length) return;
-  const a = S.lectures[i], b = S.lectures[j];
-  // Renumber the whole list so the swap is real even if positions were equal.
-  const list = S.lectures.slice(); list[i] = b; list[j] = a;
-  const calls = list.map((l, k) => sb.from('lectures').update({ order_index: k }).eq('id', l.id));
-  const res = await Promise.all(calls);
-  if(res.some((r) => r.error)) toast(res.find((r) => r.error).error.message);
+// Drag and drop inside one group of lectures (a chapter, the unsorted ones,
+// or the whole list when chapters are off). Members swap among the slots the
+// group already occupies, then every lecture is renumbered 0..n-1.
+async function reorderLectures(grp, fromId, toId){
+  if(S.reordering || fromId === toId) return;
+  const group = S.lectures.filter((l) => grpOf(l) === grp);
+  const oi = group.findIndex((l) => l.id === fromId), ni = group.findIndex((l) => l.id === toId);
+  if(oi < 0 || ni < 0) return;
+  const moved = group.splice(oi, 1)[0];
+  group.splice(ni, 0, moved);
+  let g = 0;
+  const result = S.lectures.map((l) => (grpOf(l) === grp ? group[g++] : l));
+  const stored = {}; S.lectures.forEach((l) => { stored[l.id] = l.order_index; });
+  S.reordering = true;
+  S.lectures = result.map((l, k) => Object.assign({}, l, { order_index: k }));
+  render();
+  try{
+    for(let k = 0; k < result.length; k++){
+      if(stored[result[k].id] === k) continue;
+      const { error } = await sb.from('lectures').update({ order_index: k }).eq('id', result[k].id);
+      if(error) throw error;
+    }
+  }catch(e){ toast((e && e.message) || String(e)); await loadLectures(); }
+  S.reordering = false;
+}
+async function reorderChapters(fromId, toId){
+  if(S.reordering || fromId === toId) return;
+  const list = S.chapters.slice();
+  const oi = list.findIndex((c) => c.id === fromId), ni = list.findIndex((c) => c.id === toId);
+  if(oi < 0 || ni < 0) return;
+  list.splice(ni, 0, list.splice(oi, 1)[0]);
+  S.reordering = true;
+  S.chapters = list.map((c, k) => Object.assign({}, c, { order_index: k }));
+  render();
+  try{
+    for(let k = 0; k < list.length; k++){
+      const { error } = await sb.from('course_chapters').update({ order_index: k }).eq('id', list[k].id);
+      if(error) throw error;
+    }
+  }catch(e){ toast((e && e.message) || String(e)); await loadLectures(); }
+  S.reordering = false;
+}
+async function setChaptersOn(on){
+  if(!S.course) return;
+  const id = S.course.id;
+  const { error } = await sb.from('courses').update({ uses_chapters: on }).eq('id', id);
+  if(error){ toast(error.message); render(); return; }
+  S.course = Object.assign({}, S.course, { uses_chapters: on });
+  S.courses = S.courses.map((c) => (c.id === id ? S.course : c));
+  if(on && !S.openCh && S.chapters[0]) S.openCh = S.chapters[0].id;
+  render();
+}
+function askName(label, initial){
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'sheet-bg';
+    bg.innerHTML = `<div class="sheet" role="dialog"><div style="font-size:15px;font-weight:700;margin-bottom:10px">${esc(label)}</div>
+      <input type="text" maxlength="120" id="nameIn" value="${esc(initial || '')}">
+      <div class="rowbtns"><button class="btn primary" data-ok="1">${esc(t('save'))}</button><button class="btn" data-no="1">${esc(t('cancel'))}</button></div></div>`;
+    const input = () => bg.querySelector('#nameIn');
+    const done = (v) => { bg.remove(); resolve(v); };
+    bg.addEventListener('click', (e) => {
+      if(e.target.closest('[data-ok]')) done(input().value.trim());
+      else if(e.target.closest('[data-no]') || e.target === bg) done(null);
+    });
+    bg.addEventListener('keydown', (e) => { if(e.key === 'Enter') done(input().value.trim()); });
+    document.body.appendChild(bg);
+    input().focus();
+  });
+}
+async function newChapter(){
+  if(!S.course) return;
+  const name = await askName(t('chapter_name_label'), '');
+  if(name == null) return;
+  if(!name){ toast(t('chapter_name_required')); return; }
+  const last = S.chapters.reduce((m, c) => Math.max(m, c.order_index || 0), -1);
+  const r = await sb.from('course_chapters').insert({ course_id: S.course.id, title: name.slice(0, 120), order_index: last + 1 }).select().single();
+  if(r.error){ toast(r.error.message); return; }
+  S.openCh = r.data.id; S.lf.chapter = r.data.id;
+  await loadLectures();
+}
+async function renameChapter(id){
+  const c = S.chapters.find((x) => x.id === id);
+  if(!c) return;
+  const name = await askName(t('chapter_name_label'), c.title || '');
+  if(name == null) return;
+  if(!name){ toast(t('chapter_name_required')); return; }
+  const { error } = await sb.from('course_chapters').update({ title: name.slice(0, 120) }).eq('id', id);
+  if(error){ toast(error.message); return; }
+  await loadLectures();
+}
+async function deleteChapter(id){
+  const c = S.chapters.find((x) => x.id === id);
+  if(!c || !confirm(t('confirm_delete_chapter').replace('{title}', c.title || ''))) return;
+  const { error } = await sb.from('course_chapters').delete().eq('id', id);
+  if(error){ toast(error.message); return; }
+  if(S.openCh === id) S.openCh = null;
+  await loadLectures();
+}
+async function moveLectureToChapter(id, chapterId){
+  const { error } = await sb.from('lectures').update({ chapter_id: chapterId || null }).eq('id', id);
+  if(error) toast(error.message);
   await loadLectures();
 }
 async function deleteLecture(id){
@@ -889,6 +1074,9 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   const id = e.target.id;
+  const lecch = e.target.getAttribute && e.target.getAttribute('data-lecch');
+  if(lecch){ moveLectureToChapter(lecch, e.target.value); return; }
+  if(id === 'chaptersSwitch'){ setChaptersOn(e.target.checked); return; }
   const file = e.target.files && e.target.files[0];
   if(id === 'thumbInput' && file){
     S.thumbFile = file;
@@ -906,6 +1094,36 @@ document.addEventListener('change', (e) => {
     setBound(e.target.getAttribute('data-bind'), e.target.type === 'checkbox' ? e.target.checked : e.target.value);
   }
 });
+// Drag and drop (mouse): lecture rows inside their own group, chapter headers among chapters.
+const clearOver = () => document.querySelectorAll('.over,.dragging').forEach((x) => x.classList.remove('over', 'dragging'));
+document.addEventListener('dragstart', (e) => {
+  const el = e.target.closest && e.target.closest('[data-drag]');
+  if(!el) return;
+  S.drag = { kind: el.getAttribute('data-drag'), id: el.getAttribute('data-id'), grp: el.getAttribute('data-grp') };
+  try{ e.dataTransfer.setData('text/plain', S.drag.id); e.dataTransfer.effectAllowed = 'move'; }catch(_){}
+  el.classList.add('dragging');
+});
+document.addEventListener('dragover', (e) => {
+  if(!S.drag) return;
+  const el = e.target.closest && e.target.closest('[data-drag="' + S.drag.kind + '"]');
+  if(!el || el.getAttribute('data-id') === S.drag.id) return;
+  if(S.drag.kind === 'lec' && el.getAttribute('data-grp') !== S.drag.grp) return;
+  e.preventDefault();
+  document.querySelectorAll('.over').forEach((x) => x.classList.remove('over'));
+  el.classList.add('over');
+});
+document.addEventListener('drop', (e) => {
+  if(!S.drag) return;
+  const el = e.target.closest && e.target.closest('[data-drag="' + S.drag.kind + '"]');
+  const d = S.drag;
+  S.drag = null; clearOver();
+  if(!el || el.getAttribute('data-id') === d.id) return;
+  e.preventDefault();
+  if(d.kind === 'lec'){ if(el.getAttribute('data-grp') === d.grp) reorderLectures(d.grp, d.id, el.getAttribute('data-id')); }
+  else reorderChapters(d.id, el.getAttribute('data-id'));
+});
+document.addEventListener('dragend', () => { S.drag = null; clearOver(); });
+
 document.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-act]');
   if(!el) return;
@@ -932,9 +1150,20 @@ document.addEventListener('click', async (e) => {
     case 'pick-file': $('#fileInput').click(); break;
     case 'add-file': addFile(); break;
     case 'del-file': deleteFile(id); break;
-    case 'lec-up': moveLecture(id, -1); break;
-    case 'lec-down': moveLecture(id, 1); break;
     case 'lec-del': deleteLecture(id); break;
+    case 'step': S.step = +id; render(); break;
+    case 'step-files': S.step = 2; render(); break;
+    case 'open-chapter': S.openCh = S.openCh === id ? null : id; S.lf.chapter = S.openCh && S.openCh !== '_' ? S.openCh : ''; render(); break;
+    case 'new-chapter': newChapter(); break;
+    case 'rename-chapter': renameChapter(id); break;
+    case 'del-chapter': deleteChapter(id); break;
+    case 'submit-review-here': {
+      const cid = S.course && S.course.id;
+      await submitReview(cid);
+      const fresh = S.courses.find((x) => x.id === cid);
+      if(fresh && fresh.status !== 'draft'){ S.course = fresh; back(); }
+      break;
+    }
     case 'add-code': addCode(); break;
     case 'stop-code': stopCode(id); break;
     case 'save-profile': saveProfile(); break;

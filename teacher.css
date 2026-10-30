@@ -190,3 +190,63 @@ textarea{resize:vertical;min-height:96px}
   .stats{flex-wrap:wrap;gap:14px 0}.stat{flex:1 1 45%;border-inline-start:0;padding:0}
   .boxes{gap:8px}
 }
+
+/* ---- course editor: timeline of three steps (info, lectures, files) ---- */
+.ce-h{padding:6px 2px 16px}.ce-h h1{font-size:24px;font-weight:800}.ce-h .sub{color:var(--muted);font-size:13px;margin-top:2px}
+.ts{display:flex;gap:8px}
+.rail{width:22px;display:flex;flex-direction:column;align-items:center;flex:none}
+.dt{width:22px;height:22px;border-radius:50%;margin-top:16px;display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--muted);
+  border:1.6px solid var(--muted2);flex:none;position:relative;transition:border-color .3s,box-shadow .3s}
+.dt.on{border:2.5px solid var(--red);box-shadow:0 0 12px rgba(232,98,44,.7)}
+.dt.on::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--red)}
+.dt.on::before{content:'';position:absolute;inset:-2px;border-radius:50%;border:2px solid var(--red);animation:halo 1.7s ease-out infinite}
+@keyframes halo{from{transform:scale(1);opacity:.6}to{transform:scale(1.9);opacity:0}}
+.dt.ok{background:var(--teal);border-color:var(--teal);color:var(--bg);animation:pop .42s cubic-bezier(.34,1.56,.64,1)}
+.dt.ok svg.i{width:13px;height:13px;stroke-width:3}
+@keyframes pop{from{transform:scale(.5)}to{transform:scale(1)}}
+.ln{flex:1;width:2px;margin-top:4px;min-height:20px;background:var(--line);border-radius:2px;position:relative;overflow:hidden}
+.ln::after{content:'';position:absolute;inset:0;background:linear-gradient(var(--red),var(--amber));transform:scaleY(0);transform-origin:top;transition:transform .7s cubic-bezier(.2,.8,.2,1)}
+.ln.fill::after{transform:scaleY(1)}
+.tc{flex:1;min-width:0;margin-bottom:16px;border:1.2px solid var(--line);border-radius:20px;transition:border-color .28s,box-shadow .28s,background .28s}
+.ts.open .tc{border-color:var(--red);box-shadow:0 0 22px rgba(232,98,44,.18);background:linear-gradient(180deg,var(--glass-top) 0%,transparent 55%),var(--glass-bg)}
+.ts.locked{opacity:.55}.ts.locked .th{cursor:default}
+.th{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;background:none;border:0;text-align:start;padding:14px;cursor:pointer;color:inherit}
+.tt{font-size:17px;font-weight:700}.tsub{font-size:12px;color:var(--muted);margin-top:1px}
+.tst{font-size:12px;color:var(--muted2);white-space:nowrap}.tst.ok{color:var(--teal)}
+.tb{padding:0 14px 14px;animation:rise .3s ease}
+@keyframes rise{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.income{min-height:46px;display:flex;align-items:center;padding:0 12px;border-radius:12px;border:1px solid color-mix(in srgb,var(--teal) 40%,transparent);background:color-mix(in srgb,var(--teal) 10%,transparent);color:var(--teal);font-weight:700}
+.tagbtn.wide{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--panel2) 60%,transparent)}
+.swrow{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.swrow b{display:block;font-size:14px}.swrow small{color:var(--muted);font-size:12px}
+.sw{width:42px;height:24px;appearance:none;-webkit-appearance:none;border-radius:99px;background:var(--line);position:relative;cursor:pointer;flex:none;transition:background .2s;border:1px solid var(--line)}
+.sw::after{content:'';position:absolute;top:2px;inset-inline-start:2px;width:18px;height:18px;border-radius:50%;background:var(--text);transition:inset-inline-start .2s}
+.sw:checked{background:var(--red);border-color:var(--red)}.sw:checked::after{inset-inline-start:20px;background:#fff}
+.lwrap{margin-top:12px}
+.lgrp{margin-top:4px}
+.lr{display:flex;align-items:center;gap:8px;padding:10px 4px;border-top:1px solid var(--line);border-radius:8px}
+.lr.over,.chh.over{background:color-mix(in srgb,var(--red) 14%,transparent)}
+.lr.dragging,.chh.dragging{opacity:.4}
+.dh{cursor:grab;color:var(--muted2);display:grid;place-items:center;flex:none}.dh:active{cursor:grabbing}
+.dh svg.i{width:18px;height:18px;fill:currentColor;stroke:none}
+.num{width:26px;font-size:12.5px;color:var(--muted);flex:none}
+.lt{flex:1;min-width:0;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.chip{display:inline-flex;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid color-mix(in srgb,var(--c) 40%,transparent);color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.chip.teal{--c:var(--teal)}.chip.warn{--c:var(--warn)}
+.sel-sm{width:auto;max-width:130px;padding:6px 8px;font-size:12px;border-radius:10px}
+.iconbtn.sm{width:32px;height:32px;border-radius:10px}.iconbtn.sm svg.i{width:16px;height:16px}
+.chp{border:1px solid var(--line);border-radius:16px;margin-top:10px;overflow:hidden}
+.chp.open{border-color:color-mix(in srgb,var(--red) 40%,var(--line))}
+.chh{display:flex;align-items:center;gap:8px;padding:10px 12px}
+.cnum{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:color-mix(in srgb,var(--red) 16%,transparent);color:var(--red);flex:none}
+.cname{flex:1;min-width:0;background:none;border:0;text-align:start;cursor:pointer;color:inherit;padding:2px 0}
+.cname b{display:block;font-size:14.5px}.cname small{color:var(--muted);font-size:11.5px}
+.chev{transition:transform .25s;display:grid;place-items:center;color:var(--muted)}.chev.up{transform:rotate(-90deg)}
+.chp .lgrp{padding:0 12px 6px}
+.addch{margin-top:10px}
+.frow{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:8px}
+.frow .fk{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:11.5px;font-weight:800;color:var(--teal);background:color-mix(in srgb,var(--teal) 16%,transparent);flex:none}
+.frow .fb{flex:1;min-width:0}.frow .t{font-size:14.5px;font-weight:700;overflow-wrap:anywhere}.frow .s{font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.fform{margin-top:6px}
+@media (max-width:520px){.sel-sm{max-width:96px}.lr{flex-wrap:wrap}}
