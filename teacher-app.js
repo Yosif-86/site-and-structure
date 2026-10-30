@@ -1063,13 +1063,14 @@ document.addEventListener('input', (e) => {
   const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
   setBound(p, v);
   if(p === 'form.price'){
-    // Group digits as they are typed; the split chips follow the price.
-    const caret = digits(v);
-    const shown = caret ? grp(caret) : '';
-    e.target.value = shown; S.form.price = shown;
-    const keep = e.target;
-    render();
-    const again = $('[data-bind="form.price"]'); if(again && keep){ again.focus(); again.setSelectionRange(shown.length, shown.length); }
+    // Keep digits only, grouped with commas ("0" is a real price: free). The
+    // income box is updated in place, so typing never re-draws the page.
+    const d = String(v).replace(/[^0-9]/g, '');
+    const shown = d ? grp(parseInt(d, 10)) : '';
+    S.form.price = shown;
+    if(e.target.value !== shown){ e.target.value = shown; try{ e.target.setSelectionRange(shown.length, shown.length); }catch(_){} }
+    const inc = $('.income');
+    if(inc){ const price = digits(shown); inc.innerHTML = price > 0 ? iqd(price - Math.round(price * S.rate)) : '—'; }
   }
 });
 document.addEventListener('change', (e) => {
